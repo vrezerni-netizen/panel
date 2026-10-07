@@ -1,0 +1,20 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+  streamvault:
+    image: node:22-alpine
+    working_dir: /app
+    network_mode: host
+    restart: unless-stopped
+    command: node src/server.js
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: "1"
+      DB_PATH: /data/streamvault.db
+    volumes:
+      - ..:/app:ro
+      - ./data:/data
