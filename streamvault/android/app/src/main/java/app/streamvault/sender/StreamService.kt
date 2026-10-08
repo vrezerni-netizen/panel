@@ -53,7 +53,7 @@ class StreamService : Service(), ConnectChecker {
         } else {
             val c = RtmpCamera2(this, this)
             camera = c
-            val videoOk = c.prepareVideo(1280, 720, 30, 2_500_000)
+            val videoOk = c.prepareVideo(1280, 720, 30, 2_500_000, 2, if (prefs.landscape) 0 else 90)
             val audioOk = if (micOn) c.prepareAudio(128_000, 44100, true) else true
             if (videoOk && audioOk) { c.startStream(url); true } else false
         }
