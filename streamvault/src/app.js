@@ -263,8 +263,8 @@ export function createApp({ db, config = {} }) {
     if (action === 'publish') {
       const m = /^live\/([a-z0-9_-]{1,32})$/.exec(String(path));
       const row = m && db.prepare('SELECT key_hash, revoked FROM streams WHERE name = ?').get(m[1]);
-      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) { const prev = liveSince.get(m[1]); liveSince.set(m[1], { since: prev && now() - prev.seen < 40000 ? prev.since : now(), seen: now() }); return res.sendStatus(200); }
-      audit(req, 'publish.denied', String(path), null);
+      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) { const prev = liveSince.get(m[1]); liveSince.set(m[1], { since: prev && now() - prev.seen < 40000 ? prev.since : now(), seen: now() }); audit(req, 'publish.ok', `${m[1]} · с адреса ${clientIp}`, null); return res.sendStatus(200); }
+      audit(req, 'publish.denied', `${String(path)} · с адреса ${clientIp} · неверное имя или ключ`, null);
       return res.sendStatus(401);
     }
     // read is allowed only for our own proxy on localhost; everything else denied
