@@ -69,7 +69,7 @@ class StreamService : Service(), ConnectChecker {
             val audioOk = if (micOn) c.prepareAudio(160_000, 44100, true) else true
             if (videoOk && audioOk) { c.startStream(url); true } else false
         }
-        if (!ok) { status("Не удалось подготовить кодек"); stop() } else running = true
+        if (!ok) { status("Не удалось подготовить кодек"); stop() } else { running = true; startedAt = System.currentTimeMillis() }
     }
 
     private fun stop() {
@@ -147,6 +147,7 @@ class StreamService : Service(), ConnectChecker {
         const val EXTRA_RESULT_DATA = "data"
         private const val CHANNEL = "stream"
         @Volatile var running = false
+        @Volatile var startedAt = 0L
         @Volatile var lastStatus = "Готов"
     }
 }
