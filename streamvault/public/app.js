@@ -143,7 +143,7 @@ function dockHtml(o) {
   const tog = (k, label) => `<button class="tg ${o[k] ? 'on' : ''}" data-t="${k}"><span class="sw"></span>${label}</button>`;
   const corners = (k) => `<div class="corners">${['tl', 'tr', 'bl', 'br'].map((p) => `<button class="${o[k] === p ? 'on' : ''}" data-c="${k}" data-p="${p}" title="${POSN[p]}"></button>`).join('')}</div>`;
   return `<aside class="dock"><div class="card dockc">
-    <h3>Оформление эфира</h3><div class="mut sm">Меняется сразу у всех зрителей</div>
+    <div class="dockhead"><h3>Оформление эфира</h3><button class="x" id="dClose" title="Свернуть">✕</button></div><div class="mut sm">Меняется сразу у всех зрителей</div>
     <div class="grp">Показывать</div>${tog('showTitle', 'Название')}${tog('showTimer', 'Таймер эфира')}${tog('showFrame', 'Рамка')}
     <div class="grp">Название на экране</div>
     <div class="form-row"><input id="dTitle" maxlength="40" value="${esc(o.title)}"><button class="btn sm" id="dSave">Применить</button></div>
@@ -162,7 +162,9 @@ async function livePage(c) {
   let current = null, playing = null, lastKey = '', overlay = await api('/api/settings');
   const st = { liveSince: null }; let skew = 0, streams = [];
   const admin = me.role === 'admin';
-  c.innerHTML = `<div class="head"><div><h2>Эфир</h2><div class="sub" id="sub"></div></div></div>
+  c.classList.add('wide');
+  c.innerHTML = `<div class="head"><div><h2>Эфир</h2><div class="sub" id="sub"></div></div>
+    ${admin ? '<button class="btn sec" id="dockToggle">⚙ Оформление</button>' : ''}</div>
     <div class="live-layout ${admin ? 'withdock' : ''}"><div class="main">
     <div class="card" style="padding:14px"><div class="player" id="pl"><video id="v" controls playsinline muted></video>
       <div class="frame" id="frame"></div>
@@ -172,6 +174,18 @@ async function livePage(c) {
       <div class="bar"><span id="nowname" class="mut"></span><span class="spacer"></span>
         ${admin ? '<button class="btn sm" id="shot">📷 Скриншот</button>' : ''}<button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
     <h3 style="margin:0 0 12px">Каналы</h3><div class="grid" id="grid"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
+  const layout = $('.live-layout');
+  const setDock = (open) => {
+    layout.classList.toggle('collapsed', !open);
+    if ($('#dockToggle')) $('#dockToggle').classList.toggle('on', open);
+    try { localStorage.setItem('dock', open ? 'open' : 'closed'); } catch { /* ignore */ }
+  };
+  if (admin) {
+    let open = false;
+    try { open = localStorage.getItem('dock') === 'open'; } catch { /* default closed */ }
+    setDock(open);
+    $('#dockToggle').onclick = () => setDock(layout.classList.contains('collapsed'));
+  }
   const v = $('#v');
   v.addEventListener('loadedmetadata', () => applyOverlay(overlay, st));
   v.addEventListener('resize', () => applyOverlay(overlay, st));
@@ -191,6 +205,7 @@ async function livePage(c) {
     const redock = () => { const d = $('.dock'); d.outerHTML = dockHtml(overlay); wireDock(); };
     const wireDock = () => {
       const d = $('.dock');
+      $('#dClose').onclick = () => setDock(false);
       d.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => save({ [b.dataset.t]: !overlay[b.dataset.t] })));
       d.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => save({ [b.dataset.c]: b.dataset.p })));
       d.querySelectorAll('[data-col]').forEach((b) => (b.onclick = () => save({ frameColor: b.dataset.col })));
