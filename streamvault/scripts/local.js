@@ -1,11 +1,13 @@
 // StreamVault для компьютера: один запуск = сервер + приём потока. Только для домашней сети.
 import { createInterface } from 'node:readline/promises';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
 import { networkInterfaces, platform, arch } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
+import { generateKeypair } from '../src/vault.js';
+import { startRecorder } from '../src/recorder.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -54,14 +56,54 @@ if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) {
   console.log('После добавления в Authenticator удалите этот файл.\n');
 }
 
+// ---- 2b. Зашифрованная запись (по желанию): ключ — на флешке, на компьютере только публичная часть ----
+const cfgPath = join('data', 'config.json');
+let cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) : null;
+if (!cfg) {
+  cfg = { record: false };
+  const answer = process.env.LOCAL_KEY_DIR ?? await (async () => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    console.log('\nЗАПИСЬ ЭФИРОВ. Записи шифруются, а ключ хранится ТОЛЬКО на вашей флешке.');
+    console.log('Вставьте флешку и введите её букву/путь (например E:\\ ), либо нажмите Enter, чтобы пока не записывать.');
+    const a = (await rl.question('Путь к флешке: ')).trim().replace(/^"|"$/g, '');
+    rl.close(); return a;
+  })();
+  if (answer) {
+    try {
+      const keyFile = join(answer, 'streamvault.key');
+      if (existsSync(keyFile)) throw new Error('на флешке уже есть streamvault.key — используйте другую или удалите его');
+      const { publicPem, privatePem } = generateKeypair();
+      writeFileSync(keyFile, privatePem, { mode: 0o600 });
+      writeFileSync(join('data', 'streamvault.pub'), publicPem);
+      cfg = { record: true };
+      console.log(`Ключ записан на флешку: ${keyFile}. Сделайте его копию и храните в надёжном месте!`);
+      console.log('Без этого файла записи не открыть никому. С компьютера он удалён не будет — его там и не было.\n');
+    } catch (e) { console.log('Запись не включена:', e.message, '\n'); }
+  }
+  writeFileSync(cfgPath, JSON.stringify(cfg));
+}
+
+let mtxConfig = join(root, 'deploy', 'mediamtx-local.yml');
+let recDir = null;
+if (cfg.record) {
+  const spool = join(root, 'data', 'spool');
+  recDir = join(root, 'data', 'recordings');
+  mkdirSync(spool, { recursive: true });
+  mtxConfig = join(root, 'data', 'mediamtx.yml');
+  const rec = `pathDefaults:\n  source: publisher\n  record: yes\n  recordPath: ${spool.replace(/\\/g, '/')}/%path/%Y-%m-%d_%H-%M-%S-%f\n  recordFormat: mpegts\n  recordSegmentDuration: 5m`;
+  writeFileSync(mtxConfig, readFileSync(join(root, 'deploy', 'mediamtx-local.yml'), 'utf8').replace('pathDefaults:\n  source: publisher', rec));
+  startRecorder({ spoolDir: spool, recDir, publicPem: readFileSync(join(root, 'data', 'streamvault.pub')) });
+  console.log('Зашифрованная запись включена.');
+}
+
 // ---- 3. Запуск ----
-const mtx = spawn(join(root, exe), [join(root, 'deploy', 'mediamtx-local.yml')], { cwd: join(root, 'bin'), stdio: ['ignore', 'ignore', 'inherit'] });
+const mtx = spawn(join(root, exe), [mtxConfig], { cwd: join(root, 'bin'), stdio: ['ignore', 'inherit', 'inherit'] });
 const stop = () => { mtx.kill(); process.exit(0); };
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 mtx.on('exit', (c) => { console.error('MediaMTX остановился (код ' + c + '). Возможно, порт 1935 или 8888 занят другой программой — закройте её (или второй запуск StreamVault).'); process.exit(1); });
 
 const port = Number(process.env.PORT || 3000);
-createApp({ db, config: { secureCookies: false } }).listen(port, '0.0.0.0', () => {
+createApp({ db, config: { secureCookies: false, recDir } }).listen(port, '0.0.0.0', () => {
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('='.repeat(60));
   console.log('Ахмат Запад запущен.');

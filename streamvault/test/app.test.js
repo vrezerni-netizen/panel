@@ -89,3 +89,25 @@ test('account locks after repeated failures', async () => {
     assert.equal(r.status, 401);
   } finally { server.close(); }
 });
+
+test('overlay settings: defaults, admin can change, viewer cannot, invalid ignored', async () => {
+  const { db, secret, server, call } = await setup();
+  try {
+    const p1 = (await call('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await call('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    const d = (await call('/api/settings', { cookie })).json;
+    assert.equal(d.title, 'Ахмат Запад'); assert.equal(d.showTimer, true);
+    const put = await call('/api/admin/settings', { method: 'PUT', cookie, body: { title: ' Новый ', showFrame: false, frameColor: 'red', timerPos: 'bl', frameWidth: 99 } });
+    assert.equal(put.json.title, 'Новый'); assert.equal(put.json.showFrame, false);
+    assert.equal(put.json.frameColor, '#3b82f6'); assert.equal(put.json.frameWidth, 4); assert.equal(put.json.timerPos, 'bl');
+    assert.equal((await call('/api/settings', { cookie })).json.title, 'Новый');
+    // viewer
+    const vs = newTotpSecret();
+    db.prepare('INSERT INTO users (username,password_hash,totp_secret,role,created_at) VALUES (?,?,?,?,?)').run('v', hashPassword('viewer-password-1'), vs, 'viewer', Date.now());
+    const vp = (await call('/api/login', { method: 'POST', body: { username: 'v', password: 'viewer-password-1' } })).json.pending;
+    const vc = (await call('/api/login/totp', { method: 'POST', body: { pending: vp, code: totpAt(vs) } })).cookie;
+    assert.equal((await call('/api/settings', { cookie: vc })).status, 200);
+    assert.equal((await call('/api/admin/settings', { method: 'PUT', cookie: vc, body: { title: 'x' } })).status, 403);
+    assert.equal((await call('/api/streams', { cookie: vc })).json.streams.length, 0);
+  } finally { server.close(); }
+});

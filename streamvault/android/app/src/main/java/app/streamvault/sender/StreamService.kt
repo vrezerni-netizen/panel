@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.net.wifi.WifiManager
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.pedro.common.ConnectChecker
 import com.pedro.library.rtmp.RtmpCamera2
@@ -18,6 +20,8 @@ import com.pedro.library.rtmp.RtmpDisplay
 class StreamService : Service(), ConnectChecker {
     private var display: RtmpDisplay? = null
     private var camera: RtmpCamera2? = null
+    private var wake: PowerManager.WakeLock? = null
+    private var wifi: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -35,6 +39,10 @@ class StreamService : Service(), ConnectChecker {
         val screen = prefs.source == "screen"
         val micOn = prefs.mic
         startInForeground(screen, micOn)
+        wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "akhmat:stream").apply { setReferenceCounted(false); acquire() }
+        wifi = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+            .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "akhmat:wifi").apply { setReferenceCounted(false); acquire() }
 
         val url = prefs.publishUrl()
         val ok = if (screen) {
@@ -44,6 +52,7 @@ class StreamService : Service(), ConnectChecker {
                 val d = RtmpDisplay(this, true, this)
                 d.setIntentResult(code, data)
                 display = d
+                d.getStreamClient().setReTries(1000)
                 val (w, h) = screenSize(prefs.landscape)
                 val dpi = resources.displayMetrics.densityDpi
                 val videoOk = d.prepareVideo(w, h, 30, 3_000_000, 0, dpi)
@@ -53,6 +62,7 @@ class StreamService : Service(), ConnectChecker {
         } else {
             val c = RtmpCamera2(this, this)
             camera = c
+            c.getStreamClient().setReTries(1000)
             val videoOk = c.prepareVideo(1280, 720, 30, 2_500_000, 2, if (prefs.landscape) 0 else 90)
             val audioOk = if (micOn) c.prepareAudio(128_000, 44100, true) else true
             if (videoOk && audioOk) { c.startStream(url); true } else false
@@ -66,6 +76,8 @@ class StreamService : Service(), ConnectChecker {
         display = null
         camera = null
         running = false
+        runCatching { if (wake?.isHeld == true) wake?.release() }
+        runCatching { if (wifi?.isHeld == true) wifi?.release() }
         status("Остановлено")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -101,7 +113,12 @@ class StreamService : Service(), ConnectChecker {
     // ---- ConnectChecker ----
     override fun onConnectionStarted(url: String) {}
     override fun onConnectionSuccess() = status("В эфире")
-    override fun onConnectionFailed(reason: String) { status("Ошибка связи: $reason"); stop() }
+    override fun onConnectionFailed(reason: String) {
+        val client = display?.getStreamClient() ?: camera?.getStreamClient()
+        if (running && client != null && client.reTry(5000, reason, null)) {
+            status("Связь потеряна, переподключаюсь...")
+        } else { status("Ошибка связи: $reason"); stop() }
+    }
     override fun onNewBitrate(bitrate: Long) {}
     override fun onDisconnect() = status("Отключено")
     override fun onAuthError() { status("Неверный ключ эфира"); stop() }

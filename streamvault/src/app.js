@@ -1,7 +1,7 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { Readable } from 'node:stream';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,6 +16,23 @@ const LOCK_MS = 15 * 60 * 1000;
 const NAME_RE = /^[a-z0-9_-]{1,32}$/;
 const USER_RE = /^[A-Za-z0-9_.-]{3,32}$/;
 const DUMMY_HASH = hashPassword('dummy-password-for-timing');
+
+const OVERLAY_DEFAULT = {
+  title: 'Ахмат Запад', showTitle: true, titlePos: 'tr',
+  showTimer: true, timerPos: 'tl',
+  showFrame: true, frameColor: '#3b82f6', frameWidth: 4,
+};
+const POS = ['tl', 'tr', 'bl', 'br'];
+
+function sanitizeOverlay(i = {}) {
+  const o = {};
+  if (typeof i.title === 'string') o.title = i.title.trim().slice(0, 40);
+  for (const k of ['showTitle', 'showTimer', 'showFrame']) if (typeof i[k] === 'boolean') o[k] = i[k];
+  for (const k of ['titlePos', 'timerPos']) if (POS.includes(i[k])) o[k] = i[k];
+  if (/^#[0-9a-fA-F]{6}$/.test(String(i.frameColor))) o.frameColor = i.frameColor.toLowerCase();
+  if ([2, 4, 8, 12].includes(i.frameWidth)) o.frameWidth = i.frameWidth;
+  return o;
+}
 
 export function createApp({ db, config = {} }) {
   const {
@@ -151,10 +168,32 @@ export function createApp({ db, config = {} }) {
   app.get('/api/me', auth, (req, res) => res.json({ username: req.user.username, role: req.user.role }));
 
   // ---- viewer: list live streams ----
-  app.get('/api/streams', auth, (req, res) => {
+  const liveSince = new Map(); // stream name -> { since, seen }: when the broadcast started / last seen live
+  app.get('/api/streams', auth, async (req, res) => {
     const rows = db.prepare('SELECT name FROM streams WHERE revoked = 0 ORDER BY name').all();
-    res.json(rows.map((r) => r.name));
+    const live = await Promise.all(rows.map(async (r) => {
+      try {
+        const up = await fetch(`${mediamtxHls}/live/${r.name}/index.m3u8`, { signal: AbortSignal.timeout(1500) });
+        await up.body?.cancel();
+        return up.status === 200;
+      } catch { return false; }
+    }));
+    const t = now();
+    const streams = rows.map((r, i) => {
+      const e = liveSince.get(r.name);
+      if (live[i]) liveSince.set(r.name, { since: e ? e.since : t, seen: t });
+      else if (e && t - e.seen > 20000) liveSince.delete(r.name); // HLS may lag a few seconds behind publish
+      return { name: r.name, live: live[i], since: live[i] ? liveSince.get(r.name).since : null };
+    });
+    res.json({ now: t, streams });
   });
+
+  // ---- overlay look (title, timer, frame): everyone reads, only admin changes ----
+  const getOverlay = () => {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'overlay'").get();
+    try { return { ...OVERLAY_DEFAULT, ...(row ? JSON.parse(row.value) : {}) }; } catch { return { ...OVERLAY_DEFAULT }; }
+  };
+  app.get('/api/settings', auth, (req, res) => res.json(getOverlay()));
 
   // ---- HLS proxy: only for logged-in users ----
   app.get('/hls/:name/:file', auth, async (req, res) => {
@@ -182,7 +221,7 @@ export function createApp({ db, config = {} }) {
     if (action === 'publish') {
       const m = /^live\/([a-z0-9_-]{1,32})$/.exec(String(path));
       const row = m && db.prepare('SELECT key_hash, revoked FROM streams WHERE name = ?').get(m[1]);
-      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) return res.sendStatus(200);
+      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) { liveSince.set(m[1], { since: now(), seen: now() }); return res.sendStatus(200); }
       audit(req, 'publish.denied', String(path), null);
       return res.sendStatus(401);
     }
@@ -287,6 +326,20 @@ export function createApp({ db, config = {} }) {
     if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
     audit(req, 'recording.download', req.params.file);
     res.download(join(recDir, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+  });
+
+  admin.delete('/recordings/:file', async (req, res) => {
+    if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
+    await unlink(join(recDir, req.params.file)).catch(() => {});
+    audit(req, 'recording.delete', req.params.file);
+    res.json({ ok: true });
+  });
+
+  admin.put('/settings', (req, res) => {
+    const next = { ...getOverlay(), ...sanitizeOverlay(req.body) };
+    db.prepare("INSERT INTO settings (key, value) VALUES ('overlay', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(next));
+    audit(req, 'settings.update', JSON.stringify(sanitizeOverlay(req.body)));
+    res.json(next);
   });
 
   admin.get('/audit', (req, res) => {

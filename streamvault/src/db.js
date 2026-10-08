@@ -29,6 +29,10 @@ export function openDb(path = process.env.DB_PATH || 'streamvault.db') {
       revoked INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS audit (
       id INTEGER PRIMARY KEY,
       ts INTEGER NOT NULL,

@@ -43,7 +43,14 @@ if (cmd === 'keygen') {
   await decryptFile(inp, await readFile(keyPath), out, pass);
   console.log('Decrypted ->', out);
   await chmod(out, 0o600);
+} else if (cmd === 'wizard') {
+  const clean = (x) => x.trim().replace(/^"|"$/g, '');
+  const inp = clean(await ask('Перетащите сюда файл записи (.sve) и нажмите Enter: '));
+  const keyPath = clean(await ask('Перетащите сюда ключ streamvault.key с флешки и нажмите Enter: '));
+  const out = inp.replace(/\.sve$/i, '') + '.decrypted.ts';
+  await decryptFile(inp, await readFile(keyPath), out);
+  console.log('\nГотово! Видео сохранено: ' + out + '\nОткройте его в VLC (https://www.videolan.org).');
 } else {
-  console.error('commands: keygen | encrypt | decrypt');
+  console.error('commands: keygen | encrypt | decrypt | wizard');
   process.exit(1);
 }

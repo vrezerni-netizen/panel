@@ -1,5 +1,7 @@
 # MediaMTX: принимает RTMP/SRT от Android, отдаёт HLS только на localhost (наружу — через StreamVault)
 logLevel: info
+readTimeout: 60s
+writeTimeout: 60s
 
 authMethod: http
 authHTTPAddress: http://127.0.0.1:3000/internal/mediamtx/auth

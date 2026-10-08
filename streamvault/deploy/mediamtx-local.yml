@@ -1,5 +1,8 @@
 # Локальная проверка (домашняя сеть). Без записи и без шифрования — НЕ для интернета.
 logLevel: info
+# Неподвижный экран шлёт мало данных — не рвём соединение по тишине
+readTimeout: 60s
+writeTimeout: 60s
 authMethod: http
 authHTTPAddress: http://127.0.0.1:3000/internal/mediamtx/auth
 
