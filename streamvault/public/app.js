@@ -37,11 +37,11 @@ const fmtSize = (b) => (b > 1073741824 ? (b / 1073741824).toFixed(2) + ' ГБ' :
 const fmtDate = (ms) => new Date(ms).toLocaleString('ru-RU');
 
 /* ---------- login ---------- */
-const brandHtml = `<div class="brand"><div class="logo">${svg('live', '')}</div><span class="n">Ахмат Запад</span></div>`;
+const brandHtml = `<div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span class="n">Ахмат Запад</span></div>`;
 
 function loginView() {
   stopPoll(); destroyHls();
-  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo">${svg('live', '')}</div><span>Ахмат Запад</span></div>
+  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span>Ахмат Запад</span></div>
     <div class="card"><h2 style="margin-bottom:14px">Вход</h2>
     <form id="f1"><input name="u" placeholder="Логин" autocomplete="username" required>
     <input name="p" type="password" placeholder="Пароль" autocomplete="current-password" required>
@@ -57,7 +57,7 @@ function loginView() {
 }
 
 function totpView(pending) {
-  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo">${svg('live', '')}</div><span>Ахмат Запад</span></div>
+  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span>Ахмат Запад</span></div>
     <div class="card"><h2 style="margin-bottom:6px">Код подтверждения</h2>
     <p class="mut" style="margin:0 0 14px">Введите 6 цифр из приложения Authenticator</p>
     <form id="f2"><input name="c" inputmode="numeric" pattern="\\d{6}" maxlength="6" autocomplete="one-time-code" required autofocus style="font-size:1.4rem;text-align:center;letter-spacing:8px">
@@ -86,7 +86,7 @@ const PAGES = [
 function shell(page) {
   const items = PAGES.filter((p) => !p.admin || me.role === 'admin');
   root.innerHTML = `<div class="shell"><aside class="side">
-    <div class="brand"><div class="logo">${svg('live', '')}</div><span class="n">Ахмат Запад</span></div>
+    <div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span class="n">Ахмат Запад</span></div>
     <nav>${items.map((p) => `<button data-p="${p.id}" class="${p.id === page ? 'on' : ''}">${svg(p.icon)}<span class="lbl">${p.label}</span></button>`).join('')}</nav>
     <div class="spacer"></div>
     <div class="me"><div class="avatar">${esc(me.username[0].toUpperCase())}</div>
