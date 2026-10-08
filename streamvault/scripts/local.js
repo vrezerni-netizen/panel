@@ -1,8 +1,8 @@
 // StreamVault для компьютера: один запуск = сервер + приём потока. Только для домашней сети.
 import { createInterface } from 'node:readline/promises';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
-import { networkInterfaces, platform, arch } from 'node:os';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync } from 'node:fs';
+import { networkInterfaces, platform, arch, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
@@ -11,9 +11,17 @@ import { startRecorder } from '../src/recorder.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
-mkdirSync('data', { recursive: true });
+// Данные (логин, настройки, записи в ожидании) лежат НЕ в папке программы, а в постоянной папке пользователя,
+// поэтому обновление программы (новый архив в новой папке) их не стирает.
+const dataDir = process.env.AKHMAT_DATA || join(homedir(), 'AkhmatZapad-data');
+const legacyDir = join(root, 'data');
+if (!existsSync(dataDir) && existsSync(join(legacyDir, 'streamvault.db'))) {
+  cpSync(legacyDir, dataDir, { recursive: true });
+  console.log(`Старые данные перенесены в ${dataDir}`);
+}
+mkdirSync(dataDir, { recursive: true });
 mkdirSync('bin', { recursive: true });
-process.env.DB_PATH ||= join('data', 'streamvault.db');
+process.env.DB_PATH ||= join(dataDir, 'streamvault.db');
 
 const { openDb } = await import('../src/db.js');
 const { createApp } = await import('../src/app.js');
@@ -49,7 +57,7 @@ if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) {
   const secret = newTotpSecret();
   db.prepare('INSERT INTO users (username, password_hash, totp_secret, role, created_at) VALUES (?,?,?,?,?)')
     .run(username, hashPassword(password), secret, 'admin', Date.now());
-  const png = join('data', 'VAZHNO-qr-dlya-authenticator.png');
+  const png = join(dataDir, 'VAZHNO-qr-dlya-authenticator.png');
   await QRCode.toFile(png, otpauthUri(secret, username), { width: 320 });
   console.log(`\nОткройте файл ${png} и отсканируйте QR в приложении Authenticator (Google/Microsoft Authenticator).`);
   console.log(`Если не получается сканировать, введите вручную секрет: ${secret}`);
@@ -57,7 +65,7 @@ if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) {
 }
 
 // ---- 2b. Зашифрованная запись (по желанию): ключ — на флешке, на компьютере только публичная часть ----
-const cfgPath = join('data', 'config.json');
+const cfgPath = join(dataDir, 'config.json');
 let cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) : null;
 if (!cfg) {
   cfg = { record: false };
@@ -74,7 +82,7 @@ if (!cfg) {
       if (existsSync(keyFile)) throw new Error('на флешке уже есть streamvault.key — используйте другую или удалите его');
       const { publicPem, privatePem } = generateKeypair();
       writeFileSync(keyFile, privatePem, { mode: 0o600 });
-      writeFileSync(join('data', 'streamvault.pub'), publicPem);
+      writeFileSync(join(dataDir, 'streamvault.pub'), publicPem);
       const folder = process.env.LOCAL_REC_FOLDER ?? await (async () => {
         const rl2 = createInterface({ input: process.stdin, output: process.stdout });
         const a2 = (await rl2.question('Папка для записей (Enter = внутри программы, data\\recordings; можно указать другой диск, например D:\\Zapisi): ')).trim().replace(/^"|"$/g, '');
@@ -91,15 +99,15 @@ if (!cfg) {
 let mtxConfig = join(root, 'deploy', 'mediamtx-local.yml');
 let recDir = null, defaultRec = null;
 if (cfg.record) {
-  const spool = join(root, 'data', 'spool');
-  recDir = cfg.recDir || join(root, 'data', 'recordings');
+  const spool = join(dataDir, 'spool');
+  recDir = cfg.recDir || join(dataDir, 'recordings');
   defaultRec = recDir;
   recDir = () => { try { const row = db.prepare("SELECT value FROM settings WHERE key = 'recdir'").get(); return (row && JSON.parse(row.value).path) || defaultRec; } catch { return defaultRec; } };
   mkdirSync(spool, { recursive: true });
-  mtxConfig = join(root, 'data', 'mediamtx.yml');
+  mtxConfig = join(dataDir, 'mediamtx.yml');
   const rec = `pathDefaults:\n  source: publisher\n  record: yes\n  recordPath: ${spool.replace(/\\/g, '/')}/%path/%Y-%m-%d_%H-%M-%S-%f\n  recordFormat: fmp4\n  recordSegmentDuration: 10m`;
   writeFileSync(mtxConfig, readFileSync(join(root, 'deploy', 'mediamtx-local.yml'), 'utf8').replace('pathDefaults:\n  source: publisher', rec));
-  startRecorder({ spoolDir: spool, recDir, defaultDir: defaultRec, publicPem: readFileSync(join(root, 'data', 'streamvault.pub')) });
+  startRecorder({ spoolDir: spool, recDir, defaultDir: defaultRec, publicPem: readFileSync(join(dataDir, 'streamvault.pub')) });
   console.log('Зашифрованная запись включена.');
 }
 
@@ -110,7 +118,7 @@ process.on('SIGINT', stop); process.on('SIGTERM', stop);
 mtx.on('exit', (c) => { console.error('MediaMTX остановился (код ' + c + '). Возможно, порт 1935 или 8888 занят другой программой — закройте её (или второй запуск StreamVault).'); process.exit(1); });
 
 const port = Number(process.env.PORT || 3000);
-createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: join(root, 'data', 'uploads') } }).listen(port, '0.0.0.0', () => {
+createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: join(dataDir, 'uploads') } }).listen(port, '0.0.0.0', () => {
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('='.repeat(60));
   console.log('Ахмат Запад запущен.');
@@ -118,6 +126,7 @@ createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: j
   for (const ip of ips) console.log(`  Панель с телефона в той же сети: http://${ip}:${port}`);
   console.log('  В приложении на планшете:');
   for (const ip of ips) console.log(`     Сервер: rtmp://${ip}   (имя и ключ — из админки)`);
+  console.log(`Данные хранятся в: ${dataDir}`);
   console.log('Остановить: Ctrl+C. Работает только в домашней сети, без шифрования.');
   console.log('='.repeat(60));
   if (!process.env.NO_OPEN) {

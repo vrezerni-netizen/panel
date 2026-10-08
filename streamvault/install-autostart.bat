@@ -2,7 +2,7 @@
 chcp 65001 >nul
 title Akhmat Zapad - autostart
 cd /d "%~dp0"
-if not exist data\streamvault.db goto first
+if not exist "%USERPROFILE%\AkhmatZapad-data\streamvault.db" goto first
 set "AZ_DIR=%~dp0"
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Startup')+'\AkhmatZapad.lnk'); $s.TargetPath='wscript.exe'; $s.Arguments='""'+$env:AZ_DIR+'run-hidden.vbs""'; $s.WorkingDirectory=$env:AZ_DIR; $s.Save(); Set-Content -Path ([Environment]::GetFolderPath('Desktop')+'\Akhmat Zapad.url') -Value ('[InternetShortcut]'+[Environment]::NewLine+'URL=http://localhost:3000') -Encoding ASCII"
 if errorlevel 1 goto fail
