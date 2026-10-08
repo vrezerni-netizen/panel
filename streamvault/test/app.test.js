@@ -204,3 +204,36 @@ test('dated recordings, screenshots by date, delete channel', async () => {
     assert.equal((await c2('/internal/mediamtx/auth', { method: 'POST', body: { action: 'publish', path: 'live/tablet9', password: ch.json.key, ip: '1.1.1.1' } })).status, 401);
   } finally { server.close(); }
 });
+
+test('phone app device API: overlay and screenshot need the stream key', async () => {
+  const { db, secret, server, call } = await setup();
+  try {
+    const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    server.close();
+    const shots = mkdtempSync(join(tmpdir(), 'dev-'));
+    const srv = createApp({ db, config: { shotDir: shots } }).listen(0);
+    after(() => srv.close());
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const c2 = async (path, { method = 'GET', body, cookie } = {}) => {
+      const r = await fetch(base + path, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: r.status, json: await r.json().catch(() => null), cookie: r.headers.get('set-cookie')?.split(';')[0] };
+    };
+    const p1 = (await c2('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await c2('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    const key = (await c2('/api/admin/streams', { method: 'POST', cookie, body: { name: 'phone1' } })).json.key;
+    await c2('/api/admin/settings', { method: 'PUT', cookie, body: { title: 'Ахмат Запад', titlePos: 'br' } });
+    assert.equal((await c2('/api/device/overlay', { method: 'POST', body: { name: 'phone1', key: 'wrong' } })).status, 401);
+    const ov = await c2('/api/device/overlay', { method: 'POST', body: { name: 'phone1', key } });
+    assert.equal(ov.status, 200); assert.equal(ov.json.title, 'Ахмат Запад'); assert.equal(ov.json.titlePos, 'br');
+    const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40)]).toString('base64');
+    assert.equal((await c2('/api/device/screenshot', { method: 'POST', body: { name: 'phone1', key: 'bad', data: jpg } })).status, 401);
+    assert.equal((await c2('/api/device/screenshot', { method: 'POST', body: { name: 'phone1', key, data: Buffer.from('<html>').toString('base64') } })).status, 400);
+    const up = await c2('/api/device/screenshot', { method: 'POST', body: { name: 'phone1', key, data: jpg } });
+    assert.equal(up.status, 200); assert.match(up.json.name, /_phone1\.jpg$/);
+    assert.equal((await c2('/api/admin/screenshots', { cookie })).json.length, 1);
+    // revoked key stops working
+    const id = (await c2('/api/admin/streams', { cookie })).json[0].id;
+    await c2('/api/admin/streams/' + id + '/revoke', { method: 'POST', cookie, body: {} });
+    assert.equal((await c2('/api/device/overlay', { method: 'POST', body: { name: 'phone1', key } })).status, 401);
+  } finally { server.close(); }
+});

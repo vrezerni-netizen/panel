@@ -77,7 +77,7 @@ export function createApp({ db, config = {} }) {
   });
   const smallJson = express.json({ limit: '10kb' });
   const bigJson = express.json({ limit: '14mb' });
-  app.use((req, res, next) => (['/api/admin/background', '/api/admin/screenshots'].includes(req.path) ? bigJson : smallJson)(req, res, next));
+  app.use((req, res, next) => (['/api/admin/background', '/api/admin/screenshots', '/api/device/screenshot'].includes(req.path) ? bigJson : smallJson)(req, res, next));
 
   const now = () => Date.now();
   const audit = (req, event, detail, actor) =>
@@ -392,20 +392,47 @@ export function createApp({ db, config = {} }) {
     res.download(join(recDir, f), f.split('/').pop(), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
   });
 
+  // ---- saving a screenshot (used by the admin button and by the phone app) ----
+  async function saveShot(buf, stream) {
+    const ext = imageExt(buf);
+    if (!shotDir || !buf.length || buf.length > 12 * 1024 * 1024 || !(ext === 'png' || ext === 'jpg')) return null;
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    const dir = join(shotDir, String(d.getFullYear()), p2(d.getMonth() + 1), p2(d.getDate()));
+    await mkdir(dir, { recursive: true });
+    const name = `${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}_${NAME_RE.test(String(stream)) ? stream : 'stream'}.${ext}`;
+    await writeFile(join(dir, name), buf);
+    return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${name}`;
+  }
+
+  // ---- phone app (device) API: authenticated with the stream name + stream key, the same secret used to publish ----
+  const deviceAuth = (req, res, next) => {
+    const { name, key } = req.body || {};
+    const row = typeof name === 'string' && typeof key === 'string' && db.prepare('SELECT key_hash, revoked FROM streams WHERE name = ?').get(name);
+    if (row && !row.revoked && safeEqual(sha256(key), row.key_hash)) return next();
+    audit(req, 'device.denied', String(name), null);
+    res.status(401).json({ error: 'invalid key' });
+  };
+  const deviceLimit = rateLimit(30, 60 * 1000);
+  app.post('/api/device/overlay', deviceLimit, deviceAuth, (req, res) => {
+    const o = getOverlay();
+    res.json({ title: o.title, showTitle: o.showTitle, titlePos: o.titlePos });
+  });
+  app.post('/api/device/screenshot', deviceLimit, deviceAuth, async (req, res) => {
+    const buf = Buffer.from(typeof req.body.data === 'string' ? req.body.data.replace(/^data:[^,]*,/, '') : '', 'base64');
+    const saved = await saveShot(buf, req.body.name);
+    if (!saved) return res.status(400).json({ error: 'PNG or JPG up to 12 MB' });
+    audit(req, 'screenshot.device', saved, req.body.name);
+    res.json({ ok: true, name: saved });
+  });
+
   // ---- admin: screenshots of the live picture, stored as <shotDir>/YYYY/MM/DD/HH-MM-SS_channel.png ----
   admin.post('/screenshots', async (req, res) => {
     if (!shotDir) return res.status(400).json({ error: 'screenshots disabled' });
     const buf = Buffer.from(typeof req.body?.data === 'string' ? req.body.data.replace(/^data:[^,]*,/, '') : '', 'base64');
-    const ext = imageExt(buf);
-    if (!buf.length || buf.length > 12 * 1024 * 1024 || !(ext === 'png' || ext === 'jpg')) return res.status(400).json({ error: 'PNG or JPG up to 12 MB' });
-    const stream = NAME_RE.test(String(req.body.stream)) ? req.body.stream : 'stream';
-    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
-    const dir = join(shotDir, String(d.getFullYear()), p2(d.getMonth() + 1), p2(d.getDate()));
-    await mkdir(dir, { recursive: true });
-    const name = `${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}_${stream}.${ext}`;
-    await writeFile(join(dir, name), buf);
-    audit(req, 'screenshot.save', name);
-    res.json({ ok: true, name: `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${name}` });
+    const saved = await saveShot(buf, req.body.stream);
+    if (!saved) return res.status(400).json({ error: 'PNG or JPG up to 12 MB' });
+    audit(req, 'screenshot.save', saved);
+    res.json({ ok: true, name: saved });
   });
   admin.get('/screenshots', async (req, res) => res.json(shotDir ? await walkDated(shotDir, SHOT_RE) : []));
   admin.get('/screenshots/file', (req, res) => {

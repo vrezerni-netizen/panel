@@ -45,6 +45,9 @@ class MainActivity : Activity() {
     private lateinit var recBtn: TextView
     private lateinit var stopBtn: TextView
     private lateinit var sizeInfo: TextView
+    private lateinit var shotBtn: TextView
+    private lateinit var vidBtn: TextView
+    private lateinit var noteText: TextView
     private lateinit var tileScreen: LinearLayout
     private lateinit var tileCamera: LinearLayout
     private lateinit var land: Switch
@@ -251,11 +254,30 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(left); addView(recBtn); addView(stopBtn)
         }
+        // operator tools while live: own screenshot and own video recording (saved on the phone by date)
+        fun toolButton(text: String) = TextView(this).apply {
+            this.text = text
+            gravity = Gravity.CENTER
+            textSize = 15f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(8), dp(13), dp(8), dp(13))
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, dp(4), 0) }
+        }
+        shotBtn = toolButton("📷  Скриншот")
+        vidBtn = toolButton("🎬  Записать видео")
+        shotBtn.setOnClickListener { startService(Intent(this, StreamService::class.java).setAction(StreamService.ACTION_SHOT)) }
+        vidBtn.setOnClickListener { startService(Intent(this, StreamService::class.java).setAction(StreamService.ACTION_REC)) }
+        noteText = TextView(this).apply { textSize = 13f; setTextColor(cMuted); setPadding(dp(4), dp(8), 0, 0) }
+        val tools = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(14), 0, 0)
+            addView(shotBtn); addView(vidBtn)
+        }
         val controlCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = round(cCard, 18, 1, cLine)
             setPadding(dp(18), dp(16), dp(16), dp(16))
-            addView(controls)
+            addView(controls); addView(tools); addView(noteText)
         }
 
         // ---- what to record: big tiles ----
@@ -392,6 +414,22 @@ class MainActivity : Activity() {
         stopBtn.text = "■"
         stopBtn.setTextColor(if (on) cText else cMuted)
         stopBtn.background = circle(cTile, 2, if (on) cMuted else cLine)
+        // operator tools: active only while live
+        val rec = StreamService.recording
+        shotBtn.alpha = if (on) 1f else 0.4f
+        vidBtn.alpha = if (on) 1f else 0.4f
+        shotBtn.setTextColor(cText); shotBtn.background = round(cTile, 12, 1, cLine)
+        if (rec) {
+            val rs = ((System.currentTimeMillis() - StreamService.recStartedAt) / 1000).coerceAtLeast(0)
+            vidBtn.text = String.format("⏹  Стоп  %02d:%02d", rs / 60, rs % 60)
+            vidBtn.setTextColor(Color.WHITE); vidBtn.background = round(cRed, 12)
+        } else {
+            vidBtn.text = "🎬  Записать видео"
+            vidBtn.setTextColor(cText); vidBtn.background = round(cTile, 12, 1, cLine)
+        }
+        val fresh = System.currentTimeMillis() - StreamService.noteAt < 6000 && StreamService.lastNote.isNotEmpty()
+        noteText.text = if (fresh) StreamService.lastNote else ""
+        noteText.visibility = if (fresh) View.VISIBLE else View.GONE
     }
 
     override fun onStart() {

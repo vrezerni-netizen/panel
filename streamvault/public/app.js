@@ -469,7 +469,7 @@ async function lookPage(c) {
 const EV = { 'login.ok': 'Вход выполнен', 'login.fail': 'Неверный пароль', 'login.totp_fail': 'Неверный код', 'login.locked': 'Вход заблокирован',
   'user.create': 'Создан пользователь', 'user.delete': 'Удалён пользователь', 'user.disable': 'Пользователь отключён', 'user.enable': 'Пользователь включён',
   'user.reset2fa': 'Сброшена 2FA', 'user.password': 'Сменён пароль', 'stream.create': 'Создан ключ эфира', 'stream.revoke': 'Ключ отозван',
-  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'screenshot.save': 'Сохранён скриншот', 'screenshot.delete': 'Удалён скриншот', 'stream.delete': 'Канал удалён', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
+  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'screenshot.save': 'Сохранён скриншот', 'screenshot.device': 'Скриншот с телефона', 'device.denied': 'Отказ телефону (неверный ключ)', 'screenshot.delete': 'Удалён скриншот', 'stream.delete': 'Канал удалён', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
 async function logPage(c) {
   const rows = await api('/api/admin/audit');
   c.innerHTML = `<div class="head"><div><h2>Журнал</h2><div class="sub">Последние 200 событий безопасности</div></div></div>
