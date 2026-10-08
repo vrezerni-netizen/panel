@@ -8,6 +8,7 @@ const ICON = {
   log: '<path d="M5 4h14v2H5zm0 7h14v2H5zm0 7h14v2H5z"/>',
   out: '<path d="M10 4h8v16h-8v-2h6V6h-6zM3 12l4-4v3h7v2H7v3z"/>',
   image: '<path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2 11h12l-3.5-4.5-3 3.8L9 12zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
+  shot: '<path d="M9 4l-1.8 2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2.2L15 4zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/>',
   cam: '<path d="M4 7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>',
 };
 const svg = (n, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="currentColor">${ICON[n]}</svg>`;
@@ -75,6 +76,7 @@ function totpView(pending) {
 const PAGES = [
   { id: 'live', label: 'Эфир', icon: 'live', admin: false },
   { id: 'rec', label: 'Записи', icon: 'rec', admin: true },
+  { id: 'shots', label: 'Скриншоты', icon: 'shot', admin: true },
   { id: 'users', label: 'Пользователи', icon: 'users', admin: true },
   { id: 'keys', label: 'Ключи эфира', icon: 'key', admin: true },
   { id: 'look', label: 'Оформление', icon: 'image', admin: true },
@@ -102,10 +104,10 @@ function destroyHls() { if (hls) { hls.destroy(); hls = null; } }
 async function route() {
   if (!me) return;
   stopPoll(); destroyHls();
-  const [page = 'live', arg] = location.hash.replace(/^#\//, '').split('/');
+  const [page = 'live', ...args] = location.hash.replace(/^#\//, '').split('/').map(decodeURIComponent);
   const p = PAGES.find((x) => x.id === page && (!x.admin || me.role === 'admin')) || PAGES[0];
   const c = shell(p.id);
-  try { await ({ live: livePage, rec: recPage, users: usersPage, keys: keysPage, look: lookPage, log: logPage }[p.id])(c, decodeURIComponent(arg || '')); }
+  try { await ({ live: livePage, rec: recPage, shots: shotsPage, users: usersPage, keys: keysPage, look: lookPage, log: logPage }[p.id])(c, args); }
   catch (e) { if (e.status === 401) { me = null; loginView(); } else c.innerHTML = `<div class="card err">Ошибка: ${esc(e.message)}</div>`; }
 }
 window.addEventListener('hashchange', route);
@@ -152,7 +154,7 @@ function dockHtml(o) {
     <div class="grp">Формат видео</div><div class="seg">${[['auto', 'Как у экрана'], ['16:9', '16:9 широкий'], ['4:3', '4:3'], ['1:1', 'Квадрат'], ['3:4', 'Вертикально 3:4'], ['9:16', 'Вертикально 9:16']].map(([a, l]) => `<button class="${o.aspect === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div>
     <div class="grp">Быстрые действия</div>
     <div class="quick"><button class="btn sec sm" data-go="keys">Новый ключ эфира</button><button class="btn sec sm" data-go="users">Новый зритель</button>
-    <button class="btn sec sm" data-go="look">Фон сайта</button><button class="btn sec sm" data-go="rec">Записи</button><button class="btn sec sm" data-go="log">Журнал</button></div>
+    <button class="btn sec sm" data-go="look">Фон сайта</button><button class="btn sec sm" data-go="rec">Записи</button><button class="btn sec sm" data-go="shots">Скриншоты</button><button class="btn sec sm" data-go="log">Журнал</button></div>
   </div></aside>`;
 }
 
@@ -168,13 +170,20 @@ async function livePage(c) {
       <div class="ov ov-timer" id="ovTimer" hidden><span class="rd"></span><span id="ovClock">00:00</span></div>
       <div class="ph" id="ph">${svg('cam', '')}<div>Выберите эфир ниже</div></div></div>
       <div class="bar"><span id="nowname" class="mut"></span><span class="spacer"></span>
-        <button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
+        ${admin ? '<button class="btn sm" id="shot">📷 Скриншот</button>' : ''}<button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
     <h3 style="margin:0 0 12px">Каналы</h3><div class="grid" id="grid"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
   const v = $('#v');
   v.addEventListener('loadedmetadata', () => applyOverlay(overlay, st));
   v.addEventListener('resize', () => applyOverlay(overlay, st));
   $('#fs').onclick = () => $('#pl').requestFullscreen?.();
   $('#rl').onclick = () => current && play(current, true);
+  if (admin) $('#shot').onclick = async () => {
+    if (!current || !v.videoWidth) return toast('Сначала включите эфир', true);
+    const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: current }); toast('Скриншот сохранён: ' + r.name.split('/').slice(0, 3).reverse().join('.')); }
+    catch (e) { toast(e.message, true); }
+  };
   applyOverlay(overlay, st);
 
   if (admin) {
@@ -242,11 +251,51 @@ async function livePage(c) {
   ticker = setInterval(() => applyOverlay(overlay, st), 1000);
 }
 
-/* ---------- recordings (folders) ---------- */
-function parseRec(r) {
-  const m = /^live_(.+?)-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/.exec(r.name);
-  if (!m) return { ...r, stream: 'Прочее', when: fmtDate(r.mtime) };
-  return { ...r, stream: m[1], when: `${m[4]}.${m[3]}.${m[2]} ${m[5]}:${m[6]}:${m[7]}` };
+/* ---------- date folders (recordings, screenshots): year -> month -> day ---------- */
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const pad2 = (n) => String(n).padStart(2, '0');
+function dateParts(item) {
+  let m = /^(\d{4})\/(\d{2})\/(\d{2})\//.exec(item.name);
+  if (!m) m = /(\d{4})-(\d{2})-(\d{2})_/.exec(item.name);
+  if (m) return [m[1], m[2], m[3]];
+  const d = new Date(item.mtime); return [String(d.getFullYear()), pad2(d.getMonth() + 1), pad2(d.getDate())];
+}
+const baseName = (n) => n.split('/').pop();
+const timeOf = (item) => {
+  const m = /_(\d{2})-(\d{2})-(\d{2})/.exec(baseName(item.name)) || /^(\d{2})-(\d{2})-(\d{2})_/.exec(baseName(item.name));
+  return m ? `${m[1]}:${m[2]}:${m[3]}` : new Date(item.mtime).toLocaleTimeString('ru-RU');
+};
+const chanOf = (item) => { const n = baseName(item.name); const m = /^live_(.+?)-\d{4}-/.exec(n) || /^\d{2}-\d{2}-\d{2}_(.+?)\.(png|jpg)$/.exec(n); return m ? m[1] : '—'; };
+
+/** Generic year/month/day browser. opts: {page, title, sub, intro, emptyText, files(c, items, day) -> html + wiring} */
+function dateBrowser(c, items, args, opts) {
+  const [y, m, d] = args;
+  const withDate = items.map((it) => ({ ...it, dp: dateParts(it) }));
+  const count = (arr) => `${arr.length} · ${fmtSize(arr.reduce((s, x) => s + x.size, 0))}`;
+  const crumbs = (parts) => `<div class="crumbs"><button data-h="#/${opts.page}">${opts.title}</button>${parts.map(([label, h], i) =>
+    ` / ${i === parts.length - 1 ? `<b style="color:var(--fg)">${label}</b>` : `<button data-h="${h}">${label}</button>`}`).join('')}</div>`;
+  const wireCrumbs = () => c.querySelectorAll('[data-h]').forEach((b) => (b.onclick = () => { location.hash = b.dataset.h; }));
+  const tiles = (arr, icon) => `<div class="grid">${arr.map(([label, sub, h]) => `<button class="tile folder" data-h="${h}"><div class="big">${svg(icon, '')}</div><div class="t">${label}</div><span class="chip">${sub}</span></button>`).join('')}</div>`;
+  const head = `<div class="head"><div><h2>${opts.title}</h2><div class="sub">${opts.sub}</div></div></div>${opts.intro || ''}`;
+  if (!items.length) { c.innerHTML = head + `<div class="card empty">${opts.emptyText}</div>`; return; }
+
+  if (!y) {
+    const ys = [...new Set(withDate.map((i) => i.dp[0]))].sort().reverse();
+    c.innerHTML = head + tiles(ys.map((yy) => [yy, count(withDate.filter((i) => i.dp[0] === yy)), `#/${opts.page}/${yy}`]), 'rec');
+  } else if (!m) {
+    const arr = withDate.filter((i) => i.dp[0] === y);
+    const ms = [...new Set(arr.map((i) => i.dp[1]))].sort().reverse();
+    c.innerHTML = crumbs([[y, '']]) + tiles(ms.map((mm) => [`${MONTHS[+mm - 1]} ${y}`, count(arr.filter((i) => i.dp[1] === mm)), `#/${opts.page}/${y}/${mm}`]), 'rec');
+  } else if (!d) {
+    const arr = withDate.filter((i) => i.dp[0] === y && i.dp[1] === m);
+    const ds = [...new Set(arr.map((i) => i.dp[2]))].sort().reverse();
+    c.innerHTML = crumbs([[y, `#/${opts.page}/${y}`], [MONTHS[+m - 1], '']]) + tiles(ds.map((dd) => [`${+dd} ${MONTHS_GEN[+m - 1]} ${y}`, count(arr.filter((i) => i.dp[2] === dd)), `#/${opts.page}/${y}/${m}/${dd}`]), 'rec');
+  } else {
+    const arr = withDate.filter((i) => i.dp[0] === y && i.dp[1] === m && i.dp[2] === d).sort((a, b) => timeOf(b).localeCompare(timeOf(a)));
+    c.innerHTML = crumbs([[y, `#/${opts.page}/${y}`], [MONTHS[+m - 1], `#/${opts.page}/${y}/${m}`], [`${+d} ${MONTHS_GEN[+m - 1]}`, '']]) + opts.files(arr);
+  }
+  wireCrumbs();
 }
 
 function pathCardHtml(st) {
@@ -261,36 +310,48 @@ function pathCardHtml(st) {
       Если флешку вынуть, записи подождут в защищённом месте на компьютере и перенесутся, когда вы её вставите обратно.</div></div>`;
 }
 
-async function recPage(c, folder) {
-  const rst = await api('/api/admin/recpath');
-  const recs = (await api('/api/admin/recordings')).map(parseRec);
+async function recPage(c, args) {
+  const [rst, recs] = await Promise.all([api('/api/admin/recpath'), api('/api/admin/recordings')]);
   const note = `<div class="note">🔒 Записи зашифрованы. Скачайте файл и откройте его на компьютере с флешкой: запустите
-    <code>decrypt-recording.bat</code> (папка программы), укажите файл и ключ <code>streamvault.key</code> с флешки.
-    Результат — обычный видеофайл MP4 (H.264 + AAC), открывается в VLC и любом плеере. Файл можно скачать кнопкой «Скачать» и выбрать флешку или любую папку. Без флешки посмотреть запись нельзя никому, даже администратору.</div>`;
-  if (!folder) {
-    const groups = {};
-    for (const r of recs) (groups[r.stream] ||= []).push(r);
-    c.innerHTML = `<div class="head"><div><h2>Записи</h2><div class="sub">Папки по каналам</div></div></div>${pathCardHtml(rst)}${note}` +
-      (recs.length ? `<div class="grid">${Object.entries(groups).map(([n, a]) => `<button class="tile folder" data-f="${esc(n)}">
-        <div class="big">${svg('rec', '')}</div><div class="t">${esc(n)}</div>
-        <span class="chip">${a.length} файл(ов) · ${fmtSize(a.reduce((s, x) => s + x.size, 0))}</span></button>`).join('')}</div>`
-        : `<div class="card empty">Записей пока нет.<br>Запись включается при первом запуске, если указать флешку для ключа.</div>`);
-    c.querySelectorAll('.tile').forEach((t) => (t.onclick = () => { location.hash = '#/rec/' + encodeURIComponent(t.dataset.f); }));
-    $('#rpSave').onclick = async () => { try { await api('/api/admin/recpath', 'PUT', { path: $('#rp').value }); toast('Папка сохранена'); route(); } catch (e) { toast(e.message, true); } };
-    $('#rpReset').onclick = async () => { await api('/api/admin/recpath', 'DELETE'); toast('Возвращена стандартная папка'); route(); };
-    return;
-  }
-  const list = recs.filter((r) => r.stream === folder);
-  c.innerHTML = `<div class="crumbs"><button id="back">Записи</button> / <b style="color:var(--fg)">${esc(folder)}</b></div>${note}
-    <div class="card tbl-wrap"><table><thead><tr><th>Дата и время</th><th>Размер</th><th></th></tr></thead><tbody>
-    ${list.map((r) => `<tr><td>${esc(r.when)}</td><td>${fmtSize(r.size)}</td><td><div class="row">
-      <a class="btn sm" href="/api/admin/recordings/${encodeURIComponent(r.name)}">Скачать</a>
-      <button class="btn danger sm" data-d="${esc(r.name)}">Удалить</button></div></td></tr>`).join('') || '<tr><td colspan="3" class="empty">Пусто</td></tr>'}
-    </tbody></table></div>`;
-  $('#back').onclick = () => { location.hash = '#/rec'; };
+    <code>decrypt-recording.bat</code>, перетащите файл записи и ключ <code>streamvault.key</code>. Результат — обычное видео MP4 (H.264 + AAC),
+    открывается в VLC и любом плеере. Без флешки с ключом посмотреть запись нельзя никому, даже администратору.
+    Папки по датам (год / месяц / день) создаются сами, когда эфир записан.</div>`;
+  dateBrowser(c, recs, args, {
+    page: 'rec', title: 'Записи', sub: 'Папки по датам: год → месяц → день',
+    intro: (args.length ? '' : pathCardHtml(rst)) + note,
+    emptyText: 'Записей пока нет.<br>Запись включается при первом запуске, если указать флешку для ключа. Когда эфир будет записан, здесь сама появится папка с датой.',
+    files: (arr) => `${note}<div class="card tbl-wrap"><table><thead><tr><th>Время</th><th>Канал</th><th>Размер</th><th></th></tr></thead><tbody>
+      ${arr.map((r) => `<tr><td>${esc(timeOf(r))}</td><td>${esc(chanOf(r))}</td><td>${fmtSize(r.size)}</td><td><div class="row">
+        <a class="btn sm" href="/api/admin/recordings/file?f=${encodeURIComponent(r.name)}">Скачать</a>
+        <button class="btn danger sm" data-d="${esc(r.name)}">Удалить</button></div></td></tr>`).join('')}</tbody></table></div>`,
+  });
   c.querySelectorAll('[data-d]').forEach((b) => (b.onclick = async () => {
     if (!confirm('Удалить запись безвозвратно?')) return;
-    await api('/api/admin/recordings/' + encodeURIComponent(b.dataset.d), 'DELETE'); route();
+    await api('/api/admin/recordings/file?f=' + encodeURIComponent(b.dataset.d), 'DELETE'); route();
+  }));
+  const sv = $('#rpSave');
+  if (sv) {
+    sv.onclick = async () => { try { await api('/api/admin/recpath', 'PUT', { path: $('#rp').value }); toast('Папка сохранена'); route(); } catch (e) { toast(e.message, true); } };
+    $('#rpReset').onclick = async () => { await api('/api/admin/recpath', 'DELETE'); toast('Возвращена стандартная папка'); route(); };
+  }
+}
+
+/* ---------- screenshots ---------- */
+async function shotsPage(c, args) {
+  const shots = await api('/api/admin/screenshots');
+  dateBrowser(c, shots, args, {
+    page: 'shots', title: 'Скриншоты', sub: 'Снимки эфира по датам: год → месяц → день',
+    intro: '<div class="note">Чтобы сделать снимок, откройте «Эфир» и нажмите «Скриншот» под видео. Снимок сохранится сюда, в папку с сегодняшней датой.</div>',
+    emptyText: 'Скриншотов пока нет.<br>Откройте «Эфир» и нажмите «Скриншот» под видео.',
+    files: (arr) => `<div class="shots">${arr.map((r) => `<figure class="shot"><a href="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" target="_blank" rel="noopener">
+      <img loading="lazy" src="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" alt=""></a>
+      <figcaption><div><b>${esc(timeOf(r))}</b> <span class="mut">${esc(chanOf(r))}</span></div><div class="row" style="margin:6px 0 0">
+      <a class="btn sec sm" href="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}&dl=1">Скачать</a>
+      <button class="btn danger sm" data-sd="${esc(r.name)}">Удалить</button></div></figcaption></figure>`).join('')}</div>`,
+  });
+  c.querySelectorAll('[data-sd]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('Удалить скриншот?')) return;
+    await api('/api/admin/screenshots/file?f=' + encodeURIComponent(b.dataset.sd), 'DELETE'); route();
   }));
 }
 
@@ -338,13 +399,17 @@ async function keysPage(c) {
   c.innerHTML = `<div class="head"><div><h2>Ключи эфира</h2><div class="sub">Ключ вводится в приложении на планшете. Показывается один раз.</div></div></div>
     <div class="card tbl-wrap"><table><thead><tr><th>Канал</th><th>Статус</th><th></th></tr></thead><tbody>
     ${streams.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td>${s.revoked ? '<span class="chip off">отозван</span>' : '<span class="chip ok"><span class="dot"></span>действует</span>'}</td>
-      <td><div class="row">${s.revoked ? '' : `<button class="btn danger sm" data-r="${s.id}">Отозвать</button>`}</div></td></tr>`).join('') || '<tr><td colspan="3" class="empty">Ключей нет</td></tr>'}
+      <td><div class="row">${s.revoked ? '' : `<button class="btn sec sm" data-r="${s.id}">Отозвать</button>`}<button class="btn danger sm" data-x="${s.id}" data-n="${esc(s.name)}">Удалить</button></div></td></tr>`).join('') || '<tr><td colspan="3" class="empty">Ключей нет</td></tr>'}
     </tbody></table></div>
     <div class="card"><h3 style="margin-bottom:12px">Новый канал</h3>
       <form id="ns" class="form-row"><input name="n" placeholder="Имя, например tablet1" pattern="[a-z0-9_-]{1,32}" required><button class="btn">Создать ключ</button></form>
       <div id="key"></div></div>`;
   c.querySelectorAll('[data-r]').forEach((b) => (b.onclick = async () => {
     if (confirm('Отозвать ключ? Эфир с него сразу перестанет приниматься.')) { await api(`/api/admin/streams/${b.dataset.r}/revoke`, 'POST'); route(); }
+  }));
+  c.querySelectorAll('[data-x]').forEach((b) => (b.onclick = async () => {
+    if (!confirm(`Удалить канал «${b.dataset.n}» полностью? Ключ перестанет работать, канал пропадёт из списка.`)) return;
+    try { await api(`/api/admin/streams/${b.dataset.x}`, 'DELETE'); toast('Канал удалён'); route(); } catch (e) { toast(e.message, true); }
   }));
   $('#ns').onsubmit = async (ev) => {
     ev.preventDefault();
@@ -404,7 +469,7 @@ async function lookPage(c) {
 const EV = { 'login.ok': 'Вход выполнен', 'login.fail': 'Неверный пароль', 'login.totp_fail': 'Неверный код', 'login.locked': 'Вход заблокирован',
   'user.create': 'Создан пользователь', 'user.delete': 'Удалён пользователь', 'user.disable': 'Пользователь отключён', 'user.enable': 'Пользователь включён',
   'user.reset2fa': 'Сброшена 2FA', 'user.password': 'Сменён пароль', 'stream.create': 'Создан ключ эфира', 'stream.revoke': 'Ключ отозван',
-  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
+  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'screenshot.save': 'Сохранён скриншот', 'screenshot.delete': 'Удалён скриншот', 'stream.delete': 'Канал удалён', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
 async function logPage(c) {
   const rows = await api('/api/admin/audit');
   c.innerHTML = `<div class="head"><div><h2>Журнал</h2><div class="sub">Последние 200 событий безопасности</div></div></div>

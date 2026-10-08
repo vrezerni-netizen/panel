@@ -52,6 +52,7 @@ export function createApp({ db, config = {} }) {
     trustProxy = false,
     recDir: recDirCfg = null,
     uploadDir = null,
+    shotDir = null,
   } = config;
   // recordings folder: default from config, can be changed by admin (e.g. folder on a USB stick)
   const customRecDir = () => {
@@ -76,7 +77,7 @@ export function createApp({ db, config = {} }) {
   });
   const smallJson = express.json({ limit: '10kb' });
   const bigJson = express.json({ limit: '14mb' });
-  app.use((req, res, next) => (req.path === '/api/admin/background' ? bigJson : smallJson)(req, res, next));
+  app.use((req, res, next) => (['/api/admin/background', '/api/admin/screenshots'].includes(req.path) ? bigJson : smallJson)(req, res, next));
 
   const now = () => Date.now();
   const audit = (req, event, detail, actor) =>
@@ -347,27 +348,79 @@ export function createApp({ db, config = {} }) {
     res.json({ name, key }); // key shown once
   });
 
+  admin.delete('/streams/:id', (req, res) => {
+    const row = db.prepare('SELECT name FROM streams WHERE id = ?').get(req.params.id);
+    if (!row) return res.sendStatus(404);
+    db.prepare('DELETE FROM streams WHERE id = ?').run(req.params.id);
+    liveSince.delete(row.name);
+    audit(req, 'stream.delete', row.name);
+    res.json({ ok: true });
+  });
+
   admin.post('/streams/:id/revoke', (req, res) => {
     db.prepare('UPDATE streams SET revoked = 1 WHERE id = ?').run(req.params.id);
     audit(req, 'stream.revoke', String(req.params.id));
     res.json({ ok: true });
   });
 
-  // ---- admin: encrypted recordings (cannot be played here: key is on the USB stick) ----
-  const REC_RE = /^[\w.-]+\.sve$/;
+  // ---- admin: encrypted recordings, stored as <folder>/YYYY/MM/DD/file.sve ----
+  const REC_RE = /^(\d{4}\/\d{2}\/\d{2}\/)?[\w.-]+\.sve$/;
+  const SHOT_RE = /^\d{4}\/\d{2}\/\d{2}\/[\w.-]+\.(png|jpg)$/;
+  async function walkDated(base, re) {
+    const out = [];
+    const files = async (dir, rel) => {
+      for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        if (e.isFile() && re.test(rel + e.name)) { const st = await stat(join(dir, e.name)); out.push({ name: rel + e.name, size: st.size, mtime: st.mtimeMs }); }
+      }
+    };
+    const dirs = async (dir, rx) => (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && rx.test(e.name)).map((e) => e.name);
+    await files(base, '');
+    for (const y of await dirs(base, /^\d{4}$/)) for (const m of await dirs(join(base, y), /^\d{2}$/)) for (const d of await dirs(join(base, y, m), /^\d{2}$/)) {
+      await files(join(base, y, m, d), `${y}/${m}/${d}/`);
+    }
+    return out.sort((a, b) => b.mtime - a.mtime);
+  }
   admin.get('/recordings', async (req, res) => {
     const recDir = getRecDir();
-    if (!recDir) return res.json([]);
-    const names = (await readdir(recDir).catch(() => [])).filter((n) => REC_RE.test(n));
-    const list = [];
-    for (const n of names) { const st = await stat(join(recDir, n)); list.push({ name: n, size: st.size, mtime: st.mtimeMs }); }
-    res.json(list.sort((a, b) => b.mtime - a.mtime));
+    res.json(recDir ? await walkDated(recDir, REC_RE) : []);
   });
-  admin.get('/recordings/:file', (req, res) => {
+  admin.get('/recordings/file', (req, res) => {
     const recDir = getRecDir();
-    if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
-    audit(req, 'recording.download', req.params.file);
-    res.download(join(recDir, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+    const f = String(req.query.f || '');
+    if (!recDir || !REC_RE.test(f)) return res.sendStatus(404);
+    audit(req, 'recording.download', f);
+    res.download(join(recDir, f), f.split('/').pop(), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+  });
+
+  // ---- admin: screenshots of the live picture, stored as <shotDir>/YYYY/MM/DD/HH-MM-SS_channel.png ----
+  admin.post('/screenshots', async (req, res) => {
+    if (!shotDir) return res.status(400).json({ error: 'screenshots disabled' });
+    const buf = Buffer.from(typeof req.body?.data === 'string' ? req.body.data.replace(/^data:[^,]*,/, '') : '', 'base64');
+    const ext = imageExt(buf);
+    if (!buf.length || buf.length > 12 * 1024 * 1024 || !(ext === 'png' || ext === 'jpg')) return res.status(400).json({ error: 'PNG or JPG up to 12 MB' });
+    const stream = NAME_RE.test(String(req.body.stream)) ? req.body.stream : 'stream';
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    const dir = join(shotDir, String(d.getFullYear()), p2(d.getMonth() + 1), p2(d.getDate()));
+    await mkdir(dir, { recursive: true });
+    const name = `${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}_${stream}.${ext}`;
+    await writeFile(join(dir, name), buf);
+    audit(req, 'screenshot.save', name);
+    res.json({ ok: true, name: `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${name}` });
+  });
+  admin.get('/screenshots', async (req, res) => res.json(shotDir ? await walkDated(shotDir, SHOT_RE) : []));
+  admin.get('/screenshots/file', (req, res) => {
+    const f = String(req.query.f || '');
+    if (!shotDir || !SHOT_RE.test(f)) return res.sendStatus(404);
+    res.set({ 'Content-Type': f.endsWith('.png') ? 'image/png' : 'image/jpeg', 'Cache-Control': 'private, max-age=3600' });
+    if (req.query.dl) res.attachment(f.split('/').pop());
+    res.sendFile(join(shotDir, f), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+  });
+  admin.delete('/screenshots/file', async (req, res) => {
+    const f = String(req.query.f || '');
+    if (!shotDir || !SHOT_RE.test(f)) return res.sendStatus(404);
+    await unlink(join(shotDir, f)).catch(() => {});
+    audit(req, 'screenshot.delete', f);
+    res.json({ ok: true });
   });
 
   async function recStatus() {
@@ -396,11 +449,12 @@ export function createApp({ db, config = {} }) {
     res.json(await recStatus());
   });
 
-  admin.delete('/recordings/:file', async (req, res) => {
+  admin.delete('/recordings/file', async (req, res) => {
     const recDir = getRecDir();
-    if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
-    await unlink(join(recDir, req.params.file)).catch(() => {});
-    audit(req, 'recording.delete', req.params.file);
+    const f = String(req.query.f || '');
+    if (!recDir || !REC_RE.test(f)) return res.sendStatus(404);
+    await unlink(join(recDir, f)).catch(() => {});
+    audit(req, 'recording.delete', f);
     res.json({ ok: true });
   });
 

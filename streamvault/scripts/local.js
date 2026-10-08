@@ -118,7 +118,7 @@ process.on('SIGINT', stop); process.on('SIGTERM', stop);
 mtx.on('exit', (c) => { console.error('MediaMTX остановился (код ' + c + '). Возможно, порт 1935 или 8888 занят другой программой — закройте её (или второй запуск StreamVault).'); process.exit(1); });
 
 const port = Number(process.env.PORT || 3000);
-createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: join(dataDir, 'uploads') } }).listen(port, '0.0.0.0', () => {
+createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: join(dataDir, 'uploads'), shotDir: join(dataDir, 'screenshots') } }).listen(port, '0.0.0.0', () => {
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('='.repeat(60));
   console.log('Ахмат Запад запущен.');

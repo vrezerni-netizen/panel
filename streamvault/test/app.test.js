@@ -160,3 +160,47 @@ test('recordings folder: admin can point it to a folder (USB stick), invalid pat
     assert.equal((await call('/api/admin/recpath', { method: 'DELETE', cookie, body: {} })).json.custom, false);
   } finally { server.close(); }
 });
+
+test('dated recordings, screenshots by date, delete channel', async () => {
+  const { db, secret, server, call } = await setup();
+  try {
+    const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    server.close();
+    const rec = mkdtempSync(join(tmpdir(), 'rec-')), shots = mkdtempSync(join(tmpdir(), 'shots-'));
+    mkdirSync(join(rec, '2026', '10', '08'), { recursive: true });
+    writeFileSync(join(rec, '2026', '10', '08', 'live_tablet1-2026-10-08_10-00-00-1.mp4.sve'), 'x');
+    writeFileSync(join(rec, 'live_old-2026-09-01_09-00-00-1.mp4.sve'), 'x');
+    const srv = createApp({ db, config: { recDir: rec, shotDir: shots } }).listen(0);
+    after(() => srv.close());
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const c2 = async (path, { method = 'GET', body, cookie } = {}) => {
+      const r = await fetch(base + path, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: r.status, json: await r.json().catch(() => null), cookie: r.headers.get('set-cookie')?.split(';')[0] };
+    };
+    const p1 = (await c2('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await c2('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    const list = (await c2('/api/admin/recordings', { cookie })).json.map((r) => r.name).sort();
+    assert.deepEqual(list, ['2026/10/08/live_tablet1-2026-10-08_10-00-00-1.mp4.sve', 'live_old-2026-09-01_09-00-00-1.mp4.sve']);
+    assert.equal((await fetch(base + '/api/admin/recordings/file?f=' + encodeURIComponent('../../etc/passwd'), { headers: { cookie } })).status, 404);
+    assert.equal((await fetch(base + '/api/admin/recordings/file?f=' + encodeURIComponent(list[0]), { headers: { cookie } })).status, 200);
+    // screenshots
+    const png = Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), Buffer.alloc(40)]).toString('base64');
+    assert.equal((await c2('/api/admin/screenshots', { method: 'POST', body: { data: png, stream: 'tablet1' } })).status, 401);
+    const saved = await c2('/api/admin/screenshots', { method: 'POST', cookie, body: { data: png, stream: 'tablet1' } });
+    assert.equal(saved.status, 200); assert.match(saved.json.name, /^\d{4}\/\d{2}\/\d{2}\/\d{2}-\d{2}-\d{2}_tablet1\.png$/);
+    assert.equal((await c2('/api/admin/screenshots', { method: 'POST', cookie, body: { data: Buffer.from('<html>').toString('base64'), stream: 'x' } })).status, 400);
+    assert.equal((await c2('/api/admin/screenshots', { cookie })).json.length, 1);
+    const img = await fetch(base + '/api/admin/screenshots/file?f=' + encodeURIComponent(saved.json.name), { headers: { cookie } });
+    assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.equal((await fetch(base + '/api/admin/screenshots/file?f=' + encodeURIComponent(saved.json.name))).status, 401);
+    assert.equal((await c2('/api/admin/screenshots/file?f=' + encodeURIComponent(saved.json.name), { method: 'DELETE', cookie, body: {} })).status, 200);
+    assert.equal((await c2('/api/admin/screenshots', { cookie })).json.length, 0);
+    // delete channel
+    const ch = await c2('/api/admin/streams', { method: 'POST', cookie, body: { name: 'tablet9' } });
+    assert.equal(ch.status, 200);
+    const id = (await c2('/api/admin/streams', { cookie })).json.find((s) => s.name === 'tablet9').id;
+    assert.equal((await c2('/api/admin/streams/' + id, { method: 'DELETE', cookie, body: {} })).status, 200);
+    assert.equal((await c2('/api/admin/streams', { cookie })).json.length, 0);
+    assert.equal((await c2('/internal/mediamtx/auth', { method: 'POST', body: { action: 'publish', path: 'live/tablet9', password: ch.json.key, ip: '1.1.1.1' } })).status, 401);
+  } finally { server.close(); }
+});

@@ -28,7 +28,14 @@ export function startRecorder({ spoolDir, recDir, defaultDir = null, publicPem, 
         const st = await stat(f).catch(() => null);
         if (!st || Date.now() - st.mtimeMs < idleMs) continue;
         const tag = relative(spoolDir, f).split(sep).slice(0, -1).join('_').replace(/[^a-z0-9_-]/gi, '_');
-        const out = join(dir, `${tag}-${basename(f).replace(/[^\w.-]/g, '_')}.sve`);
+        // folder per day: <recordings>/YYYY/MM/DD/ (date taken from the segment name, otherwise its mtime)
+        const dm = /(\d{4})-(\d{2})-(\d{2})_/.exec(basename(f));
+        const p2 = (n) => String(n).padStart(2, '0');
+        const md = new Date(st.mtimeMs);
+        const [Y, M, D] = dm ? [dm[1], dm[2], dm[3]] : [String(md.getFullYear()), p2(md.getMonth() + 1), p2(md.getDate())];
+        const sub = join(dir, Y, M, D);
+        await mkdir(sub, { recursive: true });
+        const out = join(sub, `${tag}-${basename(f).replace(/[^\w.-]/g, '_')}.sve`);
         try {
           await encryptFile(f, publicPem, out);
           await unlink(f);
