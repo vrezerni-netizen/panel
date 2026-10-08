@@ -203,7 +203,7 @@ export function createApp({ db, config = {} }) {
     const streams = rows.map((r, i) => {
       const e = liveSince.get(r.name);
       if (live[i]) liveSince.set(r.name, { since: e ? e.since : t, seen: t });
-      else if (e && t - e.seen > 20000) liveSince.delete(r.name); // HLS may lag a few seconds behind publish
+      else if (e && t - e.seen > 40000) liveSince.delete(r.name); // keep the timer through short drops (the phone reconnects every 5 s)
       return { name: r.name, live: live[i], since: live[i] ? liveSince.get(r.name).since : null };
     });
     res.json({ now: t, streams });
@@ -244,6 +244,7 @@ export function createApp({ db, config = {} }) {
     try {
       const qs = new URLSearchParams(req.query).toString();
       const up = await fetch(`${mediamtxHls}/live/${name}/${file}${qs ? `?${qs}` : ''}`, { signal: AbortSignal.timeout(15000) });
+      if (up.status === 200) { const e = liveSince.get(name); if (e) e.seen = now(); } // someone is watching: the channel is alive
       res.status(up.status);
       for (const h of ['content-type', 'content-length']) if (up.headers.get(h)) res.set(h, up.headers.get(h));
       if (!up.body) return res.end();
@@ -262,7 +263,7 @@ export function createApp({ db, config = {} }) {
     if (action === 'publish') {
       const m = /^live\/([a-z0-9_-]{1,32})$/.exec(String(path));
       const row = m && db.prepare('SELECT key_hash, revoked FROM streams WHERE name = ?').get(m[1]);
-      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) { liveSince.set(m[1], { since: now(), seen: now() }); return res.sendStatus(200); }
+      if (row && !row.revoked && typeof password === 'string' && safeEqual(sha256(password), row.key_hash)) { const prev = liveSince.get(m[1]); liveSince.set(m[1], { since: prev && now() - prev.seen < 40000 ? prev.since : now(), seen: now() }); return res.sendStatus(200); }
       audit(req, 'publish.denied', String(path), null);
       return res.sendStatus(401);
     }
