@@ -136,6 +136,9 @@ function dockHtml(o) {
     <div class="grp">Где таймер</div>${corners('timerPos')}
     <div class="grp">Цвет рамки</div><div class="sw-row">${COLORS.map((c) => `<button class="clr ${o.frameColor === c ? 'on' : ''}" data-col="${c}" style="background:${c}"></button>`).join('')}</div>
     <div class="grp">Толщина рамки</div><div class="seg">${[[2, 'Тонкая'], [4, 'Средняя'], [8, 'Толстая'], [12, 'Очень']].map(([w, l]) => `<button class="${o.frameWidth === w ? 'on' : ''}" data-w="${w}">${l}</button>`).join('')}</div>
+    <div class="grp">Режим показа</div><div class="seg">
+      <button class="${o.mode === 'fast' ? 'on' : ''}" data-mode="fast">Быстрый ≈0,5 с<br><small>без звука</small></button>
+      <button class="${o.mode === 'hls' ? 'on' : ''}" data-mode="hls">Обычный ≈2 с<br><small>со звуком</small></button></div>
     <div class="grp">Формат видео</div><div class="seg">${[['auto', 'Как у экрана'], ['16:9', '16:9 широкий'], ['4:3', '4:3'], ['1:1', 'Квадрат'], ['3:4', 'Вертикально 3:4'], ['9:16', 'Вертикально 9:16']].map(([a, l]) => `<button class="${o.aspect === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div>
     <div class="grp">Быстрые действия</div>
     <div class="quick"><button class="btn sec sm" data-go="keys">Новый ключ эфира</button><button class="btn sec sm" data-go="users">Новый зритель</button>
@@ -177,7 +180,7 @@ async function livePage(c) {
   const applyAll = () => tiles.forEach(applyTile);
 
   // ---------- one player per channel ----------
-  function playTile(t) {
+  function playHls(t) {
     if (t.hls || t.native) return;
     const src = `/hls/${encodeURIComponent(t.name)}/index.m3u8`;
     if (window.Hls && Hls.isSupported()) {
@@ -192,10 +195,50 @@ async function livePage(c) {
       h.loadSource(src); h.attachMedia(t.v); t.v.play().catch(() => {});
     } else { t.native = true; t.v.src = src; t.v.play().catch(() => {}); }
   }
+
+  /** Fast mode: WebRTC (WHEP) through the authenticated proxy. Any problem -> falls back to HLS automatically. */
+  async function playRtc(t) {
+    if (t.pc || t.rtcBusy) return;
+    t.rtcBusy = true;
+    const fallback = () => { if (tiles.get(t.name) !== t || t.hls || t.native) return; stopTile(t); t.noRtc = true; if (t.live) playHls(t); };
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      t.pc = pc;
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      pc.ontrack = (e) => {
+        if (e.track.kind === 'video') {
+          t.v.srcObject = e.streams[0] || new MediaStream([e.track]);
+          const r = e.receiver; if ('jitterBufferTarget' in r) r.jitterBufferTarget = 0; if ('playoutDelayHint' in r) r.playoutDelayHint = 0;
+          t.v.play().catch(() => {});
+        }
+      };
+      pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState) && t.pc === pc) fallback(); else if (pc.connectionState === 'disconnected') setTimeout(() => { if (t.pc === pc && pc.connectionState !== 'connected') fallback(); }, 4000); };
+      await pc.setLocalDescription(await pc.createOffer());
+      await new Promise((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const done = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', done); res(); } };
+        pc.addEventListener('icegatheringstatechange', done); setTimeout(res, 2000);
+      });
+      const r = await fetch(`/whep/${encodeURIComponent(t.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp, credentials: 'same-origin' });
+      if (r.status === 401) { me = null; loginView(); return; }
+      if (!r.ok) throw new Error('whep ' + r.status);
+      await pc.setRemoteDescription({ type: 'answer', sdp: await r.text() });
+      // watchdog: no picture within 6 s -> use HLS instead
+      setTimeout(() => { if (t.pc === pc && t.v.readyState < 2) fallback(); }, 6000);
+    } catch { fallback(); }
+    finally { t.rtcBusy = false; }
+  }
+
+  function playTile(t) {
+    if (t.pc || t.hls || t.native || t.rtcBusy) return;
+    if (overlay.mode === 'fast' && !t.noRtc && window.RTCPeerConnection) playRtc(t); else playHls(t);
+  }
   function stopTile(t) {
     if (t.hls) { t.hls.destroy(); t.hls = null; }
-    if (t.native) { t.native = false; }
-    t.v.removeAttribute('src'); t.v.load();
+    if (t.pc) { const pc = t.pc; t.pc = null; try { pc.close(); } catch { /* ignore */ } }
+    t.native = false;
+    t.v.srcObject = null; t.v.removeAttribute('src'); t.v.load();
   }
   cleanup = () => tiles.forEach(stopTile);
 
@@ -257,7 +300,7 @@ async function livePage(c) {
     try { open = localStorage.getItem('dock2') !== 'closed'; } catch { /* default open */ }
     setDock(open);
     $('#dockToggle').onclick = () => setDock(layout.classList.contains('collapsed'));
-    const save = async (patch) => { try { overlay = await api('/api/admin/settings', 'PUT', patch); applyAll(); redock(); } catch (e) { toast(e.message, true); } };
+    const save = async (patch) => { try { overlay = await api('/api/admin/settings', 'PUT', patch); applyAll(); redock(); if (patch.mode) tiles.forEach((t) => { stopTile(t); t.noRtc = false; if (t.live) playTile(t); }); } catch (e) { toast(e.message, true); } };
     const redock = () => { const d = $('.dock'); d.outerHTML = dockHtml(overlay); wireDock(); };
     const wireDock = () => {
       const d = $('.dock');
@@ -266,6 +309,7 @@ async function livePage(c) {
       d.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => save({ [b.dataset.c]: b.dataset.p })));
       d.querySelectorAll('[data-col]').forEach((b) => (b.onclick = () => save({ frameColor: b.dataset.col })));
       d.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => save({ aspect: b.dataset.a })));
+      d.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => save({ mode: b.dataset.mode })));
       d.querySelectorAll('[data-w]').forEach((b) => (b.onclick = () => save({ frameWidth: Number(b.dataset.w) })));
       d.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => { location.hash = '#/' + b.dataset.go; }));
       $('#dSave').onclick = () => save({ title: $('#dTitle').value });

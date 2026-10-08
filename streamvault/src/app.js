@@ -22,6 +22,7 @@ const OVERLAY_DEFAULT = {
   showTimer: true, timerPos: 'tl',
   showFrame: true, frameColor: '#3b82f6', frameWidth: 4,
   aspect: 'auto',
+  mode: 'fast', // 'fast' = WebRTC (~0.5 s, no sound), 'hls' = low-latency HLS (~2 s, with sound)
 };
 const ASPECTS = ['auto', '16:9', '4:3', '1:1', '3:4', '9:16'];
 const THEME_DEFAULT = { bgVersion: 0, bgExt: '', dim: 0.55, blur: 0 };
@@ -42,12 +43,14 @@ function sanitizeOverlay(i = {}) {
   if (/^#[0-9a-fA-F]{6}$/.test(String(i.frameColor))) o.frameColor = i.frameColor.toLowerCase();
   if ([2, 4, 8, 12].includes(i.frameWidth)) o.frameWidth = i.frameWidth;
   if (ASPECTS.includes(i.aspect)) o.aspect = i.aspect;
+  if (['fast', 'hls'].includes(i.mode)) o.mode = i.mode;
   return o;
 }
 
 export function createApp({ db, config = {} }) {
   const {
     mediamtxHls = 'http://127.0.0.1:8888',
+    mediamtxWebrtc = 'http://127.0.0.1:8889',
     secureCookies = process.env.NODE_ENV === 'production',
     trustProxy = false,
     recDir: recDirCfg = null,
@@ -235,6 +238,20 @@ export function createApp({ db, config = {} }) {
     try { return { ...OVERLAY_DEFAULT, ...(row ? JSON.parse(row.value) : {}) }; } catch { return { ...OVERLAY_DEFAULT }; }
   };
   app.get('/api/settings', auth, (req, res) => res.json(getOverlay()));
+
+  // ---- WebRTC (WHEP) signaling proxy: only for logged-in users; the media itself then flows browser <-> MediaMTX ----
+  app.post('/whep/:name', auth, express.text({ type: 'application/sdp', limit: '64kb' }), async (req, res) => {
+    const { name } = req.params;
+    if (!NAME_RE.test(name) || !db.prepare('SELECT 1 FROM streams WHERE name = ? AND revoked = 0').get(name)) return res.sendStatus(404);
+    if (typeof req.body !== 'string' || !req.body.startsWith('v=0')) return res.sendStatus(400);
+    try {
+      const up = await fetch(`${mediamtxWebrtc}/live/${name}/whep`, {
+        method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: req.body, signal: AbortSignal.timeout(10000),
+      });
+      const text = await up.text();
+      res.status(up.status).type('application/sdp').send(text);
+    } catch { res.sendStatus(502); }
+  });
 
   // ---- HLS proxy: only for logged-in users ----
   app.get('/hls/:name/:file', auth, async (req, res) => {

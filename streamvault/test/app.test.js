@@ -238,3 +238,22 @@ test('phone app device API: overlay and screenshot need the stream key', async (
     assert.equal((await c2('/api/device/overlay', { method: 'POST', body: { name: 'phone1', key } })).status, 401);
   } finally { server.close(); }
 });
+
+test('WebRTC signaling proxy needs a session and a known channel; mode setting is validated', async () => {
+  const { secret, server, call } = await setup();
+  try {
+    const sdp = 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n';
+    const post = (path, cookie, body = sdp) => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp', ...(cookie ? { cookie } : {}) }, body });
+    assert.equal((await post('/whep/tablet1')).status, 401);
+    const p1 = (await call('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await call('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    assert.equal((await post('/whep/nochannel', cookie)).status, 404);
+    await call('/api/admin/streams', { method: 'POST', cookie, body: { name: 'tablet1' } });
+    assert.equal((await post('/whep/tablet1', cookie, 'garbage')).status, 400);
+    // media server is not running in tests -> 502 (the request got past auth and validation)
+    assert.equal((await post('/whep/tablet1', cookie)).status, 502);
+    assert.equal((await call('/api/admin/settings', { method: 'PUT', cookie, body: { mode: 'hls' } })).json.mode, 'hls');
+    assert.equal((await call('/api/admin/settings', { method: 'PUT', cookie, body: { mode: 'nonsense' } })).json.mode, 'hls');
+    assert.equal((await call('/api/settings', { cookie })).json.mode, 'hls');
+  } finally { server.close(); }
+});

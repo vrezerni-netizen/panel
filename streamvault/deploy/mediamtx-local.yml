@@ -11,7 +11,13 @@ metrics: no
 pprof: no
 playback: no
 rtsp: no
-webrtc: no
+# WebRTC: быстрый режим просмотра (≈0,5 с). Сигнализация только на localhost — наружу её отдаёт StreamVault после проверки входа
+webrtc: yes
+webrtcAddress: 127.0.0.1:8889
+webrtcEncryption: no
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: yes
 srt: no
 
 rtmp: yes

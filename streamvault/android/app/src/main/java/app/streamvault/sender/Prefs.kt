@@ -31,7 +31,7 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("mic", true)
         set(v) = sp.edit().putBoolean("mic", v).apply()
     var quality: Int // 0 = 720p, 1 = 1080p, 2 = 1080p max
-        get() = sp.getInt("quality", 1)
+        get() = sp.getInt("quality", 0)
         set(v) = sp.edit().putInt("quality", v).apply()
     /** 0 = no sound, 1 = microphone, 2 = device sound (screen only, Android 10+) */
     var audio: Int
