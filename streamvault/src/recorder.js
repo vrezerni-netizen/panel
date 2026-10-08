@@ -33,7 +33,7 @@ export function startRecorder({ spoolDir, recDir, defaultDir = null, publicPem, 
         const p2 = (n) => String(n).padStart(2, '0');
         const md = new Date(st.mtimeMs);
         const [Y, M, D] = dm ? [dm[1], dm[2], dm[3]] : [String(md.getFullYear()), p2(md.getMonth() + 1), p2(md.getDate())];
-        const sub = join(dir, Y, M, D);
+        const sub = join(dir, `${Y}-${M}-${D}`); // one folder per day
         await mkdir(sub, { recursive: true });
         const out = join(sub, `${tag}-${basename(f).replace(/[^\w.-]/g, '_')}.sve`);
         try {

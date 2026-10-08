@@ -238,7 +238,7 @@ async function livePage(c) {
         if (!t.live || !t.v.videoWidth) return toast('У этого канала сейчас нет эфира', true);
         const cv = document.createElement('canvas'); cv.width = t.v.videoWidth; cv.height = t.v.videoHeight;
         cv.getContext('2d').drawImage(t.v, 0, 0);
-        try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: name }); toast('Скриншот сохранён: ' + r.name.split('/').slice(0, 3).reverse().join('.')); }
+        try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: name }); toast('Скриншот сохранён в папку ' + r.name.split('/')[0].split('-').reverse().join('.')); }
         catch (err) { toast(err.message, true); }
       }
     }));
@@ -305,8 +305,7 @@ const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', '�
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const pad2 = (n) => String(n).padStart(2, '0');
 function dateParts(item) {
-  let m = /^(\d{4})\/(\d{2})\/(\d{2})\//.exec(item.name);
-  if (!m) m = /(\d{4})-(\d{2})-(\d{2})_/.exec(item.name);
+  let m = /^(\d{4})-(\d{2})-(\d{2})\//.exec(item.name) || /^(\d{4})\/(\d{2})\/(\d{2})\//.exec(item.name) || /(\d{4})-(\d{2})-(\d{2})_/.exec(item.name);
   if (m) return [m[1], m[2], m[3]];
   const d = new Date(item.mtime); return [String(d.getFullYear()), pad2(d.getMonth() + 1), pad2(d.getDate())];
 }
@@ -317,34 +316,24 @@ const timeOf = (item) => {
 };
 const chanOf = (item) => { const n = baseName(item.name); const m = /^live_(.+?)-\d{4}-/.exec(n) || /^\d{2}-\d{2}-\d{2}_(.+?)\.(png|jpg)$/.exec(n); return m ? m[1] : '—'; };
 
-/** Generic year/month/day browser. opts: {page, title, sub, intro, emptyText, files(c, items, day) -> html + wiring} */
+/** Generic date browser: one folder per day (newest first), files inside. */
 function dateBrowser(c, items, args, opts) {
-  const [y, m, d] = args;
-  const withDate = items.map((it) => ({ ...it, dp: dateParts(it) }));
+  const day = args.length >= 3 ? args.join('-') : args[0]; // old links #/rec/2026/10/08 still work
+  const withDay = items.map((it) => { const [y, m, d] = dateParts(it); return { ...it, day: `${y}-${m}-${d}` }; });
   const count = (arr) => `${arr.length} · ${fmtSize(arr.reduce((s, x) => s + x.size, 0))}`;
-  const crumbs = (parts) => `<div class="crumbs"><button data-h="#/${opts.page}">${opts.title}</button>${parts.map(([label, h], i) =>
-    ` / ${i === parts.length - 1 ? `<b style="color:var(--fg)">${label}</b>` : `<button data-h="${h}">${label}</button>`}`).join('')}</div>`;
-  const wireCrumbs = () => c.querySelectorAll('[data-h]').forEach((b) => (b.onclick = () => { location.hash = b.dataset.h; }));
-  const tiles = (arr, icon) => `<div class="grid">${arr.map(([label, sub, h]) => `<button class="tile folder" data-h="${h}"><div class="big">${svg(icon, '')}</div><div class="t">${label}</div><span class="chip">${sub}</span></button>`).join('')}</div>`;
+  const label = (k) => { const [y, m, d] = k.split('-'); return `${+d} ${MONTHS_GEN[+m - 1]} ${y}`; };
   const head = `<div class="head"><div><h2>${opts.title}</h2><div class="sub">${opts.sub}</div></div></div>${opts.intro || ''}`;
   if (!items.length) { c.innerHTML = head + `<div class="card empty">${opts.emptyText}</div>`; return; }
-
-  if (!y) {
-    const ys = [...new Set(withDate.map((i) => i.dp[0]))].sort().reverse();
-    c.innerHTML = head + tiles(ys.map((yy) => [yy, count(withDate.filter((i) => i.dp[0] === yy)), `#/${opts.page}/${yy}`]), 'rec');
-  } else if (!m) {
-    const arr = withDate.filter((i) => i.dp[0] === y);
-    const ms = [...new Set(arr.map((i) => i.dp[1]))].sort().reverse();
-    c.innerHTML = crumbs([[y, '']]) + tiles(ms.map((mm) => [`${MONTHS[+mm - 1]} ${y}`, count(arr.filter((i) => i.dp[1] === mm)), `#/${opts.page}/${y}/${mm}`]), 'rec');
-  } else if (!d) {
-    const arr = withDate.filter((i) => i.dp[0] === y && i.dp[1] === m);
-    const ds = [...new Set(arr.map((i) => i.dp[2]))].sort().reverse();
-    c.innerHTML = crumbs([[y, `#/${opts.page}/${y}`], [MONTHS[+m - 1], '']]) + tiles(ds.map((dd) => [`${+dd} ${MONTHS_GEN[+m - 1]} ${y}`, count(arr.filter((i) => i.dp[2] === dd)), `#/${opts.page}/${y}/${m}/${dd}`]), 'rec');
+  if (!day) {
+    const days = [...new Set(withDay.map((i) => i.day))].sort().reverse();
+    c.innerHTML = head + `<div class="grid">${days.map((k) => `<button class="tile folder" data-h="#/${opts.page}/${k}"><div class="big">${svg('rec', '')}</div>
+      <div class="t">${label(k)}</div><span class="chip">${count(withDay.filter((i) => i.day === k))}</span></button>`).join('')}</div>`;
   } else {
-    const arr = withDate.filter((i) => i.dp[0] === y && i.dp[1] === m && i.dp[2] === d).sort((a, b) => timeOf(b).localeCompare(timeOf(a)));
-    c.innerHTML = crumbs([[y, `#/${opts.page}/${y}`], [MONTHS[+m - 1], `#/${opts.page}/${y}/${m}`], [`${+d} ${MONTHS_GEN[+m - 1]}`, '']]) + opts.files(arr);
+    const arr = withDay.filter((i) => i.day === day).sort((a, b) => timeOf(b).localeCompare(timeOf(a)));
+    c.innerHTML = `<div class="crumbs"><button data-h="#/${opts.page}">${opts.title}</button> / <b style="color:var(--fg)">${label(day)}</b></div>` +
+      (arr.length ? opts.files(arr) : '<div class="card empty">В этой папке пусто</div>');
   }
-  wireCrumbs();
+  c.querySelectorAll('[data-h]').forEach((b) => (b.onclick = () => { location.hash = b.dataset.h; }));
 }
 
 function pathCardHtml(st) {
@@ -364,9 +353,9 @@ async function recPage(c, args) {
   const note = `<div class="note">🔒 Записи зашифрованы. Скачайте файл и откройте его на компьютере с флешкой: запустите
     <code>decrypt-recording.bat</code>, перетащите файл записи и ключ <code>streamvault.key</code>. Результат — обычное видео MP4 (H.264 + AAC),
     открывается в VLC и любом плеере. Без флешки с ключом посмотреть запись нельзя никому, даже администратору.
-    Папки по датам (год / месяц / день) создаются сами, когда эфир записан.</div>`;
+    Папка на каждый день (например, 8 октября 2026) создаётся сама, когда эфир записан.</div>`;
   dateBrowser(c, recs, args, {
-    page: 'rec', title: 'Записи', sub: 'Папки по датам: год → месяц → день',
+    page: 'rec', title: 'Записи', sub: 'Одна папка на каждый день',
     intro: (args.length ? '' : pathCardHtml(rst)) + note,
     emptyText: 'Записей пока нет.<br>Запись включается при первом запуске, если указать флешку для ключа. Когда эфир будет записан, здесь сама появится папка с датой.',
     files: (arr) => `${note}<div class="card tbl-wrap"><table><thead><tr><th>Время</th><th>Канал</th><th>Размер</th><th></th></tr></thead><tbody>
@@ -385,19 +374,57 @@ async function recPage(c, args) {
   }
 }
 
+/* ---------- picture viewer (lightbox) inside the app ---------- */
+function openViewer(items, start) {
+  let i = start;
+  const ov = document.createElement('div');
+  ov.className = 'lb';
+  ov.innerHTML = `<button class="lb-x" title="Закрыть (Esc)">✕</button>
+    <button class="lb-nav lb-prev" title="Назад">‹</button><img class="lb-img" alt=""><button class="lb-nav lb-next" title="Вперёд">›</button>
+    <div class="lb-bar"><span class="lb-cap"></span><span class="spacer"></span>
+      <a class="btn sm" id="lbDl">Скачать</a><button class="btn danger sm" id="lbDel">Удалить</button></div>`;
+  document.body.append(ov);
+  const img = $('.lb-img', ov);
+  const url = (n) => `/api/admin/screenshots/file?f=${encodeURIComponent(n)}`;
+  const show = () => {
+    img.src = url(items[i].name);
+    $('.lb-cap', ov).textContent = `${items[i].title}  ·  ${i + 1} из ${items.length}`;
+    $('#lbDl', ov).href = url(items[i].name) + '&dl=1';
+    $('.lb-prev', ov).style.visibility = items.length > 1 ? 'visible' : 'hidden';
+    $('.lb-next', ov).style.visibility = items.length > 1 ? 'visible' : 'hidden';
+  };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const step = (d) => { i = (i + d + items.length) % items.length; show(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') step(1); else if (e.key === 'ArrowLeft') step(-1); };
+  document.addEventListener('keydown', onKey);
+  $('.lb-x', ov).onclick = close;
+  $('.lb-prev', ov).onclick = (e) => { e.stopPropagation(); step(-1); };
+  $('.lb-next', ov).onclick = (e) => { e.stopPropagation(); step(1); };
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  $('#lbDel', ov).onclick = async () => {
+    if (!confirm('Удалить скриншот?')) return;
+    await api('/api/admin/screenshots/file?f=' + encodeURIComponent(items[i].name), 'DELETE');
+    close(); route();
+  };
+  show();
+}
+
 /* ---------- screenshots ---------- */
 async function shotsPage(c, args) {
   const shots = await api('/api/admin/screenshots');
   dateBrowser(c, shots, args, {
-    page: 'shots', title: 'Скриншоты', sub: 'Снимки эфира по датам: год → месяц → день',
+    page: 'shots', title: 'Скриншоты', sub: 'Одна папка на каждый день',
     intro: '<div class="note">Чтобы сделать снимок, откройте «Эфир» и нажмите «Скриншот» под видео. Снимок сохранится сюда, в папку с сегодняшней датой.</div>',
     emptyText: 'Скриншотов пока нет.<br>Откройте «Эфир» и нажмите «Скриншот» под видео.',
-    files: (arr) => `<div class="shots">${arr.map((r) => `<figure class="shot"><a href="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" target="_blank" rel="noopener">
-      <img loading="lazy" src="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" alt=""></a>
+    files: (arr) => `<div class="shots">${arr.map((r) => `<figure class="shot" data-name="${esc(r.name)}" data-title="${esc(timeOf(r))} · ${esc(chanOf(r))}">
+      <img loading="lazy" src="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" alt="" title="Открыть">
       <figcaption><div><b>${esc(timeOf(r))}</b> <span class="mut">${esc(chanOf(r))}</span></div><div class="row" style="margin:6px 0 0">
       <a class="btn sec sm" href="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}&dl=1">Скачать</a>
       <button class="btn danger sm" data-sd="${esc(r.name)}">Удалить</button></div></figcaption></figure>`).join('')}</div>`,
   });
+  // click on a picture opens a viewer on top of this page (no new tab)
+  const figs = [...c.querySelectorAll('.shot')];
+  figs.forEach((f, i) => { f.querySelector('img').onclick = () => openViewer(figs.map((x) => ({ name: x.dataset.name, title: x.dataset.title })), i); });
   c.querySelectorAll('[data-sd]').forEach((b) => (b.onclick = async () => {
     if (!confirm('Удалить скриншот?')) return;
     await api('/api/admin/screenshots/file?f=' + encodeURIComponent(b.dataset.sd), 'DELETE'); route();

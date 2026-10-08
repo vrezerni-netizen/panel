@@ -364,9 +364,10 @@ export function createApp({ db, config = {} }) {
     res.json({ ok: true });
   });
 
-  // ---- admin: encrypted recordings, stored as <folder>/YYYY/MM/DD/file.sve ----
-  const REC_RE = /^(\d{4}\/\d{2}\/\d{2}\/)?[\w.-]+\.sve$/;
-  const SHOT_RE = /^\d{4}\/\d{2}\/\d{2}\/[\w.-]+\.(png|jpg)$/;
+  // ---- admin: encrypted recordings, stored as <folder>/YYYY-MM-DD/file.sve (one folder per day) ----
+  const DAY = '(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}/\\d{2}/\\d{2})'; // one folder per day (old year/month/day folders are still read)
+  const REC_RE = new RegExp(`^(?:${DAY}/)?[\\w.-]+\\.sve$`);
+  const SHOT_RE = new RegExp(`^${DAY}/[\\w.-]+\\.(png|jpg)$`);
   async function walkDated(base, re) {
     const out = [];
     const files = async (dir, rel) => {
@@ -376,6 +377,7 @@ export function createApp({ db, config = {} }) {
     };
     const dirs = async (dir, rx) => (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && rx.test(e.name)).map((e) => e.name);
     await files(base, '');
+    for (const day of await dirs(base, /^\d{4}-\d{2}-\d{2}$/)) await files(join(base, day), `${day}/`);
     for (const y of await dirs(base, /^\d{4}$/)) for (const m of await dirs(join(base, y), /^\d{2}$/)) for (const d of await dirs(join(base, y, m), /^\d{2}$/)) {
       await files(join(base, y, m, d), `${y}/${m}/${d}/`);
     }
@@ -398,11 +400,12 @@ export function createApp({ db, config = {} }) {
     const ext = imageExt(buf);
     if (!shotDir || !buf.length || buf.length > 12 * 1024 * 1024 || !(ext === 'png' || ext === 'jpg')) return null;
     const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
-    const dir = join(shotDir, String(d.getFullYear()), p2(d.getMonth() + 1), p2(d.getDate()));
+    const day = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+    const dir = join(shotDir, day);
     await mkdir(dir, { recursive: true });
     const name = `${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}_${NAME_RE.test(String(stream)) ? stream : 'stream'}.${ext}`;
     await writeFile(join(dir, name), buf);
-    return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${name}`;
+    return `${day}/${name}`;
   }
 
   // ---- phone app (device) API: authenticated with the stream name + stream key, the same secret used to publish ----
@@ -426,7 +429,7 @@ export function createApp({ db, config = {} }) {
     res.json({ ok: true, name: saved });
   });
 
-  // ---- admin: screenshots of the live picture, stored as <shotDir>/YYYY/MM/DD/HH-MM-SS_channel.png ----
+  // ---- admin: screenshots of the live picture, stored as <shotDir>/YYYY-MM-DD/HH-MM-SS_channel.png ----
   admin.post('/screenshots', async (req, res) => {
     if (!shotDir) return res.status(400).json({ error: 'screenshots disabled' });
     const buf = Buffer.from(typeof req.body?.data === 'string' ? req.body.data.replace(/^data:[^,]*,/, '') : '', 'base64');

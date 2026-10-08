@@ -60,12 +60,12 @@ test('recorder encrypts idle segments, deletes plaintext, keeps fresh ones', asy
   const r = startRecorder({ spoolDir: spool, recDir: rec, defaultDir: rec, publicPem, log: { log() {}, error() {} } });
   await r.tick(); r.stop();
   assert.ok(!existsSync(old) && existsSync(fresh));
-  // stored as <rec>/YYYY/MM/DD/file.sve
-  const [Y] = readdirSync(rec); const [M] = readdirSync(join(rec, Y)); const [D] = readdirSync(join(rec, Y, M));
-  assert.match(Y + M + D, /^\d{8}$/);
-  const files = readdirSync(join(rec, Y, M, D));
+  // stored as <rec>/YYYY-MM-DD/file.sve (one folder per day)
+  const days = readdirSync(rec);
+  assert.equal(days.length, 1); assert.match(days[0], /^\d{4}-\d{2}-\d{2}$/);
+  const files = readdirSync(join(rec, days[0]));
   assert.equal(files.length, 1);
-  await decryptFile(join(rec, Y, M, D, files[0]), privatePem, join(dir, 'rec.out'));
+  await decryptFile(join(rec, days[0], files[0]), privatePem, join(dir, 'rec.out'));
   assert.equal(readFileSync(join(dir, 'rec.out'), 'utf8'), 'old-data');
 });
 

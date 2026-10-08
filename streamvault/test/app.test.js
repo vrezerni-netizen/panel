@@ -170,6 +170,7 @@ test('dated recordings, screenshots by date, delete channel', async () => {
     mkdirSync(join(rec, '2026', '10', '08'), { recursive: true });
     writeFileSync(join(rec, '2026', '10', '08', 'live_tablet1-2026-10-08_10-00-00-1.mp4.sve'), 'x');
     writeFileSync(join(rec, 'live_old-2026-09-01_09-00-00-1.mp4.sve'), 'x');
+    mkdirSync(join(rec, '2026-10-09'), { recursive: true }); writeFileSync(join(rec, '2026-10-09', 'live_tablet1-2026-10-09_11-00-00-1.mp4.sve'), 'x');
     const srv = createApp({ db, config: { recDir: rec, shotDir: shots } }).listen(0);
     after(() => srv.close());
     const base = `http://127.0.0.1:${srv.address().port}`;
@@ -180,14 +181,14 @@ test('dated recordings, screenshots by date, delete channel', async () => {
     const p1 = (await c2('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
     const cookie = (await c2('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
     const list = (await c2('/api/admin/recordings', { cookie })).json.map((r) => r.name).sort();
-    assert.deepEqual(list, ['2026/10/08/live_tablet1-2026-10-08_10-00-00-1.mp4.sve', 'live_old-2026-09-01_09-00-00-1.mp4.sve']);
+    assert.deepEqual(list, ['2026-10-09/live_tablet1-2026-10-09_11-00-00-1.mp4.sve', '2026/10/08/live_tablet1-2026-10-08_10-00-00-1.mp4.sve', 'live_old-2026-09-01_09-00-00-1.mp4.sve'].sort());
     assert.equal((await fetch(base + '/api/admin/recordings/file?f=' + encodeURIComponent('../../etc/passwd'), { headers: { cookie } })).status, 404);
     assert.equal((await fetch(base + '/api/admin/recordings/file?f=' + encodeURIComponent(list[0]), { headers: { cookie } })).status, 200);
     // screenshots
     const png = Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), Buffer.alloc(40)]).toString('base64');
     assert.equal((await c2('/api/admin/screenshots', { method: 'POST', body: { data: png, stream: 'tablet1' } })).status, 401);
     const saved = await c2('/api/admin/screenshots', { method: 'POST', cookie, body: { data: png, stream: 'tablet1' } });
-    assert.equal(saved.status, 200); assert.match(saved.json.name, /^\d{4}\/\d{2}\/\d{2}\/\d{2}-\d{2}-\d{2}_tablet1\.png$/);
+    assert.equal(saved.status, 200); assert.match(saved.json.name, /^\d{4}-\d{2}-\d{2}\/\d{2}-\d{2}-\d{2}_tablet1\.png$/);
     assert.equal((await c2('/api/admin/screenshots', { method: 'POST', cookie, body: { data: Buffer.from('<html>').toString('base64'), stream: 'x' } })).status, 400);
     assert.equal((await c2('/api/admin/screenshots', { cookie })).json.length, 1);
     const img = await fetch(base + '/api/admin/screenshots/file?f=' + encodeURIComponent(saved.json.name), { headers: { cookie } });
