@@ -176,3 +176,27 @@ a.btn { text-decoration:none; } a.btn:hover { color:#fff; }
 .exitfs:hover { background:#e11d48; border-color:#e11d48; }
 .player:fullscreen .exitfs, .player:-webkit-full-screen .exitfs { display:block; }
 .player:-webkit-full-screen { width:100vw; height:100vh; aspect-ratio:auto; border-radius:0; }
+
+/* ---- wall of channels: every live channel in its own window ---- */
+.wall { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:16px; align-items:start; }
+.vtile { background:rgba(18,28,50,.7); border:1px solid rgba(120,150,210,.2); border-radius:14px; padding:10px; backdrop-filter:blur(10px); min-width:0; }
+.vtile.live { border-color:rgba(225,29,72,.45); }
+.vbox { position:relative; container-type:inline-size; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:var(--ar,1.7778); width:100%; display:grid; place-items:center; cursor:pointer; }
+.vbox video { width:100%; height:100%; object-fit:contain; background:#000; }
+.vbox .offmsg { position:absolute; text-align:center; color:var(--mut); font-size:.9rem; pointer-events:none; }
+.vbox .offmsg svg { width:34px; height:34px; fill:var(--line); }
+.vtile.live .offmsg { display:none; }
+.vcap { display:flex; align-items:center; gap:8px; padding:10px 2px 2px; flex-wrap:wrap; }
+.wall.focusmode { grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); }
+.wall.focusmode .vtile.big { grid-column:1 / -1; order:-1 !important; justify-self:center; width:min(100%, calc(72vh * var(--ar,1.7778) + 22px)); }
+.vbox:fullscreen { width:100vw; height:100vh; aspect-ratio:auto; border-radius:0; cursor:default; }
+.vbox:-webkit-full-screen { width:100vw; height:100vh; aspect-ratio:auto; border-radius:0; }
+.vbox:fullscreen .exitfs, .vbox:-webkit-full-screen .exitfs { display:block; }
+.vbox .ov-title { font-size:clamp(11px, 4.6cqw, 28px); }
+.vbox .ov-timer { font-size:clamp(11px, 4cqw, 24px); }
+.vbox .ov { padding:4px 10px; }
+.vtile:not(.big) .pos-bl, .vtile:not(.big) .pos-br { bottom:12px; }
+.vtile:not(.big) .pos-tl, .vtile:not(.big) .pos-tr { top:10px; }
+.vtile:not(.big) .pos-tl, .vtile:not(.big) .pos-bl { left:10px; }
+.vtile:not(.big) .pos-tr, .vtile:not(.big) .pos-br { right:10px; }
+@media (max-width:700px) { .wall { grid-template-columns:1fr; } }

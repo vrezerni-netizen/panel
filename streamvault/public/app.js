@@ -98,7 +98,7 @@ function shell(page) {
   return $('#c');
 }
 
-function stopPoll() { clearInterval(poll); poll = null; clearInterval(ticker); ticker = null; }
+function stopPoll() { clearInterval(poll); poll = null; clearInterval(ticker); ticker = null; if (cleanup) { cleanup(); cleanup = null; } }
 function destroyHls() { if (hls) { hls.destroy(); hls = null; } }
 
 async function route() {
@@ -114,6 +114,7 @@ window.addEventListener('hashchange', route);
 
 /* ---------- live ---------- */
 let ticker = null;
+let cleanup = null; // called when leaving the live page: stops all players
 const POSN = { tl: 'Слева вверху', tr: 'Справа вверху', bl: 'Слева внизу', br: 'Справа внизу' };
 const COLORS = ['#3b82f6', '#22d3ee', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#e6ebf6'];
 const fmtClock = (sec) => {
@@ -122,22 +123,6 @@ const fmtClock = (sec) => {
   const pad = (n) => String(n).padStart(2, '0');
   return h ? `${h}:${pad(m)}:${pad(x)}` : `${pad(m)}:${pad(x)}`;
 };
-
-function applyOverlay(o, state) {
-  const pl = $('#pl'); if (!pl) return;
-  const v = $('#v');
-  let ar = 16 / 9;
-  if (o.aspect && o.aspect !== 'auto') { const [a, b] = o.aspect.split(':').map(Number); ar = a / b; }
-  else if (v && v.videoWidth) ar = v.videoWidth / v.videoHeight;
-  pl.style.setProperty('--ar', ar.toFixed(4));
-  const frame = $('#frame'), t = $('#ovTitle'), tm = $('#ovTimer');
-  frame.style.display = o.showFrame ? 'block' : 'none';
-  frame.style.borderColor = o.frameColor; frame.style.borderWidth = o.frameWidth + 'px';
-  t.hidden = !(o.showTitle && o.title); t.textContent = o.title; t.className = 'ov ov-title pos-' + o.titlePos;
-  const showT = o.showTimer && state.liveSince;
-  tm.hidden = !showT; tm.className = 'ov ov-timer pos-' + o.timerPos;
-  if (showT) $('#ovClock').textContent = fmtClock((Date.now() - state.liveSince) / 1000);
-}
 
 function dockHtml(o) {
   const tog = (k, label) => `<button class="tg ${o[k] ? 'on' : ''}" data-t="${k}"><span class="sw"></span>${label}</button>`;
@@ -159,56 +144,120 @@ function dockHtml(o) {
 }
 
 async function livePage(c) {
-  let current = null, playing = null, lastKey = '', overlay = await api('/api/settings');
-  const st = { liveSince: null }; let skew = 0, streams = [];
+  let overlay = await api('/api/settings');
+  let skew = 0, focus = null, streams = [];
   const admin = me.role === 'admin';
+  const tiles = new Map(); // channel name -> {el, v, box, hls, live, since, missed}
   c.classList.add('wide');
   c.innerHTML = `<div class="head"><div><h2>Эфир</h2><div class="sub" id="sub"></div></div>
-    ${admin ? '<button class="btn sec" id="dockToggle">⚙ Оформление</button>' : ''}</div>
-    <div class="live-layout ${admin ? 'withdock' : ''}"><div class="main">
-    <div class="card" style="padding:14px"><div class="player" id="pl"><video id="v" controls playsinline muted></video>
-      <div class="frame" id="frame"></div>
-      <div class="ov ov-title" id="ovTitle" hidden></div>
-      <div class="ov ov-timer" id="ovTimer" hidden><span class="rd"></span><span id="ovClock">00:00</span></div>
-      <button class="exitfs" id="exitfs" type="button">✕ Выйти из полного экрана</button>
-      <div class="ph" id="ph">${svg('cam', '')}<div>Выберите эфир ниже</div></div></div>
-      <div class="bar"><span id="nowname" class="mut"></span><span class="spacer"></span>
-        ${admin ? '<button class="btn sm" id="shot">📷 Скриншот</button>' : ''}<button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
-    <h3 style="margin:0 0 12px">Каналы</h3><div class="grid" id="grid"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
+    <div class="row">${admin ? '<button class="btn sec" id="dockToggle">⚙ Оформление</button>' : ''}</div></div>
+    <div class="live-layout ${admin ? 'withdock' : ''}"><div class="main"><div class="wall" id="wall"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
+  const wall = $('#wall');
   const layout = $('.live-layout');
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enterFs = (el) => (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+
+  // ---------- overlay (title / timer / frame) and shape of one tile ----------
+  function applyTile(t) {
+    const o = overlay, el = t.el, big = focus === t.name;
+    let ar = 16 / 9;
+    if (o.aspect && o.aspect !== 'auto') { const [a, b] = o.aspect.split(':').map(Number); ar = a / b; }
+    else if (t.v.videoWidth) ar = t.v.videoWidth / t.v.videoHeight;
+    if (!big) ar = Math.min(1.9, Math.max(0.75, ar)); // keep the wall tidy; the picture itself is never stretched
+    el.style.setProperty('--ar', ar.toFixed(4));
+    const frame = $('.frame', el), title = $('.ov-title', el), timer = $('.ov-timer', el);
+    frame.style.display = o.showFrame && t.live ? 'block' : 'none';
+    frame.style.borderColor = o.frameColor; frame.style.borderWidth = o.frameWidth + 'px';
+    title.hidden = !(o.showTitle && o.title && t.live); title.textContent = o.title; title.className = 'ov ov-title pos-' + o.titlePos;
+    const showT = o.showTimer && t.live && t.since;
+    timer.hidden = !showT; timer.className = 'ov ov-timer pos-' + o.timerPos;
+    if (showT) $('.clock', el).textContent = fmtClock((Date.now() - t.since) / 1000);
+  }
+  const applyAll = () => tiles.forEach(applyTile);
+
+  // ---------- one player per channel ----------
+  function playTile(t) {
+    if (t.hls || t.native) return;
+    const src = `/hls/${encodeURIComponent(t.name)}/index.m3u8`;
+    if (window.Hls && Hls.isSupported()) {
+      const h = new Hls({ lowLatencyMode: true, liveSyncDuration: 1.5, liveMaxLatencyDuration: 4, maxLiveSyncPlaybackRate: 1.2, backBufferLength: 10, manifestLoadingMaxRetry: 8, levelLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
+      t.hls = h;
+      h.on(Hls.Events.ERROR, (_, d) => {
+        if (d.response && d.response.code === 401) { me = null; loginView(); return; }
+        if (!d.fatal) return;
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+        else { stopTile(t); setTimeout(() => { if (t.live && tiles.get(t.name) === t) playTile(t); }, 3000); }
+      });
+      h.loadSource(src); h.attachMedia(t.v); t.v.play().catch(() => {});
+    } else { t.native = true; t.v.src = src; t.v.play().catch(() => {}); }
+  }
+  function stopTile(t) {
+    if (t.hls) { t.hls.destroy(); t.hls = null; }
+    if (t.native) { t.native = false; }
+    t.v.removeAttribute('src'); t.v.load();
+  }
+  cleanup = () => tiles.forEach(stopTile);
+
+  function setFocus(name) {
+    focus = name;
+    wall.classList.toggle('focusmode', !!name);
+    tiles.forEach((t) => {
+      const big = t.name === name;
+      t.el.classList.toggle('big', big);
+      t.v.controls = big; t.v.muted = !big;      // sound only for the enlarged channel
+      $('[data-act=focus]', t.el).textContent = big ? 'Свернуть' : 'Увеличить';
+      applyTile(t);
+    });
+    if (name) tiles.get(name)?.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function makeTile(name) {
+    const el = document.createElement('div');
+    el.className = 'vtile'; el.dataset.n = name;
+    el.innerHTML = `<div class="vbox"><video muted playsinline autoplay></video><div class="frame"></div>
+      <div class="ov ov-title" hidden></div><div class="ov ov-timer" hidden><span class="rd"></span><span class="clock">00:00</span></div>
+      <div class="offmsg">${svg('cam', '')}<div>Не в эфире</div></div>
+      <button class="exitfs" type="button">✕ Выйти из полного экрана</button></div>
+      <div class="vcap"><b>${esc(name)}</b><span class="chip st">Не в эфире</span><span class="spacer"></span>
+      ${admin ? '<button class="btn sm sec" data-act="shot" title="Скриншот">📷</button>' : ''}
+      <button class="btn sm sec" data-act="focus">Увеличить</button><button class="btn sm sec" data-act="fs" title="Во весь экран">⛶</button></div>`;
+    const t = { name, el, v: $('video', el), box: $('.vbox', el), hls: null, native: false, live: false, since: null, missed: 0 };
+    t.v.addEventListener('loadedmetadata', () => applyTile(t));
+    t.v.addEventListener('resize', () => applyTile(t));
+    const toggleFs = () => (fsEl() === t.box ? exitFs() : enterFs(t.box));
+    $('.exitfs', el).onclick = (e) => { e.stopPropagation(); exitFs(); };
+    t.box.onclick = (e) => { if (focus !== t.name && !e.target.closest('.exitfs')) setFocus(t.name); };
+    t.box.ondblclick = toggleFs;
+    el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => {
+      e.stopPropagation();
+      const act = b.dataset.act;
+      if (act === 'focus') setFocus(focus === name ? null : name);
+      else if (act === 'fs') toggleFs();
+      else if (act === 'shot') {
+        if (!t.live || !t.v.videoWidth) return toast('У этого канала сейчас нет эфира', true);
+        const cv = document.createElement('canvas'); cv.width = t.v.videoWidth; cv.height = t.v.videoHeight;
+        cv.getContext('2d').drawImage(t.v, 0, 0);
+        try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: name }); toast('Скриншот сохранён: ' + r.name.split('/').slice(0, 3).reverse().join('.')); }
+        catch (err) { toast(err.message, true); }
+      }
+    }));
+    wall.append(el); tiles.set(name, t);
+    return t;
+  }
+
+  // ---------- admin dock (settings on the right, closed with the cross, open by default) ----------
   const setDock = (open) => {
     layout.classList.toggle('collapsed', !open);
     if ($('#dockToggle')) $('#dockToggle').classList.toggle('on', open);
-    try { localStorage.setItem('dock', open ? 'open' : 'closed'); } catch { /* ignore */ }
+    try { localStorage.setItem('dock2', open ? 'open' : 'closed'); } catch { /* ignore */ }
   };
   if (admin) {
-    let open = false;
-    try { open = localStorage.getItem('dock') === 'open'; } catch { /* default closed */ }
+    let open = true;
+    try { open = localStorage.getItem('dock2') !== 'closed'; } catch { /* default open */ }
     setDock(open);
     $('#dockToggle').onclick = () => setDock(layout.classList.contains('collapsed'));
-  }
-  const v = $('#v');
-  v.addEventListener('loadedmetadata', () => applyOverlay(overlay, st));
-  v.addEventListener('resize', () => applyOverlay(overlay, st));
-  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
-  const enterFs = () => { const el = $('#pl'); (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); };
-  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
-  const toggleFs = () => (fsEl() ? exitFs() : enterFs());
-  $('#fs').onclick = toggleFs;
-  $('#exitfs').onclick = (e) => { e.stopPropagation(); exitFs(); };
-  $('#pl').ondblclick = toggleFs;   // double click / double tap also toggles
-  $('#rl').onclick = () => current && play(current, true);
-  if (admin) $('#shot').onclick = async () => {
-    if (!current || !v.videoWidth) return toast('Сначала включите эфир', true);
-    const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
-    cv.getContext('2d').drawImage(v, 0, 0);
-    try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: current }); toast('Скриншот сохранён: ' + r.name.split('/').slice(0, 3).reverse().join('.')); }
-    catch (e) { toast(e.message, true); }
-  };
-  applyOverlay(overlay, st);
-
-  if (admin) {
-    const save = async (patch) => { try { overlay = await api('/api/admin/settings', 'PUT', patch); applyOverlay(overlay, st); redock(); } catch (e) { toast(e.message, true); } };
+    const save = async (patch) => { try { overlay = await api('/api/admin/settings', 'PUT', patch); applyAll(); redock(); } catch (e) { toast(e.message, true); } };
     const redock = () => { const d = $('.dock'); d.outerHTML = dockHtml(overlay); wireDock(); };
     const wireDock = () => {
       const d = $('.dock');
@@ -225,52 +274,30 @@ async function livePage(c) {
     wireDock();
   }
 
-  function play(name, force) {
-    if (playing === name && !force) return;
-    current = name; playing = name;
-    $('#nowname').innerHTML = `<span class="chip live"><span class="dot"></span>${esc(name)}</span>`;
-    $('#ph').hidden = true;
-    destroyHls();
-    const src = `/hls/${encodeURIComponent(name)}/index.m3u8`;
-    if (window.Hls && Hls.isSupported()) {
-      hls = new Hls({ lowLatencyMode: true, liveSyncDuration: 1.5, liveMaxLatencyDuration: 4, maxLiveSyncPlaybackRate: 1.2, backBufferLength: 10, manifestLoadingMaxRetry: 8, levelLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
-      hls.on(Hls.Events.ERROR, (_, d) => {
-        if (d.response && d.response.code === 401) { me = null; loginView(); return; }
-        if (!d.fatal) return;
-        if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-        else setTimeout(() => { if (current === name) play(name, true); }, 3000);
-      });
-      hls.loadSource(src); hls.attachMedia(v);
-      v.play().catch(() => {});
-    } else { v.src = src; v.play().catch(() => {}); }
-  }
-
-  function syncSince() {
-    const s = streams.find((x) => x.name === current);
-    st.liveSince = s && s.live && s.since ? s.since - skew : null;
-    applyOverlay(overlay, st);
-  }
-
   async function refresh() {
     const r = await api('/api/streams');
     skew = r.now - Date.now(); streams = r.streams;
-    const list = streams, liveN = list.filter((s) => s.live).length;
-    $('#sub').textContent = list.length ? `В эфире: ${liveN} из ${list.length}` : 'Каналов пока нет';
-    const key = JSON.stringify(list.map((s) => [s.name, s.live])) + current;
-    if (key !== lastKey) {
-      lastKey = key;
-      $('#grid').innerHTML = list.length ? list.map((s) => `<button class="tile ${s.name === current ? 'sel' : ''}" data-n="${esc(s.name)}">
-        <div class="big">${svg('cam', '')}</div><div class="t">${esc(s.name)}</div>
-        ${s.live ? '<span class="chip live"><span class="dot"></span>Идёт эфир</span>' : '<span class="chip">Не в эфире</span>'}</button>`).join('')
-        : `<div class="card empty" style="grid-column:1/-1">Нет каналов.${admin ? ' Создайте ключ эфира в разделе «Ключи эфира».' : ''}</div>`;
-      $('#grid').querySelectorAll('.tile').forEach((t) => (t.onclick = () => { play(t.dataset.n, true); lastKey = ''; syncSince(); refresh(); }));
+    const liveN = streams.filter((s) => s.live).length;
+    $('#sub').textContent = streams.length ? `В эфире: ${liveN} из ${streams.length}` : 'Каналов пока нет';
+    for (const [n, t] of tiles) if (!streams.find((s) => s.name === n)) { stopTile(t); t.el.remove(); tiles.delete(n); if (focus === n) setFocus(null); }
+    const empty = $('#none');
+    if (!streams.length && !empty) wall.insertAdjacentHTML('beforeend', `<div class="card empty" id="none" style="grid-column:1/-1">Нет каналов.${admin ? ' Создайте ключ эфира в разделе «Ключи эфира».' : ''}</div>`);
+    if (streams.length && empty) empty.remove();
+    for (const s of streams) {
+      const t = tiles.get(s.name) || makeTile(s.name);
+      t.live = s.live; t.since = s.live && s.since ? s.since - skew : null;
+      t.el.classList.toggle('live', s.live);
+      t.el.style.order = s.live ? 0 : 1;
+      const st = $('.st', t.el);
+      st.className = 'chip st' + (s.live ? ' live' : '');
+      st.innerHTML = s.live ? '<span class="dot"></span>Идёт эфир' : 'Не в эфире';
+      if (s.live) { t.missed = 0; playTile(t); } else if (++t.missed >= 2) stopTile(t);
+      applyTile(t);
     }
-    if (!current) { const first = list.find((s) => s.live); if (first) play(first.name); }
-    syncSince();
   }
   await refresh();
   poll = setInterval(() => refresh().catch(() => {}), 5000);
-  ticker = setInterval(() => applyOverlay(overlay, st), 1000);
+  ticker = setInterval(applyAll, 1000);
 }
 
 /* ---------- date folders (recordings, screenshots): year -> month -> day ---------- */
