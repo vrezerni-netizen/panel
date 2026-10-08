@@ -57,11 +57,25 @@ test('recorder encrypts idle segments, deletes plaintext, keeps fresh ones', asy
   const old = join(spool, 'live', 'tablet1', 'old.ts'), fresh = join(spool, 'live', 'tablet1', 'fresh.ts');
   writeFileSync(old, 'old-data'); writeFileSync(fresh, 'fresh-data');
   const past = new Date(Date.now() - 60000); utimesSync(old, past, past);
-  const r = startRecorder({ spoolDir: spool, recDir: rec, publicPem, log: { log() {}, error() {} } });
+  const r = startRecorder({ spoolDir: spool, recDir: rec, defaultDir: rec, publicPem, log: { log() {}, error() {} } });
   await r.tick(); r.stop();
   assert.ok(!existsSync(old) && existsSync(fresh));
   const files = readdirSync(rec);
   assert.equal(files.length, 1);
   await decryptFile(join(rec, files[0]), privatePem, join(dir, 'rec.out'));
   assert.equal(readFileSync(join(dir, 'rec.out'), 'utf8'), 'old-data');
+});
+
+test('recorder keeps segments in spool while the USB folder is missing, then encrypts them', async () => {
+  const { publicPem } = generateKeypair();
+  const spool = join(dir, 'spool2'), usb = join(dir, 'usb-later');
+  mkdirSync(join(spool, 'live', 't'), { recursive: true });
+  const seg = join(spool, 'live', 't', 'a.mp4'); writeFileSync(seg, 'video'); const past = new Date(Date.now() - 60000); utimesSync(seg, past, past);
+  const r = startRecorder({ spoolDir: spool, recDir: () => usb, publicPem, log: { log() {}, error() {} } });
+  await r.tick();
+  assert.ok(existsSync(seg), 'plaintext must stay in spool, nothing written to a missing folder');
+  assert.ok(!existsSync(usb), 'must not create the missing (removed USB) folder');
+  mkdirSync(usb);
+  await r.tick(); r.stop();
+  assert.ok(!existsSync(seg)); assert.equal(readdirSync(usb).length, 1);
 });

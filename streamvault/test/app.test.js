@@ -142,3 +142,21 @@ test('background upload: admin only, validates image type, theme public', async 
     srv.close();
   } finally { server.close(); }
 });
+
+test('recordings folder: admin can point it to a folder (USB stick), invalid paths rejected', async () => {
+  const { db, secret, server, call } = await setup();
+  try {
+    const { mkdtempSync, writeFileSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const usb = mkdtempSync(join(tmpdir(), 'usb-'));
+    const p1 = (await call('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await call('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    assert.equal((await call('/api/admin/recpath', { method: 'PUT', cookie, body: { path: 'relative/dir' } })).status, 400);
+    assert.equal((await call('/api/admin/recpath', { method: 'PUT', cookie, body: { path: join(usb, 'nope') } })).status, 400);
+    const ok = await call('/api/admin/recpath', { method: 'PUT', cookie, body: { path: usb } });
+    assert.equal(ok.status, 200); assert.equal(ok.json.ok, true); assert.equal(ok.json.effective, usb);
+    writeFileSync(join(usb, 'live_tablet1-2026-10-08_10-00-00-1.mp4.sve'), 'x'); writeFileSync(join(usb, 'notes.txt'), 'x');
+    const list = await call('/api/admin/recordings', { cookie });
+    assert.deepEqual(list.json.map((r) => r.name), ['live_tablet1-2026-10-08_10-00-00-1.mp4.sve']);
+    assert.equal((await call('/api/admin/recpath', { method: 'DELETE', cookie, body: {} })).json.custom, false);
+  } finally { server.close(); }
+});

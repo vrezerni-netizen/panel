@@ -11,18 +11,24 @@ async function* walk(dir) {
   }
 }
 
-export function startRecorder({ spoolDir, recDir, publicPem, idleMs = 20000, intervalMs = 10000, log = console }) {
-  let busy = false;
+export function startRecorder({ spoolDir, recDir, defaultDir = null, publicPem, idleMs = 20000, intervalMs = 10000, log = console }) {
+  // recDir may be a function (re-read each tick: admin can point it at a USB stick). If the folder is missing
+  // (stick removed), segments stay in the spool and are encrypted as soon as it is back.
+  let busy = false, warned = false;
   const tick = async () => {
     if (busy) return;
     busy = true;
     try {
-      await mkdir(recDir, { recursive: true, mode: 0o700 });
+      const dir = typeof recDir === 'function' ? recDir() : recDir;
+      if (defaultDir && dir === defaultDir) await mkdir(dir, { recursive: true, mode: 0o700 });
+      const okDir = await stat(dir).then((x) => x.isDirectory()).catch(() => false);
+      if (!okDir) { if (!warned) log.error('Папка записей недоступна, записи ждут в spool:', dir); warned = true; return; }
+      warned = false;
       for await (const f of walk(spoolDir)) {
         const st = await stat(f).catch(() => null);
         if (!st || Date.now() - st.mtimeMs < idleMs) continue;
         const tag = relative(spoolDir, f).split(sep).slice(0, -1).join('_').replace(/[^a-z0-9_-]/gi, '_');
-        const out = join(recDir, `${tag}-${basename(f).replace(/[^\w.-]/g, '_')}.sve`);
+        const out = join(dir, `${tag}-${basename(f).replace(/[^\w.-]/g, '_')}.sve`);
         try {
           await encryptFile(f, publicPem, out);
           await unlink(f);

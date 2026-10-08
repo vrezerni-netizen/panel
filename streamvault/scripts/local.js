@@ -89,15 +89,17 @@ if (!cfg) {
 }
 
 let mtxConfig = join(root, 'deploy', 'mediamtx-local.yml');
-let recDir = null;
+let recDir = null, defaultRec = null;
 if (cfg.record) {
   const spool = join(root, 'data', 'spool');
   recDir = cfg.recDir || join(root, 'data', 'recordings');
+  defaultRec = recDir;
+  recDir = () => { try { const row = db.prepare("SELECT value FROM settings WHERE key = 'recdir'").get(); return (row && JSON.parse(row.value).path) || defaultRec; } catch { return defaultRec; } };
   mkdirSync(spool, { recursive: true });
   mtxConfig = join(root, 'data', 'mediamtx.yml');
   const rec = `pathDefaults:\n  source: publisher\n  record: yes\n  recordPath: ${spool.replace(/\\/g, '/')}/%path/%Y-%m-%d_%H-%M-%S-%f\n  recordFormat: fmp4\n  recordSegmentDuration: 10m`;
   writeFileSync(mtxConfig, readFileSync(join(root, 'deploy', 'mediamtx-local.yml'), 'utf8').replace('pathDefaults:\n  source: publisher', rec));
-  startRecorder({ spoolDir: spool, recDir, publicPem: readFileSync(join(root, 'data', 'streamvault.pub')) });
+  startRecorder({ spoolDir: spool, recDir, defaultDir: defaultRec, publicPem: readFileSync(join(root, 'data', 'streamvault.pub')) });
   console.log('Зашифрованная запись включена.');
 }
 
@@ -108,7 +110,7 @@ process.on('SIGINT', stop); process.on('SIGTERM', stop);
 mtx.on('exit', (c) => { console.error('MediaMTX остановился (код ' + c + '). Возможно, порт 1935 или 8888 занят другой программой — закройте её (или второй запуск StreamVault).'); process.exit(1); });
 
 const port = Number(process.env.PORT || 3000);
-createApp({ db, config: { secureCookies: false, recDir, uploadDir: join(root, 'data', 'uploads') } }).listen(port, '0.0.0.0', () => {
+createApp({ db, config: { secureCookies: false, recDir: defaultRec, uploadDir: join(root, 'data', 'uploads') } }).listen(port, '0.0.0.0', () => {
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('='.repeat(60));
   console.log('Ахмат Запад запущен.');

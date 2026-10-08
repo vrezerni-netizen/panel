@@ -249,7 +249,20 @@ function parseRec(r) {
   return { ...r, stream: m[1], when: `${m[4]}.${m[3]}.${m[2]} ${m[5]}:${m[6]}:${m[7]}` };
 }
 
+function pathCardHtml(st) {
+  const chip = !st.effective ? '<span class="chip off">папка не задана</span>'
+    : st.ok ? `<span class="chip ok"><span class="dot"></span>доступна${st.free != null ? ' · свободно ' + fmtSize(st.free) : ''}</span>`
+    : '<span class="chip off">недоступна — вставьте флешку</span>';
+  return `<div class="card"><h3 style="margin-bottom:6px">Куда сохранять записи</h3>
+    <div class="mut sm" style="margin-bottom:10px">Сейчас: <code>${esc(st.effective || '—')}</code> ${chip}${st.custom ? '' : ' <span class="mut">(стандартная папка программы)</span>'}</div>
+    <div class="form-row"><input id="rp" placeholder="Например: E:\\Ахмат Запад" value="${esc(st.path || '')}"><button class="btn" id="rpSave">Сохранить</button>
+      <button class="btn sec" id="rpReset">Стандартная</button></div>
+    <div class="mut sm" style="margin-top:8px">Откройте свою папку «Ахмат Запад» на флешке в проводнике, нажмите на адресную строку, скопируйте путь и вставьте сюда.
+      Если флешку вынуть, записи подождут в защищённом месте на компьютере и перенесутся, когда вы её вставите обратно.</div></div>`;
+}
+
 async function recPage(c, folder) {
+  const rst = await api('/api/admin/recpath');
   const recs = (await api('/api/admin/recordings')).map(parseRec);
   const note = `<div class="note">🔒 Записи зашифрованы. Скачайте файл и откройте его на компьютере с флешкой: запустите
     <code>decrypt-recording.bat</code> (папка программы), укажите файл и ключ <code>streamvault.key</code> с флешки.
@@ -257,12 +270,14 @@ async function recPage(c, folder) {
   if (!folder) {
     const groups = {};
     for (const r of recs) (groups[r.stream] ||= []).push(r);
-    c.innerHTML = `<div class="head"><div><h2>Записи</h2><div class="sub">Папки по каналам</div></div></div>${note}` +
+    c.innerHTML = `<div class="head"><div><h2>Записи</h2><div class="sub">Папки по каналам</div></div></div>${pathCardHtml(rst)}${note}` +
       (recs.length ? `<div class="grid">${Object.entries(groups).map(([n, a]) => `<button class="tile folder" data-f="${esc(n)}">
         <div class="big">${svg('rec', '')}</div><div class="t">${esc(n)}</div>
         <span class="chip">${a.length} файл(ов) · ${fmtSize(a.reduce((s, x) => s + x.size, 0))}</span></button>`).join('')}</div>`
         : `<div class="card empty">Записей пока нет.<br>Запись включается при первом запуске, если указать флешку для ключа.</div>`);
     c.querySelectorAll('.tile').forEach((t) => (t.onclick = () => { location.hash = '#/rec/' + encodeURIComponent(t.dataset.f); }));
+    $('#rpSave').onclick = async () => { try { await api('/api/admin/recpath', 'PUT', { path: $('#rp').value }); toast('Папка сохранена'); route(); } catch (e) { toast(e.message, true); } };
+    $('#rpReset').onclick = async () => { await api('/api/admin/recpath', 'DELETE'); toast('Возвращена стандартная папка'); route(); };
     return;
   }
   const list = recs.filter((r) => r.stream === folder);
@@ -389,7 +404,7 @@ async function lookPage(c) {
 const EV = { 'login.ok': 'Вход выполнен', 'login.fail': 'Неверный пароль', 'login.totp_fail': 'Неверный код', 'login.locked': 'Вход заблокирован',
   'user.create': 'Создан пользователь', 'user.delete': 'Удалён пользователь', 'user.disable': 'Пользователь отключён', 'user.enable': 'Пользователь включён',
   'user.reset2fa': 'Сброшена 2FA', 'user.password': 'Сменён пароль', 'stream.create': 'Создан ключ эфира', 'stream.revoke': 'Ключ отозван',
-  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'recording.delete': 'Удалена запись' };
+  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
 async function logPage(c) {
   const rows = await api('/api/admin/audit');
   c.innerHTML = `<div class="head"><div><h2>Журнал</h2><div class="sub">Последние 200 событий безопасности</div></div></div>

@@ -1,8 +1,8 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { Readable } from 'node:stream';
-import { readdir, stat, unlink, mkdir, writeFile, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir, stat, unlink, mkdir, writeFile, readFile, statfs } from 'node:fs/promises';
+import { join, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   hashPassword, verifyPassword, randomToken, sha256, safeEqual,
@@ -50,9 +50,15 @@ export function createApp({ db, config = {} }) {
     mediamtxHls = 'http://127.0.0.1:8888',
     secureCookies = process.env.NODE_ENV === 'production',
     trustProxy = false,
-    recDir = null,
+    recDir: recDirCfg = null,
     uploadDir = null,
   } = config;
+  // recordings folder: default from config, can be changed by admin (e.g. folder on a USB stick)
+  const customRecDir = () => {
+    try { const row = db.prepare("SELECT value FROM settings WHERE key = 'recdir'").get(); return (row && JSON.parse(row.value).path) || null; } catch { return null; }
+  };
+  const defaultRecDir = typeof recDirCfg === 'function' ? recDirCfg() : recDirCfg;
+  const getRecDir = () => customRecDir() || defaultRecDir;
 
   const app = express();
   app.disable('x-powered-by');
@@ -350,6 +356,7 @@ export function createApp({ db, config = {} }) {
   // ---- admin: encrypted recordings (cannot be played here: key is on the USB stick) ----
   const REC_RE = /^[\w.-]+\.sve$/;
   admin.get('/recordings', async (req, res) => {
+    const recDir = getRecDir();
     if (!recDir) return res.json([]);
     const names = (await readdir(recDir).catch(() => [])).filter((n) => REC_RE.test(n));
     const list = [];
@@ -357,12 +364,40 @@ export function createApp({ db, config = {} }) {
     res.json(list.sort((a, b) => b.mtime - a.mtime));
   });
   admin.get('/recordings/:file', (req, res) => {
+    const recDir = getRecDir();
     if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
     audit(req, 'recording.download', req.params.file);
     res.download(join(recDir, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
   });
 
+  async function recStatus() {
+    const dir = getRecDir();
+    const custom = customRecDir();
+    let ok = false, free = null;
+    try { ok = !!dir && (await stat(dir)).isDirectory(); if (ok) { const f = await statfs(dir); free = f.bavail * f.bsize; } } catch { ok = false; }
+    return { path: custom, effective: dir, custom: !!custom, ok, free };
+  }
+  admin.get('/recpath', async (req, res) => res.json(await recStatus()));
+  admin.put('/recpath', async (req, res) => {
+    const p = typeof req.body?.path === 'string' ? req.body.path.trim().replace(/^"|"$/g, '') : '';
+    if (!p || p.length > 260 || !isAbsolute(p)) return res.status(400).json({ error: 'Укажите полный путь, например E:\\Ахмат Запад' });
+    try {
+      if (!(await stat(p)).isDirectory()) throw new Error('not a directory');
+      const probe = join(p, `.write-test-${now()}`);
+      await writeFile(probe, 'ok'); await unlink(probe);
+    } catch { return res.status(400).json({ error: 'Папка не найдена или в неё нельзя записывать. Вставьте флешку и проверьте путь.' }); }
+    db.prepare("INSERT INTO settings (key, value) VALUES ('recdir', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify({ path: p }));
+    audit(req, 'recpath.set', p);
+    res.json(await recStatus());
+  });
+  admin.delete('/recpath', async (req, res) => {
+    db.prepare("DELETE FROM settings WHERE key = 'recdir'").run();
+    audit(req, 'recpath.reset');
+    res.json(await recStatus());
+  });
+
   admin.delete('/recordings/:file', async (req, res) => {
+    const recDir = getRecDir();
     if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
     await unlink(join(recDir, req.params.file)).catch(() => {});
     audit(req, 'recording.delete', req.params.file);
