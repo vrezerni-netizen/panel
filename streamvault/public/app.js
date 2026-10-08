@@ -170,6 +170,7 @@ async function livePage(c) {
       <div class="frame" id="frame"></div>
       <div class="ov ov-title" id="ovTitle" hidden></div>
       <div class="ov ov-timer" id="ovTimer" hidden><span class="rd"></span><span id="ovClock">00:00</span></div>
+      <button class="exitfs" id="exitfs" type="button">✕ Выйти из полного экрана</button>
       <div class="ph" id="ph">${svg('cam', '')}<div>Выберите эфир ниже</div></div></div>
       <div class="bar"><span id="nowname" class="mut"></span><span class="spacer"></span>
         ${admin ? '<button class="btn sm" id="shot">📷 Скриншот</button>' : ''}<button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
@@ -189,7 +190,13 @@ async function livePage(c) {
   const v = $('#v');
   v.addEventListener('loadedmetadata', () => applyOverlay(overlay, st));
   v.addEventListener('resize', () => applyOverlay(overlay, st));
-  $('#fs').onclick = () => $('#pl').requestFullscreen?.();
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enterFs = () => { const el = $('#pl'); (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); };
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  const toggleFs = () => (fsEl() ? exitFs() : enterFs());
+  $('#fs').onclick = toggleFs;
+  $('#exitfs').onclick = (e) => { e.stopPropagation(); exitFs(); };
+  $('#pl').ondblclick = toggleFs;   // double click / double tap also toggles
   $('#rl').onclick = () => current && play(current, true);
   if (admin) $('#shot').onclick = async () => {
     if (!current || !v.videoWidth) return toast('Сначала включите эфир', true);
@@ -226,7 +233,7 @@ async function livePage(c) {
     destroyHls();
     const src = `/hls/${encodeURIComponent(name)}/index.m3u8`;
     if (window.Hls && Hls.isSupported()) {
-      hls = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 8, levelLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
+      hls = new Hls({ lowLatencyMode: true, liveSyncDuration: 1.5, liveMaxLatencyDuration: 4, maxLiveSyncPlaybackRate: 1.2, backBufferLength: 10, manifestLoadingMaxRetry: 8, levelLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
       hls.on(Hls.Events.ERROR, (_, d) => {
         if (d.response && d.response.code === 401) { me = null; loginView(); return; }
         if (!d.fatal) return;

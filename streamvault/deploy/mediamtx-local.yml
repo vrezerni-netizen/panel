@@ -19,9 +19,11 @@ rtmpAddress: :1935
 
 hls: yes
 hlsAddress: 127.0.0.1:8888
-hlsVariant: mpegts
-hlsSegmentDuration: 2s
-hlsSegmentCount: 6
+hlsVariant: lowLatency
+hlsAlwaysRemux: yes
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentCount: 7
 
 pathDefaults:
   source: publisher

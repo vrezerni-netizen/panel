@@ -22,10 +22,11 @@ srtAddress: :8890
 
 hls: yes
 hlsAddress: 127.0.0.1:8888
-hlsAlwaysRemux: no
-hlsVariant: mpegts
-hlsSegmentDuration: 2s
-hlsSegmentCount: 6
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentCount: 7
 
 pathDefaults:
   source: publisher
