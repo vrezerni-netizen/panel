@@ -157,3 +157,4 @@ label.btn { cursor:pointer; }
 .shot { margin:0; background:rgba(18,28,50,.7); border:1px solid rgba(120,150,210,.2); border-radius:12px; overflow:hidden; }
 .shot img { width:100%; aspect-ratio:16/10; object-fit:cover; display:block; background:#000; }
 .shot figcaption { padding:10px 12px; }
+a.btn { text-decoration:none; } a.btn:hover { color:#fff; }
