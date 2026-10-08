@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { Readable } from 'node:stream';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   hashPassword, verifyPassword, randomToken, sha256, safeEqual,
   newTotpSecret, verifyTotp, otpauthUri,
@@ -293,8 +294,8 @@ export function createApp({ db, config = {} }) {
   });
 
   // ---- static ----
-  app.use('/vendor/hls.js', express.static(new URL('../node_modules/hls.js/dist/hls.min.js', import.meta.url).pathname));
-  app.use(express.static(new URL('../public', import.meta.url).pathname));
+  app.use('/vendor/hls.js', express.static(fileURLToPath(new URL('../node_modules/hls.js/dist/hls.min.js', import.meta.url))));
+  app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))));
 
   // purge expired sessions
   setInterval(() => db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now()), 600000).unref();
