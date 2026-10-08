@@ -75,7 +75,12 @@ if (!cfg) {
       const { publicPem, privatePem } = generateKeypair();
       writeFileSync(keyFile, privatePem, { mode: 0o600 });
       writeFileSync(join('data', 'streamvault.pub'), publicPem);
-      cfg = { record: true };
+      const folder = process.env.LOCAL_REC_FOLDER ?? await (async () => {
+        const rl2 = createInterface({ input: process.stdin, output: process.stdout });
+        const a2 = (await rl2.question('Папка для записей (Enter = внутри программы, data\\recordings; можно указать другой диск, например D:\\Zapisi): ')).trim().replace(/^"|"$/g, '');
+        rl2.close(); return a2;
+      })();
+      cfg = { record: true, recDir: folder || null };
       console.log(`Ключ записан на флешку: ${keyFile}. Сделайте его копию и храните в надёжном месте!`);
       console.log('Без этого файла записи не открыть никому. С компьютера он удалён не будет — его там и не было.\n');
     } catch (e) { console.log('Запись не включена:', e.message, '\n'); }
@@ -87,10 +92,10 @@ let mtxConfig = join(root, 'deploy', 'mediamtx-local.yml');
 let recDir = null;
 if (cfg.record) {
   const spool = join(root, 'data', 'spool');
-  recDir = join(root, 'data', 'recordings');
+  recDir = cfg.recDir || join(root, 'data', 'recordings');
   mkdirSync(spool, { recursive: true });
   mtxConfig = join(root, 'data', 'mediamtx.yml');
-  const rec = `pathDefaults:\n  source: publisher\n  record: yes\n  recordPath: ${spool.replace(/\\/g, '/')}/%path/%Y-%m-%d_%H-%M-%S-%f\n  recordFormat: mpegts\n  recordSegmentDuration: 5m`;
+  const rec = `pathDefaults:\n  source: publisher\n  record: yes\n  recordPath: ${spool.replace(/\\/g, '/')}/%path/%Y-%m-%d_%H-%M-%S-%f\n  recordFormat: fmp4\n  recordSegmentDuration: 10m`;
   writeFileSync(mtxConfig, readFileSync(join(root, 'deploy', 'mediamtx-local.yml'), 'utf8').replace('pathDefaults:\n  source: publisher', rec));
   startRecorder({ spoolDir: spool, recDir, publicPem: readFileSync(join(root, 'data', 'streamvault.pub')) });
   console.log('Зашифрованная запись включена.');
@@ -103,7 +108,7 @@ process.on('SIGINT', stop); process.on('SIGTERM', stop);
 mtx.on('exit', (c) => { console.error('MediaMTX остановился (код ' + c + '). Возможно, порт 1935 или 8888 занят другой программой — закройте её (или второй запуск StreamVault).'); process.exit(1); });
 
 const port = Number(process.env.PORT || 3000);
-createApp({ db, config: { secureCookies: false, recDir } }).listen(port, '0.0.0.0', () => {
+createApp({ db, config: { secureCookies: false, recDir, uploadDir: join(root, 'data', 'uploads') } }).listen(port, '0.0.0.0', () => {
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('='.repeat(60));
   console.log('Ахмат Запад запущен.');

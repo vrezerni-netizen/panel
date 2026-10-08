@@ -1,7 +1,7 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { Readable } from 'node:stream';
-import { readdir, stat, unlink } from 'node:fs/promises';
+import { readdir, stat, unlink, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -21,7 +21,17 @@ const OVERLAY_DEFAULT = {
   title: 'Ахмат Запад', showTitle: true, titlePos: 'tr',
   showTimer: true, timerPos: 'tl',
   showFrame: true, frameColor: '#3b82f6', frameWidth: 4,
+  aspect: 'auto',
 };
+const ASPECTS = ['auto', '16:9', '4:3', '1:1', '3:4', '9:16'];
+const THEME_DEFAULT = { bgVersion: 0, bgExt: '', dim: 0.55, blur: 0 };
+const IMG_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+function imageExt(buf) {
+  if (buf.length > 12 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length > 12 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buf.length > 12 && buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP') return 'webp';
+  return null;
+}
 const POS = ['tl', 'tr', 'bl', 'br'];
 
 function sanitizeOverlay(i = {}) {
@@ -31,6 +41,7 @@ function sanitizeOverlay(i = {}) {
   for (const k of ['titlePos', 'timerPos']) if (POS.includes(i[k])) o[k] = i[k];
   if (/^#[0-9a-fA-F]{6}$/.test(String(i.frameColor))) o.frameColor = i.frameColor.toLowerCase();
   if ([2, 4, 8, 12].includes(i.frameWidth)) o.frameWidth = i.frameWidth;
+  if (ASPECTS.includes(i.aspect)) o.aspect = i.aspect;
   return o;
 }
 
@@ -40,6 +51,7 @@ export function createApp({ db, config = {} }) {
     secureCookies = process.env.NODE_ENV === 'production',
     trustProxy = false,
     recDir = null,
+    uploadDir = null,
   } = config;
 
   const app = express();
@@ -56,7 +68,9 @@ export function createApp({ db, config = {} }) {
     });
     next();
   });
-  app.use(express.json({ limit: '10kb' }));
+  const smallJson = express.json({ limit: '10kb' });
+  const bigJson = express.json({ limit: '14mb' });
+  app.use((req, res, next) => (req.path === '/api/admin/background' ? bigJson : smallJson)(req, res, next));
 
   const now = () => Date.now();
   const audit = (req, event, detail, actor) =>
@@ -186,6 +200,26 @@ export function createApp({ db, config = {} }) {
       return { name: r.name, live: live[i], since: live[i] ? liveSince.get(r.name).since : null };
     });
     res.json({ now: t, streams });
+  });
+
+  // ---- site theme: background photo (public so the login page can use it) ----
+  const getTheme = () => {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'theme'").get();
+    try { return { ...THEME_DEFAULT, ...(row ? JSON.parse(row.value) : {}) }; } catch { return { ...THEME_DEFAULT }; }
+  };
+  const saveTheme = (t) => db.prepare("INSERT INTO settings (key, value) VALUES ('theme', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(t));
+  app.get('/api/theme', (req, res) => {
+    const t = getTheme();
+    res.json({ bg: t.bgVersion ? `/api/bg?v=${t.bgVersion}` : '/bg-default.svg', custom: !!t.bgVersion, dim: t.dim, blur: t.blur });
+  });
+  app.get('/api/bg', async (req, res) => {
+    const t = getTheme();
+    if (!uploadDir || !t.bgVersion) return res.redirect('/bg-default.svg');
+    try {
+      const buf = await readFile(join(uploadDir, `background.${t.bgExt}`));
+      res.set({ 'Content-Type': IMG_TYPES[t.bgExt], 'Cache-Control': 'public, max-age=86400' });
+      res.send(buf);
+    } catch { res.redirect('/bg-default.svg'); }
   });
 
   // ---- overlay look (title, timer, frame): everyone reads, only admin changes ----
@@ -340,6 +374,42 @@ export function createApp({ db, config = {} }) {
     db.prepare("INSERT INTO settings (key, value) VALUES ('overlay', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(next));
     audit(req, 'settings.update', JSON.stringify(sanitizeOverlay(req.body)));
     res.json(next);
+  });
+
+  admin.put('/theme', (req, res) => {
+    const t = getTheme();
+    const { dim, blur } = req.body || {};
+    if (typeof dim === 'number' && dim >= 0 && dim <= 0.9) t.dim = dim;
+    if (typeof blur === 'number' && blur >= 0 && blur <= 20) t.blur = Math.round(blur);
+    saveTheme(t);
+    audit(req, 'theme.update');
+    res.json(t);
+  });
+
+  admin.post('/background', async (req, res) => {
+    if (!uploadDir) return res.status(400).json({ error: 'uploads disabled' });
+    const data = typeof req.body?.data === 'string' ? req.body.data.replace(/^data:[^,]*,/, '') : '';
+    const buf = Buffer.from(data, 'base64');
+    if (!buf.length || buf.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'image up to 10 MB' });
+    const ext = imageExt(buf);
+    if (!ext) return res.status(400).json({ error: 'only JPG, PNG or WEBP' });
+    await mkdir(uploadDir, { recursive: true });
+    const t = getTheme();
+    if (t.bgExt && t.bgExt !== ext) await unlink(join(uploadDir, `background.${t.bgExt}`)).catch(() => {});
+    await writeFile(join(uploadDir, `background.${ext}`), buf);
+    t.bgExt = ext; t.bgVersion = now();
+    saveTheme(t);
+    audit(req, 'theme.background', `${ext} ${buf.length}`);
+    res.json({ ok: true, bg: `/api/bg?v=${t.bgVersion}` });
+  });
+
+  admin.delete('/background', async (req, res) => {
+    const t = getTheme();
+    if (uploadDir && t.bgExt) await unlink(join(uploadDir, `background.${t.bgExt}`)).catch(() => {});
+    t.bgExt = ''; t.bgVersion = 0;
+    saveTheme(t);
+    audit(req, 'theme.background.reset');
+    res.json({ ok: true });
   });
 
   admin.get('/audit', (req, res) => {

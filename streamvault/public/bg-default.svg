@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1330"/><stop offset=".55" stop-color="#0a1a3d"/><stop offset="1" stop-color="#070d1f"/></linearGradient>
+    <filter id="b1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="55"/></filter>
+    <filter id="b2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+    <radialGradient id="v" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#g)"/>
+  <g filter="url(#b1)" opacity=".85">
+    <circle cx="300" cy="260" r="260" fill="#1d4ed8" opacity=".55"/><circle cx="1500" cy="180" r="300" fill="#0ea5e9" opacity=".35"/>
+    <circle cx="1100" cy="880" r="340" fill="#4338ca" opacity=".45"/><circle cx="160" cy="900" r="220" fill="#0369a1" opacity=".4"/>
+  </g>
+  <g filter="url(#b2)" opacity=".55" fill="#93c5fd">
+    <circle cx="520" cy="620" r="46"/><circle cx="740" cy="380" r="30"/><circle cx="980" cy="560" r="62" opacity=".6"/><circle cx="1320" cy="430" r="40"/>
+    <circle cx="1560" cy="700" r="70" opacity=".5"/><circle cx="1750" cy="320" r="34"/><circle cx="400" cy="140" r="26"/><circle cx="860" cy="820" r="38"/><circle cx="1220" cy="150" r="24"/>
+  </g>
+  <rect width="1920" height="1080" fill="url(#v)"/>
+</svg>

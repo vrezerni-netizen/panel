@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { createApp } from '../src/app.js';
@@ -109,5 +109,36 @@ test('overlay settings: defaults, admin can change, viewer cannot, invalid ignor
     assert.equal((await call('/api/settings', { cookie: vc })).status, 200);
     assert.equal((await call('/api/admin/settings', { method: 'PUT', cookie: vc, body: { title: 'x' } })).status, 403);
     assert.equal((await call('/api/streams', { cookie: vc })).json.streams.length, 0);
+  } finally { server.close(); }
+});
+
+test('background upload: admin only, validates image type, theme public', async () => {
+  const { db, secret, server, call } = await setup();
+  try {
+    const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    server.close();
+    const dir = mkdtempSync(join(tmpdir(), 'up-'));
+    const srv = createApp({ db, config: { uploadDir: dir } }).listen(0);
+    after(() => srv.close());
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const c2 = async (path, { method = 'GET', body, cookie } = {}) => {
+      const r = await fetch(base + path, { method, redirect: 'manual', headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: r.status, json: await r.json().catch(() => null), type: r.headers.get('content-type'), cookie: r.headers.get('set-cookie')?.split(';')[0] };
+    };
+    const t0 = await c2('/api/theme'); assert.equal(t0.status, 200); assert.equal(t0.json.bg, '/bg-default.svg');
+    assert.equal((await c2('/api/admin/background', { method: 'POST', body: { data: 'x' } })).status, 401);
+    const p1 = (await c2('/api/login', { method: 'POST', body: { username: 'boss', password: 'correct horse battery' } })).json.pending;
+    const cookie = (await c2('/api/login/totp', { method: 'POST', body: { pending: p1, code: totpAt(secret) } })).cookie;
+    const png = Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), Buffer.alloc(40)]).toString('base64');
+    assert.equal((await c2('/api/admin/background', { method: 'POST', cookie, body: { data: Buffer.from('<svg onload=alert(1)>').toString('base64') } })).status, 400);
+    assert.equal((await c2('/api/admin/background', { method: 'POST', cookie, body: { data: png } })).status, 200);
+    const t1 = await c2('/api/theme'); assert.match(t1.json.bg, /^\/api\/bg\?v=\d+$/);
+    const img = await fetch(base + '/api/bg'); assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.equal((await c2('/api/admin/theme', { method: 'PUT', cookie, body: { dim: 0.3, blur: 5 } })).json.dim, 0.3);
+    assert.equal((await c2('/api/admin/background', { method: 'DELETE', cookie, body: {} })).status, 200);
+    assert.equal((await c2('/api/theme')).json.bg, '/bg-default.svg');
+    assert.equal((await c2('/api/admin/settings', { method: 'PUT', cookie, body: { aspect: '4:3' } })).json.aspect, '4:3');
+    assert.equal((await c2('/api/admin/settings', { method: 'PUT', cookie, body: { aspect: 'evil' } })).json.aspect, '4:3');
+    srv.close();
   } finally { server.close(); }
 });

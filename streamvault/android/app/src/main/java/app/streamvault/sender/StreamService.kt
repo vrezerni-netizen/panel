@@ -9,8 +9,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.net.wifi.WifiManager
+import android.graphics.Rect
 import android.os.IBinder
 import android.os.PowerManager
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.pedro.common.ConnectChecker
 import com.pedro.library.rtmp.RtmpCamera2
@@ -53,18 +55,18 @@ class StreamService : Service(), ConnectChecker {
                 d.setIntentResult(code, data)
                 display = d
                 d.getStreamClient().setReTries(1000)
-                val (w, h) = screenSize(prefs.landscape)
+                val (w, h) = screenSize(prefs.landscape, qualityLong(prefs.quality))
                 val dpi = resources.displayMetrics.densityDpi
-                val videoOk = d.prepareVideo(w, h, 30, 3_000_000, 0, dpi)
-                val audioOk = if (micOn) d.prepareAudio(128_000, 44100, true) else true
+                val videoOk = d.prepareVideo(w, h, 30, qualityBitrate(prefs.quality), 0, dpi)
+                val audioOk = if (micOn) d.prepareAudio(160_000, 44100, true) else true
                 if (videoOk && audioOk) { d.startStream(url); true } else false
             }
         } else {
             val c = RtmpCamera2(this, this)
             camera = c
             c.getStreamClient().setReTries(1000)
-            val videoOk = c.prepareVideo(1280, 720, 30, 2_500_000, 2, if (prefs.landscape) 0 else 90)
-            val audioOk = if (micOn) c.prepareAudio(128_000, 44100, true) else true
+            val videoOk = c.prepareVideo(qualityLong(prefs.quality), if (prefs.quality == 0) 720 else 1080, 30, qualityBitrate(prefs.quality), 2, if (prefs.landscape) 0 else 90)
+            val audioOk = if (micOn) c.prepareAudio(160_000, 44100, true) else true
             if (videoOk && audioOk) { c.startStream(url); true } else false
         }
         if (!ok) { status("Не удалось подготовить кодек"); stop() } else running = true
@@ -83,12 +85,23 @@ class StreamService : Service(), ConnectChecker {
         stopSelf()
     }
 
-    // 16:9 at 720p; orientation chosen in the app (set before starting).
-    private fun screenSize(landscape: Boolean): Pair<Int, Int> {
-        val long = 1280
-        val short = 720
+    // Real screen shape (4:3, 16:10, 16:9 ...) scaled to the chosen quality, so the picture is not stretched.
+    private fun screenSize(landscape: Boolean, longSide: Int): Pair<Int, Int> {
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val bounds: Rect = if (Build.VERSION.SDK_INT >= 30) wm.maximumWindowMetrics.bounds else {
+            val m = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(m)
+            Rect(0, 0, m.widthPixels, m.heightPixels)
+        }
+        val a = maxOf(bounds.width(), bounds.height()).toFloat()
+        val b = minOf(bounds.width(), bounds.height()).toFloat()
+        val long = longSide
+        val short = ((long * b / a).toInt() / 2) * 2 // even number for the encoder
         return if (landscape) long to short else short to long
     }
+
+    private fun qualityLong(q: Int) = if (q == 0) 1280 else 1920
+    private fun qualityBitrate(q: Int) = when (q) { 0 -> 3_000_000; 1 -> 8_000_000; else -> 12_000_000 }
 
     private fun startInForeground(screen: Boolean, mic: Boolean) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

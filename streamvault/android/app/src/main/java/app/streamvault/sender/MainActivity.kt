@@ -46,6 +46,14 @@ class MainActivity : Activity() {
             orientation = RadioGroup.HORIZONTAL; addView(screen); addView(camera)
             check(if (prefs.source == "camera") 2 else 1)
         }
+        val q0 = RadioButton(this).apply { text = "Стандарт 720p"; id = 11 }
+        val q1 = RadioButton(this).apply { text = "Высокое 1080p"; id = 12 }
+        val q2 = RadioButton(this).apply { text = "Максимум 1080p+"; id = 13 }
+        val quality = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL; addView(q0); addView(q1); addView(q2)
+            check(11 + prefs.quality)
+        }
+        val qTitle = TextView(this).apply { text = "Качество видео"; setPadding(0, 16, 0, 0) }
         val mic = CheckBox(this).apply { text = "Микрофон"; isChecked = prefs.mic }
         val land = CheckBox(this).apply { text = "Горизонтально (экран)"; isChecked = prefs.landscape }
         statusView = TextView(this).apply { textSize = 18f; setPadding(0, 24, 0, 24) }
@@ -57,7 +65,7 @@ class MainActivity : Activity() {
             } else {
                 prefs.server = server.text.toString(); prefs.name = name.text.toString(); prefs.key = key.text.toString()
                 prefs.source = if (source.checkedRadioButtonId == 2) "camera" else "screen"
-                prefs.mic = mic.isChecked; prefs.landscape = land.isChecked
+                prefs.quality = quality.checkedRadioButtonId - 11; prefs.mic = mic.isChecked; prefs.landscape = land.isChecked
                 if (prefs.server.isEmpty() || prefs.name.isEmpty() || prefs.key.isEmpty()) {
                     Toast.makeText(this, "Заполните сервер, имя и ключ", Toast.LENGTH_LONG).show(); return@setOnClickListener
                 }
@@ -74,7 +82,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL; setPadding(40, 40, 40, 40); setBackgroundColor(0xFF0B1220.toInt())
             val title = TextView(this@MainActivity).apply { text = "Ахмат Запад"; textSize = 26f; setPadding(0, 0, 0, 24); setTextColor(0xFFE3E9F4.toInt()) }
             addView(title)
-            listOf(server, name, key, source, mic, land, statusView, toggle).forEach { addView(it) }
+            listOf(server, name, key, source, qTitle, quality, mic, land, statusView, toggle).forEach { addView(it) }
         }
         setContentView(ScrollView(this).apply { setBackgroundColor(0xFF0B1220.toInt()); addView(root) })
     }

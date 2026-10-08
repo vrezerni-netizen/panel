@@ -7,6 +7,7 @@ const ICON = {
   key: '<path d="M7 14a4 4 0 1 1 3.9-5H21v3h-2v2h-3v-2h-5.1A4 4 0 0 1 7 14zm0-5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>',
   log: '<path d="M5 4h14v2H5zm0 7h14v2H5zm0 7h14v2H5z"/>',
   out: '<path d="M10 4h8v16h-8v-2h6V6h-6zM3 12l4-4v3h7v2H7v3z"/>',
+  image: '<path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2 11h12l-3.5-4.5-3 3.8L9 12zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
   cam: '<path d="M4 7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>',
 };
 const svg = (n, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="currentColor">${ICON[n]}</svg>`;
@@ -76,6 +77,7 @@ const PAGES = [
   { id: 'rec', label: 'Записи', icon: 'rec', admin: true },
   { id: 'users', label: 'Пользователи', icon: 'users', admin: true },
   { id: 'keys', label: 'Ключи эфира', icon: 'key', admin: true },
+  { id: 'look', label: 'Оформление', icon: 'image', admin: true },
   { id: 'log', label: 'Журнал', icon: 'log', admin: true },
 ];
 
@@ -103,7 +105,7 @@ async function route() {
   const [page = 'live', arg] = location.hash.replace(/^#\//, '').split('/');
   const p = PAGES.find((x) => x.id === page && (!x.admin || me.role === 'admin')) || PAGES[0];
   const c = shell(p.id);
-  try { await ({ live: livePage, rec: recPage, users: usersPage, keys: keysPage, log: logPage }[p.id])(c, decodeURIComponent(arg || '')); }
+  try { await ({ live: livePage, rec: recPage, users: usersPage, keys: keysPage, look: lookPage, log: logPage }[p.id])(c, decodeURIComponent(arg || '')); }
   catch (e) { if (e.status === 401) { me = null; loginView(); } else c.innerHTML = `<div class="card err">Ошибка: ${esc(e.message)}</div>`; }
 }
 window.addEventListener('hashchange', route);
@@ -121,6 +123,11 @@ const fmtClock = (sec) => {
 
 function applyOverlay(o, state) {
   const pl = $('#pl'); if (!pl) return;
+  const v = $('#v');
+  let ar = 16 / 9;
+  if (o.aspect && o.aspect !== 'auto') { const [a, b] = o.aspect.split(':').map(Number); ar = a / b; }
+  else if (v && v.videoWidth) ar = v.videoWidth / v.videoHeight;
+  pl.style.setProperty('--ar', ar.toFixed(4));
   const frame = $('#frame'), t = $('#ovTitle'), tm = $('#ovTimer');
   frame.style.display = o.showFrame ? 'block' : 'none';
   frame.style.borderColor = o.frameColor; frame.style.borderWidth = o.frameWidth + 'px';
@@ -142,9 +149,10 @@ function dockHtml(o) {
     <div class="grp">Где таймер</div>${corners('timerPos')}
     <div class="grp">Цвет рамки</div><div class="sw-row">${COLORS.map((c) => `<button class="clr ${o.frameColor === c ? 'on' : ''}" data-col="${c}" style="background:${c}"></button>`).join('')}</div>
     <div class="grp">Толщина рамки</div><div class="seg">${[[2, 'Тонкая'], [4, 'Средняя'], [8, 'Толстая'], [12, 'Очень']].map(([w, l]) => `<button class="${o.frameWidth === w ? 'on' : ''}" data-w="${w}">${l}</button>`).join('')}</div>
+    <div class="grp">Формат видео</div><div class="seg">${[['auto', 'Как у экрана'], ['16:9', '16:9 широкий'], ['4:3', '4:3'], ['1:1', 'Квадрат'], ['3:4', 'Вертикально 3:4'], ['9:16', 'Вертикально 9:16']].map(([a, l]) => `<button class="${o.aspect === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div>
     <div class="grp">Быстрые действия</div>
     <div class="quick"><button class="btn sec sm" data-go="keys">Новый ключ эфира</button><button class="btn sec sm" data-go="users">Новый зритель</button>
-    <button class="btn sec sm" data-go="rec">Записи</button><button class="btn sec sm" data-go="log">Журнал</button></div>
+    <button class="btn sec sm" data-go="look">Фон сайта</button><button class="btn sec sm" data-go="rec">Записи</button><button class="btn sec sm" data-go="log">Журнал</button></div>
   </div></aside>`;
 }
 
@@ -163,6 +171,8 @@ async function livePage(c) {
         <button class="btn sec sm" id="fs">Во весь экран</button><button class="btn sec sm" id="rl">Обновить</button></div></div>
     <h3 style="margin:0 0 12px">Каналы</h3><div class="grid" id="grid"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
   const v = $('#v');
+  v.addEventListener('loadedmetadata', () => applyOverlay(overlay, st));
+  v.addEventListener('resize', () => applyOverlay(overlay, st));
   $('#fs').onclick = () => $('#pl').requestFullscreen?.();
   $('#rl').onclick = () => current && play(current, true);
   applyOverlay(overlay, st);
@@ -175,6 +185,7 @@ async function livePage(c) {
       d.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => save({ [b.dataset.t]: !overlay[b.dataset.t] })));
       d.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => save({ [b.dataset.c]: b.dataset.p })));
       d.querySelectorAll('[data-col]').forEach((b) => (b.onclick = () => save({ frameColor: b.dataset.col })));
+      d.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => save({ aspect: b.dataset.a })));
       d.querySelectorAll('[data-w]').forEach((b) => (b.onclick = () => save({ frameWidth: Number(b.dataset.w) })));
       d.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => { location.hash = '#/' + b.dataset.go; }));
       $('#dSave').onclick = () => save({ title: $('#dTitle').value });
@@ -242,7 +253,7 @@ async function recPage(c, folder) {
   const recs = (await api('/api/admin/recordings')).map(parseRec);
   const note = `<div class="note">🔒 Записи зашифрованы. Скачайте файл и откройте его на компьютере с флешкой: запустите
     <code>decrypt-recording.bat</code> (папка программы), укажите файл и ключ <code>streamvault.key</code> с флешки.
-    Дальше видео открывается в VLC. Без флешки посмотреть запись нельзя никому, даже администратору.</div>`;
+    Результат — обычный видеофайл MP4 (H.264 + AAC), открывается в VLC и любом плеере. Файл можно скачать кнопкой «Скачать» и выбрать флешку или любую папку. Без флешки посмотреть запись нельзя никому, даже администратору.</div>`;
   if (!folder) {
     const groups = {};
     for (const r of recs) (groups[r.stream] ||= []).push(r);
@@ -333,11 +344,52 @@ async function keysPage(c) {
   };
 }
 
+/* ---------- appearance: background photo ---------- */
+async function lookPage(c) {
+  let t = await api('/api/theme');
+  c.innerHTML = `<div class="head"><div><h2>Оформление сайта</h2><div class="sub">Фоновое фото для входа и всех страниц</div></div></div>
+    <div class="look-grid"><div class="card"><h3 style="margin-bottom:12px">Фоновое фото</h3>
+      <div class="bgprev" id="prev"><span class="chip" id="cur"></span></div>
+      <div class="row" style="margin-top:14px"><label class="btn" for="file">Загрузить своё фото</label>
+        <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <button class="btn sec" id="reset">Вернуть стандартный фон</button></div>
+      <div class="mut sm" style="margin-top:10px">JPG, PNG или WEBP до 10 МБ. Лучше всего подходит фото 1920×1080 и больше.</div></div>
+      <div class="card"><h3 style="margin-bottom:12px">Настройка</h3>
+      <div class="grp" style="margin-top:0">Затемнение фона: <b id="dv"></b></div><input type="range" id="dim" min="0" max="90" step="5" style="width:100%">
+      <div class="grp">Размытие фона: <b id="bv"></b></div><input type="range" id="blur" min="0" max="20" step="1" style="width:100%">
+      <div class="mut sm" style="margin-top:12px">Затемнение делает текст читаемее, размытие смягчает фото.</div></div></div>`;
+  const paint = () => {
+    $('#prev').style.backgroundImage = `url("${t.bg}")`;
+    $('#prev').style.setProperty('--dim', t.dim);
+    $('#cur').textContent = t.custom ? 'Ваше фото' : 'Стандартный фон';
+    $('#dim').value = Math.round(t.dim * 100); $('#dv').textContent = Math.round(t.dim * 100) + '%';
+    $('#blur').value = t.blur; $('#bv').textContent = t.blur + ' px';
+    applyTheme(t);
+  };
+  paint();
+  const saveLook = async () => { try { await api('/api/admin/theme', 'PUT', { dim: t.dim, blur: t.blur }); } catch (e) { toast(e.message, true); } };
+  $('#dim').oninput = (e) => { t.dim = e.target.value / 100; paint(); };
+  $('#dim').onchange = saveLook;
+  $('#blur').oninput = (e) => { t.blur = Number(e.target.value); paint(); };
+  $('#blur').onchange = saveLook;
+  $('#file').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) return toast('Файл больше 10 МБ', true);
+    const fr = new FileReader();
+    fr.onload = async () => {
+      try { await api('/api/admin/background', 'POST', { data: fr.result }); t = await api('/api/theme'); paint(); toast('Фон обновлён'); }
+      catch (err) { toast(err.message, true); }
+    };
+    fr.readAsDataURL(f);
+  };
+  $('#reset').onclick = async () => { await api('/api/admin/background', 'DELETE'); t = await api('/api/theme'); paint(); toast('Возвращён стандартный фон'); };
+}
+
 /* ---------- audit log ---------- */
 const EV = { 'login.ok': 'Вход выполнен', 'login.fail': 'Неверный пароль', 'login.totp_fail': 'Неверный код', 'login.locked': 'Вход заблокирован',
   'user.create': 'Создан пользователь', 'user.delete': 'Удалён пользователь', 'user.disable': 'Пользователь отключён', 'user.enable': 'Пользователь включён',
   'user.reset2fa': 'Сброшена 2FA', 'user.password': 'Сменён пароль', 'stream.create': 'Создан ключ эфира', 'stream.revoke': 'Ключ отозван',
-  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'recording.download': 'Скачана запись', 'recording.delete': 'Удалена запись' };
+  'publish.denied': 'Отклонена публикация', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'recording.delete': 'Удалена запись' };
 async function logPage(c) {
   const rows = await api('/api/admin/audit');
   c.innerHTML = `<div class="head"><div><h2>Журнал</h2><div class="sub">Последние 200 событий безопасности</div></div></div>
@@ -346,7 +398,16 @@ async function logPage(c) {
     </tbody></table></div>`;
 }
 
+function applyTheme(t) {
+  const r = document.documentElement.style;
+  r.setProperty('--bg-img', `url("${t.bg}")`);
+  r.setProperty('--dim', String(t.dim));
+  r.setProperty('--blur', (t.blur || 0) + 'px');
+}
+async function loadTheme() { try { applyTheme(await api('/api/theme')); } catch { /* default css */ } }
+
 async function start() {
+  await loadTheme();
   try { me = await api('/api/me'); if (!location.hash) location.hash = '#/live'; route(); }
   catch { me = null; loginView(); }
 }

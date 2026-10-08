@@ -47,7 +47,8 @@ if (cmd === 'keygen') {
   const clean = (x) => x.trim().replace(/^"|"$/g, '');
   const inp = clean(await ask('Перетащите сюда файл записи (.sve) и нажмите Enter: '));
   const keyPath = clean(await ask('Перетащите сюда ключ streamvault.key с флешки и нажмите Enter: '));
-  const out = inp.replace(/\.sve$/i, '') + '.decrypted.ts';
+  const base = inp.replace(/\.sve$/i, '');
+  const out = base.replace(/(\.(mp4|ts))?$/i, (m) => '.decrypted' + (m || '.mp4'));
   await decryptFile(inp, await readFile(keyPath), out);
   console.log('\nГотово! Видео сохранено: ' + out + '\nОткройте его в VLC (https://www.videolan.org).');
 } else {

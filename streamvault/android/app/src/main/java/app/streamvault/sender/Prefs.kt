@@ -30,6 +30,9 @@ class Prefs(context: Context) {
     var mic: Boolean
         get() = sp.getBoolean("mic", true)
         set(v) = sp.edit().putBoolean("mic", v).apply()
+    var quality: Int // 0 = 720p, 1 = 1080p, 2 = 1080p max
+        get() = sp.getInt("quality", 1)
+        set(v) = sp.edit().putInt("quality", v).apply()
     var landscape: Boolean
         get() = sp.getBoolean("landscape", true)
         set(v) = sp.edit().putBoolean("landscape", v).apply()
