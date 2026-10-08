@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "create-admin": "node src/cli.js create-admin"
+    "create-admin": "node src/cli.js create-admin",
+    "local": "node scripts/local.js"
   },
   "dependencies": {
     "express": "^5.2.1",

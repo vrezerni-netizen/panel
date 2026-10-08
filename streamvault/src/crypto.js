@@ -75,6 +75,6 @@ export function verifyTotp(secret, code, timeMs = Date.now()) {
   return null;
 }
 
-export const otpauthUri = (secret, account, issuer = 'StreamVault') =>
+export const otpauthUri = (secret, account, issuer = 'Ахмат Запад') =>
   `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}` +
   `?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;

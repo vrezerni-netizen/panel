@@ -1,0 +1,26 @@
+# Локальная проверка (домашняя сеть). Без записи и без шифрования — НЕ для интернета.
+logLevel: info
+authMethod: http
+authHTTPAddress: http://127.0.0.1:3000/internal/mediamtx/auth
+
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: no
+webrtc: no
+srt: no
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: 127.0.0.1:8888
+hlsVariant: mpegts
+hlsSegmentDuration: 2s
+hlsSegmentCount: 6
+
+pathDefaults:
+  source: publisher
+paths:
+  "~^live/[a-z0-9_-]+$": {}

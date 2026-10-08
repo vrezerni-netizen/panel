@@ -9,3 +9,5 @@ android/local.properties
 spool/
 recordings/
 *.key
+bin/
+data/

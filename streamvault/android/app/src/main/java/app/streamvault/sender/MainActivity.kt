@@ -60,7 +60,8 @@ class MainActivity : Activity() {
                 if (prefs.server.isEmpty() || prefs.name.isEmpty() || prefs.key.isEmpty()) {
                     Toast.makeText(this, "Заполните сервер, имя и ключ", Toast.LENGTH_LONG).show(); return@setOnClickListener
                 }
-                if (!prefs.server.startsWith("rtmps://") && !prefs.server.startsWith("rtmp://127.") && !prefs.server.startsWith("rtmp://192.168.")) {
+                val lan = Regex("^rtmp://(127\\.|10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)")
+                if (!prefs.server.startsWith("rtmps://") && !lan.containsMatchIn(prefs.server)) {
                     Toast.makeText(this, "Используйте rtmps:// (шифрование)", Toast.LENGTH_LONG).show(); return@setOnClickListener
                 }
                 requestedOrientation = if (prefs.landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -69,10 +70,12 @@ class MainActivity : Activity() {
         }
 
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(40, 40, 40, 40)
+            orientation = LinearLayout.VERTICAL; setPadding(40, 40, 40, 40); setBackgroundColor(0xFF0B1220.toInt())
+            val title = TextView(this@MainActivity).apply { text = "Ахмат Запад"; textSize = 26f; setPadding(0, 0, 0, 24); setTextColor(0xFFE3E9F4.toInt()) }
+            addView(title)
             listOf(server, name, key, source, mic, land, statusView, toggle).forEach { addView(it) }
         }
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply { setBackgroundColor(0xFF0B1220.toInt()); addView(root) })
     }
 
     private fun requestPermissionsThenStart() {

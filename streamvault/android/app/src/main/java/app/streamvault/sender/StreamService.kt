@@ -83,7 +83,7 @@ class StreamService : Service(), ConnectChecker {
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Эфир", NotificationManager.IMPORTANCE_LOW))
         val n: Notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .setContentTitle("Идёт эфир")
+            .setContentTitle("Ахмат Запад — идёт эфир")
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= 29) {
