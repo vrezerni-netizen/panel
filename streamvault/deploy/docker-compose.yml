@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./spool:/spool
   streamvault:
     image: node:22-alpine
     working_dir: /app
@@ -15,6 +16,10 @@ services:
       NODE_ENV: production
       TRUST_PROXY: "1"
       DB_PATH: /data/streamvault.db
+      REC_PUBKEY: /data/streamvault.pub   # только ПУБЛИЧНЫЙ ключ; приватный — на флешке
+      REC_SPOOL: /spool
+      REC_DIR: /data/recordings
     volumes:
       - ..:/app:ro
       - ./data:/data
+      - ./spool:/spool

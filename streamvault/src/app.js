@@ -1,6 +1,8 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { Readable } from 'node:stream';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   hashPassword, verifyPassword, randomToken, sha256, safeEqual,
   newTotpSecret, verifyTotp, otpauthUri,
@@ -19,6 +21,7 @@ export function createApp({ db, config = {} }) {
     mediamtxHls = 'http://127.0.0.1:8888',
     secureCookies = process.env.NODE_ENV === 'production',
     trustProxy = false,
+    recDir = null,
   } = config;
 
   const app = express();
@@ -268,6 +271,21 @@ export function createApp({ db, config = {} }) {
     db.prepare('UPDATE streams SET revoked = 1 WHERE id = ?').run(req.params.id);
     audit(req, 'stream.revoke', String(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ---- admin: encrypted recordings (cannot be played here: key is on the USB stick) ----
+  const REC_RE = /^[\w.-]+\.sve$/;
+  admin.get('/recordings', async (req, res) => {
+    if (!recDir) return res.json([]);
+    const names = (await readdir(recDir).catch(() => [])).filter((n) => REC_RE.test(n));
+    const list = [];
+    for (const n of names) { const st = await stat(join(recDir, n)); list.push({ name: n, size: st.size, mtime: st.mtimeMs }); }
+    res.json(list.sort((a, b) => b.mtime - a.mtime));
+  });
+  admin.get('/recordings/:file', (req, res) => {
+    if (!recDir || !REC_RE.test(req.params.file)) return res.sendStatus(404);
+    audit(req, 'recording.download', req.params.file);
+    res.download(join(recDir, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
   });
 
   admin.get('/audit', (req, res) => {

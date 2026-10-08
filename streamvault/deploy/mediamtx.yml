@@ -27,6 +27,11 @@ hlsSegmentCount: 6
 
 pathDefaults:
   source: publisher
+  # запись в spool (открытый текст живёт <~5 мин), StreamVault шифрует и удаляет — см. REC_PUBKEY
+  record: yes
+  recordPath: /spool/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: mpegts
+  recordSegmentDuration: 5m
 # пути вида live/<имя>; проверка ключа — в authHTTPAddress
 paths:
   "~^live/[a-z0-9_-]+$": {}

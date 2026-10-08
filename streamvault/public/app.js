@@ -78,13 +78,23 @@ function play(name) {
 }
 
 async function adminView(me) {
-  const [users, streams] = await Promise.all([api('/api/admin/users'), api('/api/admin/streams')]);
+  const [users, streams, recs] = await Promise.all([api('/api/admin/users'), api('/api/admin/streams'), api('/api/admin/recordings')]);
   $app.innerHTML = `<div class="row"><button class="sec" id="back">← Эфир</button></div>
   <div class="card"><h3>Пользователи</h3><div id="ul"></div>
     <form id="nu"><input name="u" placeholder="Логин" required><input name="p" type="password" placeholder="Пароль (≥12)" minlength="12" required>
     <button>Создать</button></form><div id="enroll"></div></div>
   <div class="card"><h3>Ключи эфира (для Android-передатчика)</h3><div id="sl"></div>
-    <form id="ns"><input name="n" placeholder="имя: tablet1" required><button>Создать ключ</button></form><div id="key"></div></div>`;
+    <form id="ns"><input name="n" placeholder="имя: tablet1" required><button>Создать ключ</button></form><div id="key"></div></div>
+  <div class="card"><h3>Записи (зашифрованы)</h3>
+    <p class="mut">Посмотреть можно только с флешкой: <code>node src/vault-cli.js decrypt файл.sve выход.ts --key /флешка/streamvault.key</code></p>
+    <div id="rl">${recs.length ? '' : '<span class="mut">Записей нет</span>'}</div></div>`;
+  const rl = document.getElementById('rl');
+  for (const r of recs) {
+    const d = document.createElement('div'); d.className = 'row';
+    const a = document.createElement('a'); a.href = `/api/admin/recordings/${encodeURIComponent(r.name)}`; a.textContent = r.name; a.style.color = 'var(--acc)';
+    d.append(a, Object.assign(document.createElement('span'), { className: 'mut', textContent: `${(r.size / 1048576).toFixed(1)} МБ · ${new Date(r.mtime).toLocaleString()}` }));
+    rl.append(d);
+  }
   document.getElementById('back').onclick = start;
   const ul = document.getElementById('ul');
   for (const u of users) {
