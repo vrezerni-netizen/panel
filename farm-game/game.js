@@ -55,7 +55,7 @@
   const TOOLS = [
     { id: 'hoe', icon: '⛏️', name: 'Копать' }, { id: 'seed', icon: '🌱', name: 'Сеять' }, { id: 'water', icon: '💧', name: 'Полив' }, { id: 'harvest', icon: '🧺', name: 'Сбор' },
     { id: 'fert', icon: '🧪', name: 'Удобр.' }, { id: 'superfert', icon: '⚡', name: 'Супер' }, { id: 'sprinkler', icon: '🚿', name: 'Поливалка' },
-    { id: 'tractor', icon: '🚜', name: 'Трактор' }, { id: 'combine', icon: '🌾', name: 'Комбайн' }, { id: 'remove', icon: '🪓', name: 'Убрать' },
+    { id: 'tractor', icon: '🚜', name: 'Трактор' }, { id: 'combine', icon: '🌾', name: 'Комбайн' }, { id: 'waterer', icon: '🚒', name: 'Поливмаш' }, { id: 'spreader', icon: '🧂', name: 'Удобр.маш' }, { id: 'remove', icon: '🪓', name: 'Убрать' },
   ];
   const needSeed = () => ui.tool === 'seed' || ui.tool === 'tractor';
   function pickSeed() {
@@ -71,8 +71,8 @@
     const r = L.act(S, tool, x, y, ui.seed);
     if (!r.ok) { toastOnce(r.msg, 'bad'); if (first) sfx.bad(); return; }
     const sp = world.tileScreen(x, y);
-    const kind = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest' }[r.fx] || 'dig';
-    if (tool === 'tractor' || tool === 'combine') {
+    const kind = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest', waterer: 'water', spreader: 'fert' }[r.fx] || 'dig';
+    if (L.MACHINES[tool] && L.MACHINES[tool].kind === 'field') {
       world.drive(tool, y);
       for (const [cx, cy] of L.areaCells(S, tool, x, y)) world.fx(kind, cx, cy);
     } else world.fx(kind, x, y, { gold: r.gold });
@@ -89,14 +89,14 @@
   }
   function onHover(t) {
     if (!t) { world.highlight(null); return; }
-    const big = (ui.tool === 'tractor' || ui.tool === 'combine') && S.up[ui.tool] > 0;
+    const big = L.MACHINES[ui.tool] && L.MACHINES[ui.tool].kind === 'field' && S.up[ui.tool] > 0;
     world.highlight(big ? L.areaCells(S, ui.tool, t.x, t.y) : [[t.x, t.y]], big ? 0xffc83d : 0xffffff);
   }
   function unlocksAt(lv) {
     const out = [];
     for (const k of L.CROP_ORDER) if (L.CROPS[k].level === lv) out.push(`${L.CROPS[k].icon} ${L.CROPS[k].name}`);
     for (const k of L.ANIMAL_ORDER) if (L.ANIMALS[k].level === lv) out.push(`${L.ANIMALS[k].icon} ${L.ANIMALS[k].name}`);
-    for (const k of ['tractor', 'combine']) if (L.TOOL_LEVELS[k].need === lv) out.push(`🚜 ${L.TOOL_LEVELS[k].name}`);
+    for (const k of L.MACH_KEYS) if (L.MACHINES[k].need === lv) out.push(`${L.MACHINES[k].icon} ${L.MACHINES[k].name}`);
     for (const f of L.FARM_DEFS) if (f.level === lv && f.cost) out.push(`🗺️ Ферма «${f.name}»`);
     if (lv === L.SPRINKLER.need) out.push('🚿 Поливалки');
     L.TRUCK_SLOTS.forEach((t, i) => { if (i && t.level === lv) out.push(`🚚 Машина №${i + 1}`); });
@@ -152,8 +152,8 @@
         let extra = '', dis = '';
         if (t.id === 'fert') extra = `<span class="n">${S.items.fert}</span>`;
         if (t.id === 'superfert') extra = `<span class="n">${S.items.superfert}</span>`;
-        if (t.id === 'tractor' || t.id === 'combine') {
-          if (!S.up[t.id]) { dis = 'dis'; extra = `<span class="cd">🔒${L.TOOL_LEVELS[t.id].need}</span>`; }
+        if (L.MACHINES[t.id]) {
+          if (!S.up[t.id]) { dis = 'dis'; extra = `<span class="cd">🔒${L.MACHINES[t.id].need}</span>`; }
           else if (S.cool[t.id] > 0) extra = `<span class="cd">${Math.ceil(S.cool[t.id] / 1000)}</span>`;
         }
         if (t.id === 'sprinkler' && S.level < L.SPRINKLER.need) { dis = 'dis'; extra = `<span class="cd">🔒${L.SPRINKLER.need}</span>`; }
@@ -293,10 +293,31 @@
   };
 
   // --- Техцентр
+  const pips = (lv) => '●'.repeat(lv) + '○'.repeat(L.MACH_MAX - lv);
+  function machEffect(k, lv) {
+    const d = L.MACHINES[k]; if (!lv) return 'не куплено';
+    if (d.kind === 'field') return `${L.areaOf(lv).length} клеток · перезарядка ${L.coolOf(k, lv)} с`;
+    if (d.kind === 'auto') return `каждые ${L.autoEvery(k, lv)} с по ${L.autoN(k, lv)} шт.`;
+    if (k === 'feeder') return `корма −${Math.round((1 - L.feedUseOf(lv)) * 100)}%`;
+    return `скорость +${Math.round((L.speedOf(lv) - 1) * 100)}%, двойной урожай ${Math.round(L.doubleOf(lv) * 100)}%`;
+  }
+  function machCard(k) {
+    const d = L.MACHINES[k], lv = S.up[k] || 0, c = L.machineCost(S, k);
+    const lock = c && S.level < c.need, lack = c && (S.coins < c.coins || S.crystals < c.gems);
+    let sub = `${d.desc}<br><span style="letter-spacing:1px;color:var(--gold)">${pips(lv)}</span> ур. ${lv}/${L.MACH_MAX} · ${machEffect(k, lv)}`;
+    if (c) sub += `<br>Дальше: ${machEffect(k, lv + 1)}<br>${lock ? `<span class="bad">Нужен ${c.need} уровень игрока</span>` : `Нужен ${c.need} ур.`}${c.gems ? ` · ${c.gems}💎` : ''}`;
+    let extra = '';
+    if (k === 'seeder') extra = `<br>Сеет: ${S.autoSeed ? L.CROPS[S.autoSeed].icon + ' ' + L.CROPS[S.autoSeed].name : '— выбери семена'} ${btn('autoseed', {}, 'Выбрать текущие семена', 'b sm')}`;
+    if (d.animals) extra = `<br><small>Для: ${d.animals.map((a) => L.ANIMALS[a].icon).join(' ')}</small>`;
+    return card(d.icon, d.name, sub + extra, c ? btn('upg', { k }, `${lv ? 'Улучшить' : 'Купить'}<br>${fmt(c.coins)} 🪙${c.gems ? ' + ' + c.gems + '💎' : ''}`, 'y', lock || lack) : '<b>МАКС</b>', lock ? 'lock' : '');
+  }
   MODALS.tech = {
     title: '🚜 Техцентр',
-    tabs: [['tech', '🚜 Техника'], ['trucks', '🚚 Транспорт'], ['farm', '🏡 Ферма']],
+    tabs: [['tech', '🚜 Полевая'], ['animals', '🐄 Для животных'], ['auto', '🤖 Автоматика'], ['trucks', '🚚 Транспорт'], ['farm', '🏡 Ферма']],
     render(tab) {
+      if (tab === 'tech') return '<div class="hint">Техника работает по площади за одно нажатие. Каждый уровень сильнее, но улучшение дорожает вдвое, с 5-го уровня нужны кристаллы, а требуемый уровень игрока растёт.</div>' + L.FIELD_TOOLS.map(machCard).join('');
+      if (tab === 'animals') return '<div class="hint">Оборудование для животных. Для каждой группы своё: яйца, молоко, шерсть, мёд и трюфели. Сарай для каждого вида строится в загоне 🐄.</div>' + L.MACH_KEYS.filter((k) => L.MACHINES[k].kind === 'animal').map(machCard).join('');
+      if (tab === 'auto') return '<div class="hint">Автоматика работает сама, пока ты в игре или ушёл. Каждый вид тратит монеты на топливо: если монет нет, он стоит. Сильнее с каждым уровнем.</div>' + L.AUTO_KEYS.map(machCard).join('');
       if (tab === 'trucks') {
         let h = '<div class="hint">Чем лучше машина, тем больше везёт и быстрее едет. Охрана защищает от разбойников.</div>';
         S.trucks.forEach((t, i) => {
@@ -306,20 +327,11 @@
         const slot = L.TRUCK_SLOTS[S.trucks.length];
         if (slot) h += card('➕', 'Ещё одна машина', slot.level > S.level ? `Откроется на ${slot.level} уровне` : 'Две машины возят одновременно', btn('truckbuy', {}, `${fmt(slot.cost)} 🪙`, 'y', slot.level > S.level || !canBuy(slot.cost)), slot.level > S.level ? 'lock' : '');
         const g = L.upgradeCost(S, 'guard');
-        h += card('💂', `Охрана машин · ур. ${S.up.guard}`, `Шанс отбить разбойников: ${['0%', '50%', '85%'][S.up.guard]}`, g == null ? '<b>МАКС</b>' : btn('upg', { k: 'guard' }, `${fmt(g)} 🪙`, 'y', !canBuy(g)));
-        return h;
+        return h + card('💂', `Охрана машин · ур. ${S.up.guard}`, `Шанс отбить разбойников: ${['0%', '50%', '85%'][S.up.guard]}`, g == null ? '<b>МАКС</b>' : btn('upg', { k: 'guard' }, `${fmt(g)} 🪙`, 'y', !canBuy(g)));
       }
-      if (tab === 'farm') {
-        const f = L.farm(S);
-        const rows = [['plot', '🟫', `Участок фермы ${f.w}×${f.h}`, 'Больше места для грядок'], ['can', '🪣', `Лейка · вода на ${L.WATER_MS[S.up.can] / 1000} с`, 'Полив держится дольше, растения растут быстрее'], ['barn', '🏚️', `Склад ${L.barnCap(S)}`, 'Больше товара'], ['stall', '🧺', `Прилавок ${L.stallCap(S)}`, 'Больше товара на рынке']];
-        return '<div class="hint">Улучшения для текущей фермы и общего хозяйства.</div>' + rows.map(([k, ic, n, d]) => { const c = L.upgradeCost(S, k); return card(ic, n, d, c == null ? '<b>МАКС</b>' : btn('upg', { k }, `${fmt(c)} 🪙`, 'y', !canBuy(c))); }).join('');
-      }
-      let h = '<div class="hint">Трактор пашет и сеет сразу несколько клеток, комбайн собирает урожай площадью. Улучшай — площадь растёт, а перезарядка короче.</div>';
-      for (const k of ['tractor', 'combine']) {
-        const d = L.TOOL_LEVELS[k], lv = S.up[k], c = L.upgradeCost(S, k), lock = S.level < d.need;
-        h += card(k === 'tractor' ? '🚜' : '🌾', `${d.name} · ур. ${lv}`, lock ? `Откроется на ${d.need} уровне` : lv ? `Захват ${d.area[lv - 1].length} клеток · перезарядка ${d.cool[lv - 1]} с` : 'Не куплен', c == null ? '<b>МАКС</b>' : btn('upg', { k }, `${lv ? 'Улучшить' : 'Купить'} ${fmt(c)} 🪙`, 'y', lock || !canBuy(c)), lock ? 'lock' : '');
-      }
-      return h + `<div class="hint">Поливалка 🚿 (с ${L.SPRINKLER.need} уровня) — ставится на ферме, сама поливает 3×3 клетки.</div>`;
+      const f = L.farm(S);
+      const rows = [['plot', '🟫', `Участок фермы ${f.w}×${f.h}`, 'Больше места для грядок'], ['can', '🪣', `Лейка · вода на ${L.WATER_MS[S.up.can] / 1000} с`, 'Полив держится дольше, растения растут быстрее'], ['barn', '🏚️', `Склад ${L.barnCap(S)}`, 'Больше товара'], ['stall', '🧺', `Прилавок ${L.stallCap(S)}`, 'Больше товара на рынке']];
+      return '<div class="hint">Улучшения для текущей фермы и общего хозяйства.</div>' + rows.map(([k, ic, n, d]) => { const c = L.upgradeCost(S, k); return card(ic, n, d, c == null ? '<b>МАКС</b>' : btn('upg', { k }, `${fmt(c)} 🪙`, 'y', !canBuy(c))); }).join('');
     },
   };
 
@@ -357,15 +369,19 @@
 
   // --- Животные
   MODALS.animals = {
-    title: '🐄 Загон и животные',
+    title: '🐄 Загон и сараи',
     render() {
       const fc = L.feedCap(S);
-      let h = `<div class="hint">Животные дают продукты каждые 1–4 минуты. Нужен корм: <b>${S.feed}/${fc}</b> ${btn('feed', { n: 10 }, 'Корм ×10 · ' + L.FEED_COST * 10 + '🪙', 'y', !canBuy(L.FEED_COST * 10))}</div>`;
+      let h = `<div class="hint">У каждого вида свой сарай: без него животных не купить, а уровень сарая даёт места (до 10 уровня). Нужен корм: <b>${Math.floor(S.feed)}/${fc}</b> ${btn('feed', { n: 10 }, 'Корм ×10 · ' + L.FEED_COST * 10 + '🪙', 'y', !canBuy(L.FEED_COST * 10))}<br>Оборудование для животных — в Техцентре.</div>`;
       for (const k of L.ANIMAL_ORDER) {
         const a = L.ANIMALS[k], n = S.animals[k] || 0, p = S.prod[k] || { acc: 0, pending: 0 }, lock = a.level > S.level;
-        const prod = L.GOODS[a.product];
-        h += card(a.icon, `${a.name} · ${n}/${a.cap}`, lock ? `Откроется на ${a.level} уровне` : `${prod.icon} ${prod.name} каждые ${Math.round(a.every / 1000)} с · на рынке ~${prod.sell}🪙${n ? `<br>Готово: ${p.pending} шт.` : ''}`,
-          lock ? '🔒' : `${p.pending ? btn('collect', { k }, `Собрать ${p.pending}`, '') + ' ' : ''}${btn('abuy', { k }, `${fmt(a.cost)}🪙`, 'y', n >= a.cap || !canBuy(a.cost))}`, lock ? 'lock' : '');
+        const prod = L.GOODS[a.product], bl = S.barns[k] || 0, cap = L.animalCap(S, k), bc = L.barnCost(S, k), mk = L.animalMachine(k);
+        let sub = lock ? `Откроется на ${a.level} уровне` : `${prod.icon} ${prod.name} каждые ${Math.round(a.every / 1000)} с · на рынке ~${prod.sell}🪙<br>🏚️ ${a.building}: ${bl ? `ур. ${bl}/${L.MACH_MAX} · ${n}/${cap} мест` : 'не построен'}${n ? ` · готово: ${p.pending}` : ''}`;
+        if (!lock && bc) sub += `<br><small>${bl ? 'Улучшение' : 'Постройка'}: ${bc.need > S.level ? `<span class="bad">нужен ${bc.need} ур.</span>` : `нужен ${bc.need} ур.`}${bc.gems ? ` · ${bc.gems}💎` : ''}</small>`;
+        if (!lock && mk && S.up[mk]) sub += `<br><small>${L.MACHINES[mk].icon} ${L.MACHINES[mk].name} ур. ${S.up[mk]}</small>`;
+        const col = (x) => `<div style="display:flex;flex-direction:column;gap:4px;align-items:stretch">${x}</div>`;
+        const barnBtn = bc ? btn('barn', { k }, `${bl ? 'Улучшить сарай' : 'Построить сарай'}<br>${fmt(bc.coins)}🪙${bc.gems ? ' + ' + bc.gems + '💎' : ''}`, bl ? 'b sm' : 'y', bc.need > S.level || S.coins < bc.coins || S.crystals < bc.gems) : '';
+        h += card(a.icon, `${a.name}`, sub, lock ? '🔒' : col(`${p.pending ? btn('collect', { k }, `Собрать ${p.pending}`, '') : ''}${bl ? btn('abuy', { k }, `Купить ${fmt(a.cost)}🪙`, 'y sm', n >= cap || !canBuy(a.cost)) : ''}${barnBtn}`), lock ? 'lock' : '');
       }
       return h;
     },
@@ -421,7 +437,7 @@
     modal: (d) => openModal(d.id),
     tab: (d) => { ui.tab[ui.modal] = d.t; ui.confirm = null; renderModal(true); },
     mode: (d) => goMode(d.m),
-    tool: (d) => { ui.tool = d.t; lastBar = ''; if (d.t === 'sprinkler' && S.level < L.SPRINKLER.need) toast(`Поливалки с ${L.SPRINKLER.need} уровня`, 'bad'); if ((d.t === 'tractor' || d.t === 'combine') && !S.up[d.t]) { toast(`${L.TOOL_LEVELS[d.t].name} покупается в Техцентре 🏙️ (с ${L.TOOL_LEVELS[d.t].need} уровня)`, 'bad'); } pickSeed(); renderBar(); },
+    tool: (d) => { ui.tool = d.t; lastBar = ''; if (d.t === 'sprinkler' && S.level < L.SPRINKLER.need) toast(`Поливалки с ${L.SPRINKLER.need} уровня`, 'bad'); if (L.MACHINES[d.t] && !S.up[d.t]) { toast(`${L.MACHINES[d.t].name} покупается в Техцентре 🏙️ (с ${L.MACHINES[d.t].need} уровня)`, 'bad'); } pickSeed(); renderBar(); },
     seedpick: (d) => { if (!S.seeds[d.k]) { if (L.CROPS[d.k].level > S.level) return toast(`С ${L.CROPS[d.k].level} уровня`, 'bad'); toast('Семян нет — купи в магазине', 'bad'); return openModal('seeds', 'seeds'); } ui.seed = d.k; lastSeed = ''; renderBar(); },
     daily: () => { const r = L.claimDaily(S, todayKey()); if (r.ok) { sfx.coin(); toast(`🎁 Подарок: ${r.coins}🪙 ${r.gems}💎 ${r.tickets}🎟️`, 'good'); } else toast(r.msg, 'bad'); },
     ld: (d) => {
@@ -449,6 +465,8 @@
     upg: (d) => { const r = L.buyUpgrade(S, d.k); if (r.ok) { sfx.level(); toast('Улучшено!', 'good'); lastBar = ''; } else toast(r.msg, 'bad'); },
     truckup: (d) => { const r = L.upgradeTruck(S, +d.i); r.ok ? (sfx.level(), toast('Машина улучшена!', 'good')) : toast(r.msg, 'bad'); },
     truckbuy: () => { const r = L.buyTruckSlot(S); r.ok ? (sfx.level(), toast('Новая машина в гараже!', 'good')) : toast(r.msg, 'bad'); },
+    barn: (d) => { const r = L.buyBarn(S, d.k); r.ok ? (sfx.level(), toast('Сарай готов!', 'good')) : toast(r.msg, 'bad'); },
+    autoseed: () => { pickSeed(); if (!ui.seed) return toast('Сначала выбери семена на панели семян (нужны в запасе)', 'bad'); S.autoSeed = ui.seed; toast(`Автосеялка будет сеять ${L.CROPS[ui.seed].icon}`, 'good'); },
     abuy: (d) => { const r = L.buyAnimal(S, d.k); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
     collect: (d) => { const r = L.collect(S, d.k); if (r.ok) { sfx.harvest(); toast(`+${r.n} ${gi(r.item)}`, 'good'); } else toast(r.msg, 'bad'); },
     ex: (d) => { const r = L.exchange(S, d.d, +d.n); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
@@ -509,7 +527,7 @@
 
   function start() {
     const d = load();
-    S = d ? d.s : L.createState();
+    S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(`С возвращением! Тебя не было ${Math.round(away / 60000)} мин — работа не стояла 🌾`, 'good'); } }
     ui.lastLog = S.logN || 0;
     try {

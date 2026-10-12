@@ -85,7 +85,7 @@
   }
 
   function vehicleModel(kind, big) {
-    const g = new T.Group(), c = kind === 'tractor' ? 0x2e9b3a : 0xe53935;
+    const g = new T.Group(), c = { tractor: 0x2e9b3a, combine: 0xe53935, waterer: 0x1e88e5, spreader: 0x8e6c3a }[kind] || 0xe53935;
     if (kind === 'tractor') {
       g.add(part('box', c, 0, 0.45, 0.2, 0.55, 0.4, 0.7)); g.add(part('box', 0xeeeeee, 0, 0.8, -0.15, 0.5, 0.5, 0.4)); g.add(part('box', 0x9ad7ff, 0, 0.82, -0.15, 0.52, 0.28, 0.42, { transparent: true, opacity: 0.8 }));
       for (const x of [-0.34, 0.34]) { g.add(part('cyl', 0x222222, x, 0.3, -0.15, 0.55, 0.16, 0.55)).rotation.z = Math.PI / 2; g.add(part('cyl', 0x222222, x, 0.2, 0.5, 0.36, 0.14, 0.36)).rotation.z = Math.PI / 2; }
@@ -268,7 +268,7 @@
       const f = L.farm(s), w = f.w, h = f.h, bonus = L.farmDef(s);
       F.w = w; F.h = h; F.key = farmKey(s);
       for (const g of [F.tileGroup, F.crops, F.props]) while (g.children.length) g.remove(g.children[0]);
-      F.tiles = []; clearLabels('farm'); F.animals = []; F.animalSig = ''; F.vehicles = [];
+      F.tiles = []; clearLabels('farm'); F.animals = []; F.animalSig = ''; F.vehicles = []; F.sprSig = ''; F.extra = null; F.drone = null;
       const groundCol = f.id === 'hills' ? 0x8aa65a : f.id === 'valley' ? 0x5fb66a : 0x6fae4f;
       ground.material = mat(groundCol);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -314,14 +314,25 @@
         }
       }
       // поливалки и пугала
-      if (F.sprSig !== JSON.stringify(f.sprinklers) + f.scarecrows + s.up.tractor + s.up.combine) {
-        F.sprSig = JSON.stringify(f.sprinklers) + f.scarecrows + s.up.tractor + s.up.combine;
+      const esig = JSON.stringify(f.sprinklers) + f.scarecrows + ['tractor', 'combine', 'waterer', 'spreader', 'drone', 'collector', 'courier'].map((k) => s.up[k] || 0).join() + JSON.stringify(s.barns);
+      if (F.sprSig !== esig) {
+        F.sprSig = esig;
         if (F.extra) F.props.remove(F.extra);
         const ex = new T.Group();
         for (const p of f.sprinklers) { const sp = new T.Group(); sp.add(part('cyl', 0x546e7a, 0, 0.25, 0, 0.12, 0.5, 0.12)); sp.add(part('cyl', 0x29b6f6, 0, 0.55, 0, 0.35, 0.1, 0.35)); sp.position.set(p.x - f.w / 2 + 0.5, 0, p.y - f.h / 2 + 0.5); ex.add(sp); }
         for (let i = 0; i < Math.min(f.scarecrows, 4); i++) { const sc2 = new T.Group(); sc2.add(part('cyl', 0x8d6e63, 0, 0.7, 0, 0.08, 1.4, 0.08)); sc2.add(part('box', 0x8d6e63, 0, 1.0, 0, 0.9, 0.08, 0.08)); sc2.add(part('sph', 0xf3d9a4, 0, 1.5, 0, 0.3)); sc2.add(part('cone', 0xb71c1c, 0, 1.78, 0, 0.45, 0.3, 0.45)); sc2.add(part('box', 0x1976d2, 0, 0.95, 0, 0.4, 0.5, 0.18)); sc2.position.set(-f.w / 2 - 0.6 + i * 0.01, 0, -f.h / 2 + 1.5 + i * 2); ex.add(sc2); }
-        if (s.up.tractor > 0) { const t = vehicleModel('tractor', s.up.tractor > 1); t.position.set(f.w / 2 + 2.2, 0, -f.h / 2 + 1.6); t.rotation.y = 1.9; ex.add(t); }
-        if (s.up.combine > 0) { const t = vehicleModel('combine', s.up.combine > 1); t.position.set(f.w / 2 + 2.4, 0, -f.h / 2 + 4); t.rotation.y = 1.3; ex.add(t); }
+        const park = [['tractor', 0.8], ['combine', 2.2], ['waterer', 3.6], ['spreader', 5]];
+        for (const [k, dz] of park) if (s.up[k] > 0) { const t = vehicleModel(k, s.up[k] > 5); t.position.set(f.w / 2 + 2.3, 0, -f.h / 2 + dz); t.rotation.y = 1.5 + (dz % 3) * 0.1; t.scale.setScalar(0.9 + s.up[k] * 0.03); ex.add(t); }
+        // сараи: у каждого вида животных свой
+        const pen = F.pen; let bi = 0; const roofs = { chicken: 0xe53935, duck: 0x1e88e5, cow: 0x6d4c41, sheep: 0x8e24aa, goat: 0xf9a825, pig: 0xec407a, bee: 0xffb300 };
+        for (const k of L.ANIMAL_ORDER) if (s.barns && s.barns[k]) {
+          const lv = s.barns[k], h = house(0.9, 0.9, 0.7, 0xf3e3c3, roofs[k]); h.scale.setScalar(0.75 + lv * 0.05);
+          h.position.set(pen.x - pen.w / 2 + 0.7 + bi * (pen.w - 1.4) / 6, 0.05, pen.z - pen.d / 2 + 0.8); bi++; ex.add(h);
+        }
+        F.drone = null;
+        if (s.up.drone > 0) { const d = new T.Group(); d.add(part('box', 0x37474f, 0, 0, 0, 0.5, 0.14, 0.5)); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { d.add(part('cyl', 0xb0bec5, x * 0.3, 0.1, z * 0.3, 0.3, 0.03, 0.3)); } d.add(part('sph', 0xff5252, 0, -0.1, 0.2, 0.1)); d.scale.setScalar(1.2); ex.add(d); F.drone = d; }
+        if (s.up.collector > 0) { const r = new T.Group(); r.add(part('box', 0x90a4ae, 0, 0.35, 0, 0.4, 0.5, 0.3)); r.add(part('box', 0xcfd8dc, 0, 0.75, 0, 0.3, 0.26, 0.26)); r.add(part('box', 0x00e5ff, 0, 0.77, 0.14, 0.2, 0.08, 0.04, { emissive: 0x005566 })); r.position.set(pen.x - pen.w / 2 - 0.9, 0, pen.z + pen.d / 2 - 0.6); ex.add(r); }
+        if (s.up.courier > 0) { const v = truckModel(1); v.position.set(pen.x + pen.w / 2 + 1.4, 0, pen.z + 0.4); v.rotation.y = 1.6; ex.add(v); }
         F.extra = ex; F.props.add(ex);
       }
       // животные
@@ -329,7 +340,7 @@
       if (sig !== F.animalSig) {
         F.animalSig = sig; for (const a of F.animals) F.props.remove(a.g); F.animals = [];
         for (const k of L.ANIMAL_ORDER) for (let i = 0; i < (s.animals[k] || 0); i++) {
-          const g = animalModel(k); const p = F.pen; g.position.set(p.x + (Math.random() - 0.5) * (p.w - 1), 0.08, p.z + (Math.random() - 0.5) * (p.d - 1));
+          const g = animalModel(k); const p = F.pen; g.position.set(p.x + (Math.random() - 0.5) * (p.w - 1), 0.08, p.z + 0.6 + (Math.random() - 0.5) * (p.d - 2.2));
           F.props.add(g); F.animals.push({ g, key: k, tx: g.position.x, tz: g.position.z, wait: Math.random() * 3, ph: Math.random() * 6 });
         }
       }
@@ -429,7 +440,7 @@
       burst(opts && opts.gold ? 'gold' : kind, x, 0.3, z);
     }
     function drive(kind, ty, dur) {
-      const lv = 1, m = vehicleModel(kind === 'combine' ? 'combine' : 'tractor', lv > 1); m.rotation.y = Math.PI / 2; m.scale.setScalar(1.15); farm.add(m);
+      const m = vehicleModel(kind, false); m.rotation.y = Math.PI / 2; m.scale.setScalar(1.15); farm.add(m);
       F.vehicles.push({ m, t: 0, dur: dur || 1.3, z: ty - F.h / 2 + 0.5, x0: -F.w / 2 - 2.5, x1: F.w / 2 + 2.5 });
     }
     function screenOf(wx, wy, wz) {
@@ -501,11 +512,12 @@
         syncFarm(s);
         for (const a of F.animals) {
           a.wait -= dt;
-          if (a.wait <= 0) { const p = F.pen; a.tx = p.x + (Math.random() - 0.5) * (p.w - 1.2); a.tz = p.z + (Math.random() - 0.5) * (p.d - 1.2); a.wait = 2 + Math.random() * 4; }
+          if (a.wait <= 0) { const p = F.pen; a.tx = p.x + (Math.random() - 0.5) * (p.w - 1.2); a.tz = p.z + 0.6 + (Math.random() - 0.5) * (p.d - 2.2); a.wait = 2 + Math.random() * 4; }
           const dx = a.tx - a.g.position.x, dz = a.tz - a.g.position.z, d = Math.hypot(dx, dz);
           if (a.key === 'bee') { a.g.position.x += Math.cos(W.time + a.ph) * dt * 0.6; a.g.position.z += Math.sin(W.time * 1.3 + a.ph) * dt * 0.6; a.g.position.y = 0.4 + Math.sin(W.time * 5 + a.ph) * 0.08; }
           else if (d > 0.08) { a.g.position.x += dx / d * dt * 0.7; a.g.position.z += dz / d * dt * 0.7; a.g.rotation.y = Math.atan2(dx, dz); a.g.position.y = 0.08 + Math.abs(Math.sin(W.time * 8 + a.ph)) * 0.05; } else a.g.position.y = 0.08;
         }
+        if (F.drone) { const a = W.time * 0.5; F.drone.position.set(Math.cos(a) * F.w * 0.35, 3.2 + Math.sin(W.time * 2) * 0.15, Math.sin(a) * F.h * 0.3); F.drone.rotation.y = -a; }
         for (const v of F.vehicles) { v.t += dt; const k = Math.min(1, v.t / v.dur); v.m.position.set(lerp(v.x0, v.x1, k), 0.12, v.z); }
         for (let i = F.vehicles.length - 1; i >= 0; i--) if (F.vehicles[i].t >= F.vehicles[i].dur) { farm.remove(F.vehicles[i].m); F.vehicles.splice(i, 1); }
         // колышем растения

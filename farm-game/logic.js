@@ -54,10 +54,34 @@
     { name: 'Фура', icon: '🚛', cap: 500, trip: 35, cost: 7500 },
   ];
   const TRUCK_SLOTS = [{ level: 1, cost: 0 }, { level: 6, cost: 1500 }, { level: 12, cost: 6000 }];
-  const TOOL_LEVELS = {  // трактор и комбайн: площадь за одно нажатие и перезарядка (с)
-    tractor: { name: 'Трактор', icon: '🚜', need: 5, cost: [800, 2500, 7000], cool: [25, 20, 15], area: [[[0, 0], [1, 0], [-1, 0]], [[0, 0], [1, 0], [-1, 0], [0, 1], [1, 1], [-1, 1]], [[0, 0], [1, 0], [-1, 0], [0, 1], [1, 1], [-1, 1], [0, -1], [1, -1], [-1, -1]]] },
-    combine: { name: 'Комбайн', icon: '🚜', need: 6, cost: [1200, 3500, 9000], cool: [30, 25, 20], area: [[[0, 0], [1, 0], [-1, 0]], [[0, 0], [1, 0], [-1, 0], [0, 1], [1, 1], [-1, 1]], [[0, 0], [1, 0], [-1, 0], [0, 1], [1, 1], [-1, 1], [0, -1], [1, -1], [-1, -1]]] },
+  // ---- техника, оборудование для животных и автоматика: у каждой уровни 1..10, улучшение дорожает вдвое
+  const MACH_MAX = 10;
+  const MACHINES = {
+    tractor:   { kind: 'field', name: 'Трактор', icon: '🚜', need: 5, base: 800, g: 1.9, cool: 25, desc: 'Пашет и сеет несколько клеток сразу' },
+    combine:   { kind: 'field', name: 'Комбайн', icon: '🌾', need: 6, base: 1200, g: 1.9, cool: 30, desc: 'Собирает созревший урожай площадью' },
+    waterer:   { kind: 'field', name: 'Поливочная машина', icon: '🚒', need: 7, base: 1000, g: 1.9, cool: 20, desc: 'Поливает площадь за одно нажатие' },
+    spreader:  { kind: 'field', name: 'Разбрасыватель удобрений', icon: '🧂', need: 9, base: 1500, g: 2.0, cool: 35, desc: 'Удобряет площадь, тратит удобрения' },
+    feeder:    { kind: 'animal', name: 'Автокормушка', icon: '🥣', need: 3, base: 500, g: 1.85, animals: null, desc: 'Все животные едят меньше корма' },
+    eggline:   { kind: 'animal', name: 'Яйцелиния', icon: '🥚', need: 4, base: 600, g: 1.85, animals: ['chicken', 'duck'], desc: 'Куры и утки несут быстрее, бывают двойные яйца' },
+    milker:    { kind: 'animal', name: 'Доильный аппарат', icon: '🥛', need: 6, base: 900, g: 1.85, animals: ['cow', 'goat'], desc: 'Коровы и козы дают молока быстрее' },
+    shearer:   { kind: 'animal', name: 'Стригальная машина', icon: '✂️', need: 8, base: 1200, g: 1.9, animals: ['sheep'], desc: 'Овцы дают шерсть быстрее' },
+    extractor: { kind: 'animal', name: 'Медогонка и трюфельный сборщик', icon: '🍯', need: 11, base: 1800, g: 1.9, animals: ['bee', 'pig'], desc: 'Пчёлы и свиньи дают мёд и трюфели быстрее' },
+    drone:     { kind: 'auto', name: 'Дрон-сборщик', icon: '🛸', need: 7, base: 2000, g: 2.0, every: 60, desc: 'Сам собирает созревший урожай (топливо 2🪙 за грядку)' },
+    collector: { kind: 'auto', name: 'Робот-сборщик', icon: '🤖', need: 5, base: 1200, g: 1.9, every: 45, desc: 'Сам собирает продукты животных (топливо 1🪙 за штуку)' },
+    seeder:    { kind: 'auto', name: 'Автосеялка', icon: '🌱', need: 9, base: 2500, g: 2.0, every: 50, desc: 'Сама сеет выбранные семена на пустую землю (1🪙 за грядку)' },
+    courier:   { kind: 'auto', name: 'Автокурьер', icon: '📦', need: 10, base: 3000, g: 2.0, every: 90, desc: 'Сам отправляет свободную машину на рынок, когда склад накопил груз (10🪙 за рейс)' },
   };
+  const MACH_KEYS = Object.keys(MACHINES), FIELD_TOOLS = MACH_KEYS.filter((k) => MACHINES[k].kind === 'field'), AUTO_KEYS = MACH_KEYS.filter((k) => MACHINES[k].kind === 'auto');
+  const AREA_W = [3, 3, 5, 5, 5, 7, 7, 7, 9, 9], AREA_R = [1, 2, 2, 3, 3, 3, 4, 4, 5, 5];
+  function areaOf(lv) {
+    const w = AREA_W[lv - 1], r = AREA_R[lv - 1], out = [], y0 = -Math.floor((r - 1) / 2);
+    for (let j = 0; j < r; j++) for (let i = 0; i < w; i++) out.push([i - (w - 1) / 2, y0 + j]);
+    return out;
+  }
+  const coolOf = (k, lv) => Math.round(MACHINES[k].cool * Math.pow(0.88, lv - 1));
+  const autoEvery = (k, lv) => Math.round(MACHINES[k].every * Math.pow(0.82, lv - 1) * 10) / 10;
+  const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1 }[k]);
+  const speedOf = (lv) => 1 + 0.08 * lv, doubleOf = (lv) => 0.04 * lv, feedUseOf = (lv) => Math.max(0.4, 1 - 0.06 * lv);
   const FARM_DEFS = [
     { id: 'home', name: 'Моя ферма', level: 1, cost: 0, bonus: 1, plots: [[8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, 120, 350, 900] },
     { id: 'valley', name: 'Долина', level: 8, cost: 4000, bonus: 1.2, plots: [[8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, 600, 1800, 4500] },
@@ -94,7 +118,8 @@
   const newTiles = (w, h) => Array.from({ length: w * h }, () => ({ k: 'grass' }));
   const makeFarm = (def) => { const [w, h] = def.plots[0]; return { id: def.id, w, h, tiles: newTiles(w, h), sprinklers: [], scarecrows: 0, plot: 0 }; };
 
-  function createState() {
+  function createState() { return migrate(newState()); }
+  function newState() {
     const f = makeFarm(FARM_DEFS[0]);
     for (let i = 0; i < 4; i++) f.tiles[(2 + (i >> 1)) * f.w + 2 + (i % 2)] = { k: 'soil' };
     const m = {}; for (const k of GOOD_KEYS) m[k] = 1;
@@ -102,12 +127,20 @@
       v: 2, coins: 60, crystals: 3, tickets: 2, rep: 0, xp: 0, level: 1,
       farms: [f], cur: 0, seeds: { wheat: 6, carrot: 2 }, goods: {}, stall: {}, feed: 6,
       items: { fert: 2, superfert: 0 }, animals: {}, prod: {},
-      up: { barn: 0, stall: 0, can: 0, guard: 0, tractor: 0, combine: 0 }, trucks: [{ lvl: 0 }],
-      cool: { tractor: 0, combine: 0 }, trips: [], orders: [], nextTripId: 1, nextOrderId: 1, orderAt: 0,
+      up: { barn: 0, stall: 0, can: 0, guard: 0 }, trucks: [{ lvl: 0 }],
+      cool: {}, barns: {}, auto: {}, autoSeed: null, feedDebt: 0, trips: [], orders: [], nextTripId: 1, nextOrderId: 1, orderAt: 0,
       market: { m, tr: {}, t: 0, ev: [], evAt: 60000 }, weather: { type: 'sun', left: 150000 }, boost: 0,
       clock: DAY_MS * 0.25, day: 1, sprAt: 0, log: [], pending: null,
       daily: { key: '' }, stats: { harvested: 0, earned: 0, trips: 0, golden: 0, spins: 0 },
     };
+  }
+  /** Достраивает старые сохранения: новые поля, сараи для уже купленных животных. */
+  function migrate(s) {
+    s.barns = s.barns || {}; s.auto = s.auto || {}; s.cool = s.cool || {}; s.feedDebt = s.feedDebt || 0; if (s.autoSeed === undefined) s.autoSeed = null;
+    for (const k of MACH_KEYS) if (s.up[k] == null) s.up[k] = 0;
+    for (const k of FIELD_TOOLS) if (s.cool[k] == null) s.cool[k] = 0;
+    for (const k of Object.keys(s.animals)) if (s.animals[k] > 0 && !s.barns[k]) s.barns[k] = 1;
+    return s;
   }
   const farm = (s) => s.farms[s.cur];
   const note = (s, msg, kind) => { s.log.push({ msg, kind: kind || 'info', n: (s.logN = (s.logN || 0) + 1) }); if (s.log.length > 30) s.log.shift(); };
@@ -208,16 +241,21 @@
     // животные
     for (const k of Object.keys(s.animals)) {
       const n = s.animals[k]; if (!n) continue;
-      const a = ANIMALS[k], p = s.prod[k] || (s.prod[k] = { acc: 0, pending: 0 }), max = a.cap * 2;
-      let time = dt * n;
+      const a = ANIMALS[k], p = s.prod[k] || (s.prod[k] = { acc: 0, pending: 0 }), max = (animalCap(s, k) || a.cap) * 2;
+      const mk = animalMachine(k), speed = mk ? speedOf(s.up[mk] || 0) : 1, dbl = mk ? doubleOf(s.up[mk] || 0) : 0;
+      let time = dt * n * speed;
       while (time > 0) {
         const need = a.every - p.acc, step = Math.min(time, need);
         if (a.feed && s.feed <= 0) break;                      // нет корма — не доят и не собирают
         p.acc += step; time -= step;
-        if (p.acc >= a.every) { p.acc = 0; if (a.feed) s.feed--; if (p.pending < max) p.pending++; }
+        if (p.acc >= a.every) {
+          p.acc = 0; if (a.feed) useFeed(s);
+          p.pending = Math.min(max, p.pending + 1 + (dbl && rnd() < dbl ? 1 : 0));
+        }
         if (p.pending >= max) { p.acc = 0; break; }
       }
     }
+    tickAutos(s, dt);
     // перезарядка техники
     for (const k of Object.keys(s.cool)) s.cool[k] = Math.max(0, s.cool[k] - dt);
     // доставки
@@ -241,6 +279,59 @@
   }
   const catchUp = (s, ms) => { const total = Math.min(Math.max(0, ms), OFFLINE_CAP); const step = 5000; for (let t = 0; t < total; t += step) tick(s, Math.min(step, total - t)); };
 
+  function animalMachine(k) { return MACH_KEYS.find((m) => MACHINES[m].kind === 'animal' && MACHINES[m].animals && MACHINES[m].animals.includes(k)) || null; }
+  function useFeed(s) {
+    s.feedDebt = (s.feedDebt || 0) + feedUseOf(s.up.feeder || 0);
+    const whole = Math.floor(s.feedDebt); s.feed = Math.max(0, s.feed - whole); s.feedDebt -= whole;
+  }
+  const animalCap = (s, k) => { const lv = s.barns[k] || 0; return lv ? ANIMALS[k].cap + (lv - 1) * 2 : 0; };
+
+  // ---------------------------------------------------------------- автоматика
+  const pay = (s, c) => { if (s.coins < c) return false; s.coins -= c; return true; };
+  function tickAutos(s, dt) {
+    for (const k of AUTO_KEYS) {
+      const lv = s.up[k] || 0; if (!lv) continue;
+      s.auto[k] = (s.auto[k] || 0) + dt; const every = autoEvery(k, lv) * 1000; let guard = 0;
+      while (s.auto[k] >= every && guard++ < 40) { s.auto[k] -= every; runAuto(s, k, lv); }
+    }
+  }
+  function runAuto(s, k, lv) {
+    let n = autoN(k, lv);
+    if (k === 'drone') {
+      for (const f of s.farms) for (let i = 0; i < f.tiles.length && n > 0; i++) {
+        if (!isRipe(f.tiles[i])) continue;
+        if (!pay(s, 2)) return; const r = harvestTile(s, f, i); if (!r) { s.coins += 2; return; }
+        addXp(s, r.xp); n--;
+      }
+    } else if (k === 'collector') {
+      for (const key of Object.keys(s.prod)) {
+        const p = s.prod[key], a = ANIMALS[key];
+        while (p.pending > 0 && n > 0) {
+          if (barnCap(s) - total(s.goods) < 1) return; if (!pay(s, 1)) return;
+          s.goods[a.product] = (s.goods[a.product] || 0) + 1; p.pending--; n--;
+        }
+      }
+    } else if (k === 'seeder') {
+      const key = s.autoSeed; if (!key || !CROPS[key] || CROPS[key].level > s.level) return;
+      for (const f of s.farms) for (let i = 0; i < f.tiles.length && n > 0; i++) {
+        if (f.tiles[i].k !== 'soil') continue;
+        if (!(s.seeds[key] > 0) || !pay(s, 1)) return;
+        plantTile(s, f, i, key); addXp(s, 2); n--;
+      }
+    } else if (k === 'courier') {
+      for (let i = 0; i < s.trucks.length; i++) {
+        if (!truckFree(s, i)) continue;
+        const cap = truckInfo(s, i).cap;
+        if (total(s.goods) < Math.min(cap, Math.floor(barnCap(s) * 0.9))) return;
+        const load = {}; let room = cap;
+        for (const g of Object.keys(s.goods).sort((x, y) => price(s, y) - price(s, x))) { const m = Math.min(s.goods[g], room); if (m > 0) { load[g] = m; room -= m; } }
+        if (!pay(s, 10)) return;
+        const r = startTrip(s, i, load); if (!r.ok) { s.coins += 10; return; }
+        note(s, '📦 Автокурьер отправил машину на рынок', 'info'); return;
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- действия на грядках
   function harvestTile(s, f, idx) {
     const t = f.tiles[idx], key = t.crop, c = CROPS[key];
@@ -260,7 +351,7 @@
     return c;
   }
   function areaCells(s, tool, x, y) {
-    const lv = s.up[tool], cells = TOOL_LEVELS[tool].area[lv - 1], f = farm(s);
+    const lv = s.up[tool], cells = areaOf(lv), f = farm(s);
     return cells.map(([dx, dy]) => [x + dx, y + dy]).filter(([cx, cy]) => inRange(f, cx, cy));
   }
 
@@ -317,9 +408,9 @@
         if (s.coins < SPRINKLER.cost) return fail(`Не хватает монет (${SPRINKLER.cost}🪙)`);
         s.coins -= SPRINKLER.cost; f.sprinklers.push({ x, y }); return { ok: true, fx: 'build' };
       }
-      case 'tractor': case 'combine': {
-        const def = TOOL_LEVELS[tool], lv = s.up[tool];
-        if (lv < 1) return fail(`${def.name} нужно купить в Техцентре`);
+      case 'tractor': case 'combine': case 'waterer': case 'spreader': {
+        const def = MACHINES[tool], lv = s.up[tool] || 0;
+        if (lv < 1) return fail(`${def.name}: купи в Техцентре`);
         if (s.cool[tool] > 0) return fail(`${def.name} остывает: ещё ${Math.ceil(s.cool[tool] / 1000)} с`);
         let did = 0, got = 0, xp = 0, planted = 0;
         for (const [cx, cy] of areaCells(s, tool, x, y)) {
@@ -327,10 +418,12 @@
           if (tool === 'tractor') {
             if (tt.k === 'grass') { f.tiles[i] = { k: 'soil' }; did++; xp += 1; }
             if (f.tiles[i].k === 'soil' && seedKey && CROPS[seedKey] && CROPS[seedKey].level <= s.level && s.seeds[seedKey] > 0) { plantTile(s, f, i, seedKey); planted++; xp += 2; }
-          } else if (isRipe(tt)) { const r = harvestTile(s, f, i); if (r) { got += r.n; xp += r.xp; did++; } }
+          } else if (tool === 'combine') { if (isRipe(tt)) { const r = harvestTile(s, f, i); if (r) { got += r.n; xp += r.xp; did++; } } }
+          else if (tool === 'waterer') { if (tt.k === 'crop' && !isRipe(tt)) { tt.water = WATER_MS[s.up.can]; did++; } }
+          else if (tt.k === 'crop' && !isRipe(tt) && s.items.fert > 0) { s.items.fert--; tt.progress = Math.min(CROPS[tt.crop].growMs, tt.progress + CROPS[tt.crop].growMs * 0.5); did++; }
         }
-        if (!did && !planted) return fail(tool === 'tractor' ? 'Тут нечего пахать и сеять' : 'Тут нечего собирать');
-        s.cool[tool] = def.cool[lv - 1] * 1000;
+        if (!did && !planted) return fail({ tractor: 'Тут нечего пахать и сеять', combine: 'Тут нечего собирать', waterer: 'Тут нечего поливать', spreader: s.items.fert > 0 ? 'Тут нечего удобрять' : 'Нет удобрения: купи в магазине' }[tool]);
+        s.cool[tool] = coolOf(tool, lv) * 1000;
         return { ok: true, fx: tool, xp, n: got, planted, levelUp: addXp(s, xp) };
       }
       default: return fail('Неизвестный инструмент');
@@ -374,11 +467,35 @@
     const tbl = { barn: BARN_COSTS, stall: STALL_COSTS, can: CAN_COSTS, guard: GUARD_COSTS }[kind];
     if (tbl) return s.up[kind] + 1 < tbl.length ? tbl[s.up[kind] + 1] : null;
     if (kind === 'plot') { const d = farmDef(s); return farm(s).plot + 1 < d.plotCost.length ? d.plotCost[farm(s).plot + 1] : null; }
-    if (kind === 'tractor' || kind === 'combine') { const d = TOOL_LEVELS[kind]; return s.up[kind] < d.cost.length ? d.cost[s.up[kind]] : null; }
+    if (MACHINES[kind]) { const c = machineCost(s, kind); return c ? c.coins : null; }
     return null;
   }
+  /** Цена следующего уровня машины: монеты растут ×1,9 за уровень, с 5-го уровня нужны ещё кристаллы, и растёт требуемый уровень игрока. */
+  function machineCost(s, k) {
+    const d = MACHINES[k], lv = s.up[k] || 0; if (lv >= MACH_MAX) return null;
+    return { coins: Math.round(d.base * Math.pow(d.g, lv)), gems: lv >= 4 ? (lv - 3) * 2 : 0, need: d.need + lv * 2 };
+  }
+  function buyMachine(s, k) {
+    const d = MACHINES[k], c = machineCost(s, k); if (!c) return fail('Максимальный уровень');
+    if (s.level < c.need) return fail(`${d.name}: нужен ${c.need} уровень`);
+    if (s.coins < c.coins) return fail('Не хватает монет');
+    if (s.crystals < c.gems) return fail('Не хватает кристаллов 💎');
+    s.coins -= c.coins; s.crystals -= c.gems; s.up[k] = (s.up[k] || 0) + 1; return { ok: true, spent: c.coins };
+  }
+  /** Сарай для каждого вида животных: без него животных не купить, уровень сарая даёт места. */
+  function barnCost(s, k) {
+    const a = ANIMALS[k], lv = s.barns[k] || 0; if (lv >= MACH_MAX) return null;
+    return { coins: Math.round(a.cost * 3 * Math.pow(1.7, lv)), gems: lv >= 5 ? (lv - 4) * 2 : 0, need: a.level + lv };
+  }
+  function buyBarn(s, k) {
+    const c = ANIMALS[k] && barnCost(s, k); if (!c) return fail('Максимальный уровень сарая');
+    if (s.level < c.need) return fail(`Нужен ${c.need} уровень`);
+    if (s.coins < c.coins) return fail('Не хватает монет');
+    if (s.crystals < c.gems) return fail('Не хватает кристаллов 💎');
+    s.coins -= c.coins; s.crystals -= c.gems; s.barns[k] = (s.barns[k] || 0) + 1; return { ok: true, spent: c.coins };
+  }
   function buyUpgrade(s, kind) {
-    if ((kind === 'tractor' || kind === 'combine') && s.level < TOOL_LEVELS[kind].need) return fail(`${TOOL_LEVELS[kind].name} с ${TOOL_LEVELS[kind].need} уровня`);
+    if (MACHINES[kind]) return buyMachine(s, kind);
     const cost = upgradeCost(s, kind);
     if (cost == null) return fail('Максимальный уровень');
     if (s.coins < cost) return fail('Не хватает монет');
@@ -393,7 +510,8 @@
   function buyAnimal(s, key) {
     const a = ANIMALS[key]; if (!a) return fail('Нет такого животного');
     if (a.level > s.level) return fail(`${a.name} с ${a.level} уровня`);
-    if ((s.animals[key] || 0) >= a.cap) return fail('Нет места: загон полон');
+    if (!s.barns[key]) return fail(`Сначала построй сарай: ${a.building}`);
+    if ((s.animals[key] || 0) >= animalCap(s, key)) return fail('В сарае нет места: улучши сарай');
     if (s.coins < a.cost) return fail('Не хватает монет');
     s.coins -= a.cost; s.animals[key] = (s.animals[key] || 0) + 1; if (!s.prod[key]) s.prod[key] = { acc: 0, pending: 0 };
     return { ok: true, spent: a.cost };
@@ -537,9 +655,10 @@
   }
 
   const api = {
-    CROPS, CROP_ORDER, ANIMALS, ANIMAL_ORDER, PRODUCTS, GOODS, GOOD_KEYS, TRUCKS, TRUCK_SLOTS, TOOL_LEVELS, FARM_DEFS, WATER_MS, CAN_COSTS,
+    CROPS, CROP_ORDER, ANIMALS, ANIMAL_ORDER, PRODUCTS, GOODS, GOOD_KEYS, TRUCKS, TRUCK_SLOTS, MACHINES, MACH_MAX, MACH_KEYS, FIELD_TOOLS, AUTO_KEYS, FARM_DEFS, WATER_MS, CAN_COSTS,
     BARN_CAP, BARN_COSTS, STALL_CAP, STALL_COSTS, GUARD_COSTS, SPRINKLER, SCARECROW_COST, FEED_COST, FERT_COST, SHOP_CRYSTALS, BOOST_MS,
     DAY_MS, OFFLINE_CAP, WHEEL, EXCHANGE, PERENNIAL_HARVESTS,
+    machineCost, buyMachine, barnCost, buyBarn, animalCap, animalMachine, areaOf, coolOf, autoEvery, autoN, speedOf, doubleOf, feedUseOf, migrate,
     setRandom, xpNeeded, levelGems, createState, farm, farmDef, tileAt, isRipe, stage, progressOf, tick, catchUp, act, areaCells,
     buySeeds, buyFeed, buyFert, buyScarecrow, buyGems, upgradeCost, buyUpgrade, buyAnimal, collect, unlockFarm, setFarm,
     truckInfo, upgradeTruck, buyTruckSlot, truckFree, loadValue, startTrip, sellStall, sellAllStall, rushTrip,
