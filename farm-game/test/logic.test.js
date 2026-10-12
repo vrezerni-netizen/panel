@@ -179,3 +179,64 @@ test('пустые закрытые фермы открываются с 3, 6, 8
   assert.equal(L.unlockFarm(s, 'grove').ok, false); s.level = 6; assert.ok(L.unlockFarm(s, 'grove').ok);
   assert.equal(s.farms.length, 3); assert.deepEqual(L.FARM_DEFS.map((d) => d.level).slice(0, 4), [1, 3, 6, 8]);
 });
+const wildState = (id) => { const s = fresh(); s.level = 12; s.coins = 1e6; assert.ok(L.unlockFarm(s, id).ok); return s; };
+const findTile = (s, k) => { const f = L.farm(s); for (let i = 0; i < f.tiles.length; i++) if (f.tiles[i].k === k) return [i % f.w, (i / f.w) | 0]; return null; };
+test('целина: большой участок с лесом и камнями, поляны есть', () => {
+  const s = wildState('wild'), f = L.farm(s), n = (k) => f.tiles.filter((t) => t.k === k).length;
+  assert.ok(f.w >= 22 && f.h >= 15); assert.ok(n('tree') > f.tiles.length * 0.4); assert.ok(n('rock') > 5); assert.ok(n('grass') > 20);
+  const again = L.createState(); again.level = 12; again.coins = 1e6; L.unlockFarm(again, 'wild'); assert.deepEqual(L.farm(again).tiles, f.tiles);
+});
+test('топор: несколько ударов, брёвна, пень, без вспашки пока не расчищено', () => {
+  const s = wildState('wild'), [x, y] = findTile(s, 'tree');
+  assert.equal(L.act(s, 'hoe', x, y).ok, false);
+  const hp = L.tileAt(s, x, y).hp; assert.ok(hp >= 3);
+  for (let i = 0; i < hp - 1; i++) { const r = L.act(s, 'axe', x, y); assert.ok(r.ok && r.hit); }
+  const r = L.act(s, 'axe', x, y); assert.ok(r.ok && r.item === 'log' && r.n >= 2); assert.equal(L.tileAt(s, x, y).k, 'stump'); assert.ok(s.goods.log >= 2);
+  assert.equal(L.act(s, 'hoe', x, y).ok, false); assert.equal(L.act(s, 'axe', x, y).ok, false);
+  const c = s.coins; assert.ok(L.act(s, 'remove', x, y).ok); assert.equal(s.coins, c - 12); assert.equal(L.tileAt(s, x, y).k, 'grass');
+  assert.ok(L.act(s, 'hoe', x, y).ok); assert.equal(L.tileAt(s, x, y).k, 'soil');
+});
+test('камень убирается за монеты, дерево нельзя убрать без топора', () => {
+  const s = wildState('wild'), [rx, ry] = findTile(s, 'rock'), [tx, ty] = findTile(s, 'tree');
+  assert.equal(L.act(s, 'remove', tx, ty).ok, false); const c = s.coins; assert.ok(L.act(s, 'remove', rx, ry).ok); assert.equal(s.coins, c - 60);
+});
+test('склад полон — рубить нельзя', () => {
+  const s = wildState('wild'); s.goods.wheat = 200; const [x, y] = findTile(s, 'tree'); L.tileAt(s, x, y).hp = 1;
+  assert.equal(L.act(s, 'axe', x, y).ok, false); assert.equal(L.tileAt(s, x, y).k, 'tree');
+});
+test('лес: после рубки вырастает молодое деревце, потом снова дерево, пахать нельзя', () => {
+  const s = wildState('forest'), [x, y] = findTile(s, 'tree'); L.tileAt(s, x, y).hp = 1;
+  assert.ok(L.act(s, 'axe', x, y).ok); assert.equal(L.tileAt(s, x, y).k, 'young'); assert.equal(L.act(s, 'axe', x, y).ok, false);
+  L.tick(s, L.YOUNG_MS + 1000); assert.equal(L.tileAt(s, x, y).k, 'tree'); assert.equal(L.act(s, 'hoe', x, y).ok, false);
+  const [gx, gy] = findTile(s, 'grass') || [0, 0]; assert.equal(L.act(s, 'hoe', gx, gy).ok, false);
+});
+test('харвестер и корчеватель работают по площади', () => {
+  const s = wildState('wild'); s.coins = 1e7; s.level = 30; assert.ok(L.buyMachine(s, 'logger').ok); assert.ok(L.buyMachine(s, 'grinder').ok);
+  const f = L.farm(s); let sx = 0, sy = 0, best = -1;
+  for (let y = 1; y < f.h - 1; y++) for (let x = 1; x < f.w - 1; x++) { const c = L.areaCells(s, 'logger', x, y).filter(([cx, cy]) => L.tileAt(s, cx, cy).k === 'tree').length; if (c > best) { best = c; sx = x; sy = y; } }
+  const r = L.act(s, 'logger', sx, sy); assert.ok(r.ok); assert.ok(r.n >= best * 2); assert.ok(L.areaCells(s, 'logger', sx, sy).every(([cx, cy]) => L.tileAt(s, cx, cy).k !== 'tree'));
+  const g = L.act(s, 'grinder', sx, sy); assert.ok(g.ok); assert.ok(L.areaCells(s, 'grinder', sx, sy).every(([cx, cy]) => L.tileAt(s, cx, cy).k !== 'stump'));
+});
+test('лесопилка: ручная распиловка и автомат', () => {
+  const s = fresh(); s.coins = 500; s.goods.log = 11; const r = L.sawLogs(s, 99); assert.ok(r.ok); assert.equal(r.planks, 5); assert.equal(s.goods.log, 1); assert.equal(s.goods.plank, 5); assert.equal(s.coins, 485);
+  assert.equal(L.sawLogs(s, 1).ok, false);
+  const t = fresh(); t.level = 12; t.coins = 1e5; t.goods.log = 20; assert.ok(L.buyMachine(t, 'sawmill').ok); L.tick(t, 41000); assert.equal(t.goods.plank, 2); assert.equal(t.goods.log, 16);
+});
+test('стройка: материалы, этапы, продажа, площадки по уровню', () => {
+  const s = fresh(); s.coins = 1e5; s.goods.plank = 100;
+  assert.equal(L.startBuild(s, 'shed').ok, false); s.level = 3; assert.equal(L.siteSlots(s), 1);
+  const b = L.startBuild(s, 'shed'); assert.ok(b.ok); assert.equal(s.goods.plank, 80); assert.equal(L.startBuild(s, 'shed').ok, false);
+  assert.equal(L.siteStage(s.sites[0]), 0); L.tick(s, 50000); assert.equal(L.siteStage(s.sites[0]), 2); assert.equal(L.sellSite(s, b.site.id).ok, false);
+  L.tick(s, 50000); assert.equal(L.siteStage(s.sites[0]), 4); const c = s.coins, r = L.sellSite(s, b.site.id); assert.ok(r.ok); assert.ok(s.coins - c > 2000); assert.equal(s.sites.length, 0); assert.equal(s.stats.built, 1);
+  s.level = 8; assert.equal(L.siteSlots(s), 2);
+});
+test('ускорение стройки за кристаллы', () => {
+  const s = fresh(); s.level = 6; s.coins = 1e5; s.goods.plank = 100; s.crystals = 50; const b = L.startBuild(s, 'house'); assert.ok(b.ok);
+  assert.ok(L.rushSite(s, b.site.id).ok); assert.equal(s.sites[0].done, true);
+});
+test('цена недвижимости колеблется в пределах', () => {
+  const s = fresh(); let n = 0; L.setRandom(() => (n++ % 9) / 9); for (let i = 0; i < 4000; i++) L.tick(s, 100); assert.ok(s.market.prop >= 0.75 && s.market.prop <= 1.45);
+});
+test('старое сохранение получает стройки и цену недвижимости', () => {
+  const s = fresh(); delete s.sites; delete s.market.prop; const m = L.migrate(s); assert.deepEqual(m.sites, []); assert.equal(m.market.prop, 1);
+});

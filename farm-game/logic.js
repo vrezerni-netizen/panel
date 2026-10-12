@@ -41,7 +41,7 @@
   const ANIMALS = {}, ANIMAL_ORDER = ['chicken', 'duck', 'cow', 'sheep', 'goat', 'pig', 'bee'];
   for (const k of ANIMAL_ORDER) { const d = ANIMAL_DEFS[k]; ANIMALS[k] = { name: d[0], icon: d[1], product: d[2], level: d[3], cost: d[4], every: d[5] * 1000, cap: d[6], building: d[7], feed: k === 'bee' ? 0 : 1 }; }
 
-  const PRODUCTS = { egg: ['Яйца', '🥚', 12], duckegg: ['Утиные яйца', '🦆', 20], milk: ['Молоко', '🥛', 45], wool: ['Шерсть', '🧶', 70], goatmilk: ['Козье молоко', '🧀', 95], truffle: ['Трюфели', '🍄', 220], honey: ['Мёд', '🍯', 180] };
+  const PRODUCTS = { log: ['Брёвна', '🪵', 35], plank: ['Доски', '🪚', 85], egg: ['Яйца', '🥚', 12], duckegg: ['Утиные яйца', '🦆', 20], milk: ['Молоко', '🥛', 45], wool: ['Шерсть', '🧶', 70], goatmilk: ['Козье молоко', '🧀', 95], truffle: ['Трюфели', '🍄', 220], honey: ['Мёд', '🍯', 180] };
   const GOODS = {};
   for (const k of CROP_ORDER) GOODS[k] = { name: CROPS[k].name, icon: CROPS[k].icon, sell: CROPS[k].sell };
   for (const k of Object.keys(PRODUCTS)) GOODS[k] = { name: PRODUCTS[k][0], icon: PRODUCTS[k][1], sell: PRODUCTS[k][2] };
@@ -66,6 +66,9 @@
     milker:    { kind: 'animal', name: 'Доильный аппарат', icon: '🥛', need: 6, base: 900, g: 1.85, animals: ['cow', 'goat'], desc: 'Коровы и козы дают молока быстрее' },
     shearer:   { kind: 'animal', name: 'Стригальная машина', icon: '✂️', need: 8, base: 1200, g: 1.9, animals: ['sheep'], desc: 'Овцы дают шерсть быстрее' },
     extractor: { kind: 'animal', name: 'Медогонка и трюфельный сборщик', icon: '🍯', need: 11, base: 1800, g: 1.9, animals: ['bee', 'pig'], desc: 'Пчёлы и свиньи дают мёд и трюфели быстрее' },
+    logger:    { kind: 'field', name: 'Харвестер', icon: '🌲', need: 4, base: 1500, g: 1.9, cool: 30, desc: 'Валит деревья на площади сразу и даёт брёвна' },
+    grinder:   { kind: 'field', name: 'Корчеватель', icon: '🪓', need: 5, base: 1100, g: 1.9, cool: 25, desc: 'Убирает пни и камни на площади, расчищает землю под поле' },
+    sawmill:   { kind: 'auto', name: 'Лесопилка', icon: '🪚', need: 5, base: 1800, g: 1.9, every: 40, desc: 'Сама пилит брёвна на доски: 2 бревна дают 1 доску (опилки и топливо: 2🪙 за доску)' },
     drone:     { kind: 'auto', name: 'Дрон-сборщик', icon: '🛸', need: 7, base: 2000, g: 2.0, every: 60, desc: 'Сам собирает созревший урожай (топливо 2🪙 за грядку)' },
     collector: { kind: 'auto', name: 'Робот-сборщик', icon: '🤖', need: 5, base: 1200, g: 1.9, every: 45, desc: 'Сам собирает продукты животных (топливо 1🪙 за штуку)' },
     seeder:    { kind: 'auto', name: 'Автосеялка', icon: '🌱', need: 9, base: 2500, g: 2.0, every: 50, desc: 'Сама сеет выбранные семена на пустую землю (1🪙 за грядку)' },
@@ -80,7 +83,7 @@
   }
   const coolOf = (k, lv) => Math.round(MACHINES[k].cool * Math.pow(0.88, lv - 1));
   const autoEvery = (k, lv) => Math.round(MACHINES[k].every * Math.pow(0.82, lv - 1) * 10) / 10;
-  const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1 }[k]);
+  const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1, sawmill: lv * 4 }[k]);
   const speedOf = (lv) => 1 + 0.08 * lv, doubleOf = (lv) => 0.04 * lv, feedUseOf = (lv) => Math.max(0.4, 1 - 0.06 * lv);
   const plotsOf = (c, first) => ({ plots: [first || [8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900] });
   const FARM_DEFS = [  // фермы открываются с уровнем; новые участки пустые
@@ -90,6 +93,8 @@
     Object.assign({ id: 'valley', name: 'Долина', icon: '🌄', level: 8, cost: 4000, bonus: 1.2 }, plotsOf(4000)),
     Object.assign({ id: 'lake', name: 'Берег озера', icon: '🏞️', level: 11, cost: 9000, bonus: 1.3 }, plotsOf(9000)),
     Object.assign({ id: 'hills', name: 'Горные террасы', icon: '⛰️', level: 16, cost: 15000, bonus: 1.4 }, plotsOf(15000, [10, 7])),
+    Object.assign({ id: 'wild', name: 'Целина с лесом', icon: '🌲', level: 2, cost: 600, bonus: 1.0, wild: true }, { plots: [[22, 15], [26, 17], [30, 19], [34, 21]], plotCost: [0, 900, 2600, 6500] }),
+    Object.assign({ id: 'forest', name: 'Лесной участок', icon: '🪵', level: 5, cost: 3500, bonus: 1.0, forestry: true }, { plots: [[18, 12], [22, 14], [26, 16]], plotCost: [0, 1800, 5200] }),
     Object.assign({ id: 'orchard', name: 'Королевский сад', icon: '🍎', level: 20, cost: 40000, bonus: 1.6 }, plotsOf(40000, [10, 7])),
   ];
   const WATER_MS = [60000, 90000, 150000, 240000], CAN_COSTS = [0, 150, 400, 1000];
@@ -121,7 +126,23 @@
 
   // ---------------------------------------------------------------- состояние
   const newTiles = (w, h) => Array.from({ length: w * h }, () => ({ k: 'grass' }));
-  const makeFarm = (def) => { const [w, h] = def.plots[0]; return { id: def.id, w, h, tiles: newTiles(w, h), sprinklers: [], scarecrows: 0, plot: 0 }; };
+  const WOOD = { oak: { name: 'Дуб', logs: 4, hp: 4 }, pine: { name: 'Сосна', logs: 3, hp: 3 }, birch: { name: 'Берёза', logs: 2, hp: 3 } };
+  const YOUNG_MS = 180000;
+  /** Детерминированная «дикая» раскладка: деревья, камни, поляны. Не зависит от rnd, чтобы сохранения и тесты были стабильными. */
+  function wildTile(def, x, y) {
+    let h = (x * 374761393 + y * 668265263 + def.id.length * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+    const r = ((h >>> 0) % 10000) / 10000, r2 = (((h >>> 8) >>> 0) % 1000) / 1000, sp = r2 < 0.45 ? 'pine' : r2 < 0.8 ? 'oak' : 'birch';
+    const clearing = def.wild && Math.sin(x * 0.5 + 1) * Math.cos(y * 0.6) > 0.8; // пара небольших полян
+    if (clearing && r < 0.9) return { k: 'grass' };
+    if (def.wild) return r < 0.66 ? { k: 'tree', sp, hp: WOOD[sp].hp } : r < 0.72 ? { k: 'rock', v: (h >>> 4) & 3 } : { k: 'grass' };
+    return r < 0.86 ? { k: 'tree', sp, hp: WOOD[sp].hp } : r < 0.9 ? { k: 'rock', v: (h >>> 4) & 3 } : { k: 'grass' };
+  }
+  function fillWild(f, def, oldW, oldH) { for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) if (x >= oldW || y >= oldH) f.tiles[y * f.w + x] = wildTile(def, x, y); }
+  const makeFarm = (def) => {
+    const [w, h] = def.plots[0], f = { id: def.id, w, h, tiles: newTiles(w, h), sprinklers: [], scarecrows: 0, plot: 0 };
+    if (def.wild || def.forestry) fillWild(f, def, 0, 0);
+    return f;
+  };
 
   function createState() { return migrate(newState()); }
   function newState() {
@@ -134,9 +155,9 @@
       items: { fert: 2, superfert: 0 }, animals: {}, prod: {},
       up: { barn: 0, stall: 0, can: 0, guard: 0 }, trucks: [{ lvl: 0 }],
       cool: {}, barns: {}, auto: {}, autoSeed: null, feedDebt: 0, trips: [], orders: [], nextTripId: 1, nextOrderId: 1, orderAt: 0,
-      market: { m, tr: {}, t: 0, ev: [], evAt: 60000 }, weather: { type: 'sun', left: 150000 }, boost: 0,
+      market: { m, tr: {}, t: 0, ev: [], evAt: 60000, prop: 1 }, weather: { type: 'sun', left: 150000 }, boost: 0,
       clock: DAY_MS * 0.25, day: 1, sprAt: 0, log: [], pending: null,
-      daily: { key: '' }, stats: { harvested: 0, earned: 0, trips: 0, golden: 0, spins: 0 },
+      daily: { key: '' }, stats: { harvested: 0, earned: 0, trips: 0, golden: 0, spins: 0, logs: 0, built: 0 }, sites: [], nextSiteId: 1,
     };
   }
   /** Достраивает старые сохранения: новые поля, сараи для уже купленных животных. */
@@ -145,6 +166,7 @@
     for (const k of MACH_KEYS) if (s.up[k] == null) s.up[k] = 0;
     for (const k of FIELD_TOOLS) if (s.cool[k] == null) s.cool[k] = 0;
     for (const k of Object.keys(s.animals)) if (s.animals[k] > 0 && !s.barns[k]) s.barns[k] = 1;
+    s.sites = s.sites || []; s.nextSiteId = s.nextSiteId || 1; s.stats.logs = s.stats.logs || 0; s.stats.built = s.stats.built || 0; if (s.market && s.market.prop == null) s.market.prop = 1;
     return s;
   }
   const farm = (s) => s.farms[s.cur];
@@ -190,6 +212,7 @@
       for (const e of s.market.ev) e.left -= MARKET_STEP;
       s.market.ev = s.market.ev.filter((e) => e.left > 0);
     }
+    s.market.prop = Math.min(1.45, Math.max(0.75, (s.market.prop || 1) + ((s.market.prop || 1) < 1 ? 1 : -1) * 0.0006 * dt / 1000 + (rnd() - 0.5) * 0.0008 * dt / 15))
     s.market.evAt -= dt;
     if (s.market.evAt <= 0) {
       s.market.evAt = 90000 + rnd() * 90000;
@@ -233,7 +256,9 @@
         t.progress = Math.min(c.growMs, t.progress + (dt + wet) * mul);
       }
     }
+    for (const f of s.farms) { const d = FARM_DEFS.find((x) => x.id === f.id); if (!d || !d.forestry) continue; for (let i = 0; i < f.tiles.length; i++) { const t = f.tiles[i]; if (t.k === 'young') { t.progress += dt; if (t.progress >= YOUNG_MS) f.tiles[i] = { k: 'tree', sp: t.sp, hp: WOOD[t.sp].hp }; } } }
     s.boost = Math.max(0, s.boost - dt);
+    tickSites(s, dt);
     // поливалки
     s.sprAt += dt;
     while (s.sprAt >= SPRINKLER.every) {
@@ -308,6 +333,9 @@
         if (!pay(s, 2)) return; const r = harvestTile(s, f, i); if (!r) { s.coins += 2; return; }
         addXp(s, r.xp); n--;
       }
+    } else if (k === 'sawmill') {
+      while (n >= 2 && (s.goods.log || 0) >= 2 && s.coins >= 2) { s.goods.log -= 2; n -= 2; s.coins -= 2; s.goods.plank = (s.goods.plank || 0) + 1; }
+      if (!s.goods.log) delete s.goods.log;
     } else if (k === 'collector') {
       for (const key of Object.keys(s.prod)) {
         const p = s.prod[key], a = ANIMALS[key];
@@ -335,6 +363,58 @@
         note(s, '📦 Автокурьер отправил машину на рынок', 'info'); return;
       }
     }
+  }
+
+  // ---------------------------------------------------------------- лес и стройка
+  /** Срубить дерево: брёвна на склад, на целине остаётся пень, в лесу вырастает новое деревце. Возвращает null, если склад полон. */
+  function fellTree(s, f, idx) {
+    const t = f.tiles[idx], w = WOOD[t.sp], room = barnCap(s) - total(s.goods);
+    if (room < 1) return null;
+    const n = Math.min(room, w.logs + (rnd() < 0.2 ? 1 : 0));
+    s.goods.log = (s.goods.log || 0) + n; s.stats.logs += n;
+    const d = FARM_DEFS.find((x) => x.id === f.id);
+    f.tiles[idx] = d && d.forestry ? { k: 'young', sp: t.sp, progress: 0 } : { k: 'stump', sp: t.sp };
+    return { n, xp: 3 + w.logs };
+  }
+  /** Ручная распиловка: 2 бревна → 1 доска, 3🪙 за доску. */
+  function sawLogs(s, planks) {
+    const have = Math.floor((s.goods.log || 0) / 2); planks = Math.min(Math.max(1, planks | 0), have);
+    if (planks <= 0) return fail('Нужно хотя бы 2 бревна');
+    const fee = planks * 3; if (s.coins < fee) return fail(`Нужно ${fee}🪙 за работу пилы`);
+    s.coins -= fee; s.goods.log -= planks * 2; if (s.goods.log <= 0) delete s.goods.log; s.goods.plank = (s.goods.plank || 0) + planks;
+    return { ok: true, planks, fee };
+  }
+  const SITE_TYPES = {
+    shed:  { name: 'Сарай', icon: '🛖', planks: 20, coins: 300, ms: 90000, price: 2700, xp: 40, level: 3 },
+    house: { name: 'Дом', icon: '🏠', planks: 60, coins: 900, ms: 240000, price: 8400, xp: 150, level: 6 },
+    barn:  { name: 'Амбар', icon: '🏚️', planks: 140, coins: 2500, ms: 480000, price: 22000, xp: 400, level: 11 },
+  };
+  const SITE_SLOTS = [{ level: 3 }, { level: 8 }, { level: 14 }];
+  const siteSlots = (s) => SITE_SLOTS.filter((x) => s.level >= x.level).length;
+  function startBuild(s, type) {
+    const d = SITE_TYPES[type]; if (!d) return fail('Нет такой постройки');
+    if (s.level < d.level) return fail(`${d.name}: с ${d.level} уровня`);
+    if (s.sites.length >= siteSlots(s)) return fail(siteSlots(s) < SITE_SLOTS.length ? `Все стройплощадки заняты. Следующая откроется на ${SITE_SLOTS[siteSlots(s)].level} уровне` : 'Все стройплощадки заняты: продай готовое здание');
+    if ((s.goods.plank || 0) < d.planks) return fail(`Нужно досок: ${d.planks} (есть ${s.goods.plank || 0}). Распили брёвна`);
+    if (s.coins < d.coins) return fail(`Нужно ${d.coins}🪙`);
+    s.goods.plank -= d.planks; if (s.goods.plank <= 0) delete s.goods.plank; s.coins -= d.coins;
+    const site = { id: s.nextSiteId++, type, prog: 0, total: d.ms, done: false, slot: s.sites.length };
+    s.sites.push(site); return { ok: true, site };
+  }
+  const siteStage = (site) => (site.done ? 4 : Math.min(3, Math.floor((site.prog / site.total) * 4)));
+  function tickSites(s, dt) { for (const st of s.sites) if (!st.done) { st.prog += dt; if (st.prog >= st.total) { st.done = true; st.prog = st.total; note(s, `🏗️ ${SITE_TYPES[st.type].name} построен! Можно продавать`, 'good'); } } }
+  const sitePrice = (s, site) => Math.round(SITE_TYPES[site.type].price * (s.market.prop || 1) * (1 + repBonus(s)));
+  function sellSite(s, id) {
+    const i = s.sites.findIndex((x) => x.id === id); if (i < 0) return fail('Стройка не найдена');
+    const st = s.sites[i]; if (!st.done) return fail('Ещё строится');
+    const gain = sitePrice(s, st), d = SITE_TYPES[st.type]; s.sites.splice(i, 1); s.sites.forEach((x, k) => { x.slot = k; });
+    s.coins += gain; s.stats.earned += gain; s.stats.built++; s.rep += 1; return { ok: true, gain, xp: d.xp, levelUp: addXp(s, d.xp) };
+  }
+  function rushSite(s, id) {
+    const st = s.sites.find((x) => x.id === id); if (!st || st.done) return fail('Нечего ускорять');
+    const cost = Math.max(1, Math.ceil(((st.total - st.prog) / st.total) * (st.type === 'barn' ? 8 : st.type === 'house' ? 4 : 2)));
+    if (s.crystals < cost) return fail(`Не хватает кристаллов: ${cost}💎`);
+    s.crystals -= cost; st.prog = st.total; st.done = true; return { ok: true, cost };
   }
 
   // ---------------------------------------------------------------- действия на грядках
@@ -366,7 +446,17 @@
     if (!t) return fail('Тут нельзя');
     const idx = y * f.w + x;
     switch (tool) {
+      case 'axe': {
+        if (t.k !== 'tree') return fail(t.k === 'young' ? 'Молодое деревце: пусть подрастёт' : t.k === 'stump' ? 'Пень не срубишь. Выкорчуй его (инструмент «Убрать»)' : 'Тут нечего рубить');
+        t.hp--; if (t.hp > 0) return { ok: true, fx: 'chop', hit: true };
+        const r = fellTree(s, f, idx); if (!r) return fail('Склад полон! Отвези брёвна на рынок или распили');
+        return { ok: true, fx: 'fell', item: 'log', n: r.n, xp: r.xp, levelUp: addXp(s, r.xp) };
+      }
       case 'hoe':
+        if (farmDef(s).forestry) return fail('В лесу не пашут: тут можно рубить');
+        if (t.k === 'tree') return fail('Сначала спили дерево топором 🪓');
+        if (t.k === 'stump') return fail('Сначала выкорчуй пень (инструмент «Убрать»)');
+        if (t.k === 'rock') return fail('Камень мешает: убери его (инструмент «Убрать»)');
         if (t.k !== 'grass') return fail('Тут уже вскопано');
         f.tiles[idx] = { k: 'soil' }; return { ok: true, fx: 'dig', xp: 1, levelUp: addXp(s, 1) };
       case 'seed': {
@@ -390,6 +480,10 @@
         return { ok: true, fx: 'harvest', item: r.key, n: r.n, gold: r.gold, xp: r.xp, levelUp: addXp(s, r.xp) };
       }
       case 'remove':
+        if (t.k === 'tree') return fail('Сначала спили дерево топором 🪓');
+        if (t.k === 'young') return fail('Молодое деревце: пусть растёт');
+        if (t.k === 'stump') { if (s.coins < 12) return fail('Корчевание пня стоит 12🪙'); s.coins -= 12; f.tiles[idx] = { k: 'grass' }; return { ok: true, fx: 'remove', xp: 2, levelUp: addXp(s, 2) }; }
+        if (t.k === 'rock') { if (s.coins < 60) return fail('Убрать камень стоит 60🪙'); s.coins -= 60; f.tiles[idx] = { k: 'grass' }; return { ok: true, fx: 'remove', xp: 5, levelUp: addXp(s, 5) }; }
         if (t.k === 'grass') {
           const si = f.sprinklers.findIndex((p) => p.x === x && p.y === y);
           if (si < 0) return fail('Тут и так трава');
@@ -413,7 +507,7 @@
         if (s.coins < SPRINKLER.cost) return fail(`Не хватает монет (${SPRINKLER.cost}🪙)`);
         s.coins -= SPRINKLER.cost; f.sprinklers.push({ x, y }); return { ok: true, fx: 'build' };
       }
-      case 'tractor': case 'combine': case 'waterer': case 'spreader': {
+      case 'tractor': case 'combine': case 'waterer': case 'spreader': case 'logger': case 'grinder': {
         const def = MACHINES[tool], lv = s.up[tool] || 0;
         if (lv < 1) return fail(`${def.name}: купи в Техцентре`);
         if (s.cool[tool] > 0) return fail(`${def.name} остывает: ещё ${Math.ceil(s.cool[tool] / 1000)} с`);
@@ -423,11 +517,13 @@
           if (tool === 'tractor') {
             if (tt.k === 'grass') { f.tiles[i] = { k: 'soil' }; did++; xp += 1; }
             if (f.tiles[i].k === 'soil' && seedKey && CROPS[seedKey] && CROPS[seedKey].level <= s.level && s.seeds[seedKey] > 0) { plantTile(s, f, i, seedKey); planted++; xp += 2; }
-          } else if (tool === 'combine') { if (isRipe(tt)) { const r = harvestTile(s, f, i); if (r) { got += r.n; xp += r.xp; did++; } } }
+          } else if (tool === 'logger') { if (tt.k === 'tree') { const r = fellTree(s, f, i); if (r) { got += r.n; xp += r.xp; did++; } } }
+          else if (tool === 'grinder') { if (tt.k === 'stump' || (tt.k === 'rock' && lv >= 2)) { f.tiles[i] = { k: 'grass' }; xp += tt.k === 'rock' ? 4 : 2; did++; } }
+          else if (tool === 'combine') { if (isRipe(tt)) { const r = harvestTile(s, f, i); if (r) { got += r.n; xp += r.xp; did++; } } }
           else if (tool === 'waterer') { if (tt.k === 'crop' && !isRipe(tt)) { tt.water = WATER_MS[s.up.can]; did++; } }
           else if (tt.k === 'crop' && !isRipe(tt) && s.items.fert > 0) { s.items.fert--; tt.progress = Math.min(CROPS[tt.crop].growMs, tt.progress + CROPS[tt.crop].growMs * 0.5); did++; }
         }
-        if (!did && !planted) return fail({ tractor: 'Тут нечего пахать и сеять', combine: 'Тут нечего собирать', waterer: 'Тут нечего поливать', spreader: s.items.fert > 0 ? 'Тут нечего удобрять' : 'Нет удобрения: купи в магазине' }[tool]);
+        if (!did && !planted) return fail({ tractor: 'Тут нечего пахать и сеять', combine: 'Тут нечего собирать', waterer: 'Тут нечего поливать', spreader: s.items.fert > 0 ? 'Тут нечего удобрять' : 'Нет удобрения: купи в магазине', logger: 'Тут нет деревьев', grinder: 'Тут нет пней (камни убирает корчеватель с 2 уровня)' }[tool]);
         s.cool[tool] = coolOf(tool, lv) * 1000;
         return { ok: true, fx: tool, xp, n: got, planted, levelUp: addXp(s, xp) };
       }
@@ -508,7 +604,7 @@
     if (kind === 'plot') {
       const f = farm(s); f.plot++; const [w2, h2] = farmDef(s).plots[f.plot], t2 = newTiles(w2, h2);
       for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) t2[y * w2 + x] = f.tiles[y * f.w + x];
-      f.w = w2; f.h = h2; f.tiles = t2;
+      const ow = f.w, oh = f.h; f.w = w2; f.h = h2; f.tiles = t2; { const dd = farmDef(s); if (dd.wild || dd.forestry) fillWild(f, dd, ow, oh); }
     } else s.up[kind]++;
     return { ok: true, spent: cost };
   }
@@ -663,6 +759,7 @@
     CROPS, CROP_ORDER, ANIMALS, ANIMAL_ORDER, PRODUCTS, GOODS, GOOD_KEYS, TRUCKS, TRUCK_SLOTS, MACHINES, MACH_MAX, MACH_KEYS, FIELD_TOOLS, AUTO_KEYS, FARM_DEFS, WATER_MS, CAN_COSTS,
     BARN_CAP, BARN_COSTS, STALL_CAP, STALL_COSTS, GUARD_COSTS, SPRINKLER, SCARECROW_COST, FEED_COST, FERT_COST, SHOP_CRYSTALS, BOOST_MS,
     DAY_MS, OFFLINE_CAP, WHEEL, EXCHANGE, PERENNIAL_HARVESTS,
+    WOOD, SITE_TYPES, SITE_SLOTS, siteSlots, siteStage, sitePrice, startBuild, sellSite, rushSite, sawLogs, fellTree, YOUNG_MS,
     machineCost, buyMachine, barnCost, buyBarn, animalCap, animalMachine, areaOf, coolOf, autoEvery, autoN, speedOf, doubleOf, feedUseOf, migrate,
     setRandom, xpNeeded, levelGems, createState, farm, farmDef, tileAt, isRipe, stage, progressOf, tick, catchUp, act, areaCells,
     buySeeds, buyFeed, buyFert, buyScarecrow, buyGems, upgradeCost, buyUpgrade, buyAnimal, collect, unlockFarm, setFarm,
