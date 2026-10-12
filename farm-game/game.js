@@ -185,6 +185,7 @@
         <button class="rbtn glow" id="h-d" data-act="daily" title="Ежедневный подарок">${ICON.gift}</button>
       </div>
       <div class="lcol2">
+        <button class="rbtn brush touchonly" id="h-brush" data-act="brush" title="Кисть: вести пальцем по грядкам, чтобы копать, сеять и собирать">${SV('<path d="M18 3l3 3-9 9-3-3z"/><path d="M9 12c-3 0-4 2-4 4s-1 3-2 4c3 1 7 0 7-4"/>')}</button>
         ${rb('modal', { id: 'menu' }, ICON.gear, 'Меню и настройки')}
         ${rb('modal', { id: 'help' }, ICON.help, 'Как играть')}
         ${rb('photo', {}, ICON.camera, 'Сделать снимок')}
@@ -524,6 +525,7 @@
     tab: (d) => { ui.tab[ui.modal] = d.t; ui.confirm = null; renderModal(true); },
     cam: (d) => goCam(d.v),
     speed: (d) => { ui.speed = +d.s; },
+    brush: () => { world.brush = !world.brush; const b = $('h-brush'); if (b) b.classList.toggle('on', world.brush); toast(world.brush ? '🖌 Кисть: веди пальцем по грядкам, чтобы копать, сеять, собирать' : '✋ Палец двигает карту, касание — действие', ''); },
     photo: () => { ui.photo = world.screenshot(); openModal('photo'); },
     tool: (d) => { ui.tool = d.t; lastBar = ''; if (d.t === 'sprinkler' && S.level < L.SPRINKLER.need) toast(`Поливалки с ${L.SPRINKLER.need} уровня`, 'bad'); if (L.MACHINES[d.t] && !S.up[d.t]) { toast(`${L.MACHINES[d.t].name} покупается в Техцентре 🏙️ (с ${L.MACHINES[d.t].need} уровня)`, 'bad'); } pickSeed(); renderBar(); },
     seedpick: (d) => { if (!S.seeds[d.k]) { if (L.CROPS[d.k].level > S.level) return toast(`С ${L.CROPS[d.k].level} уровня`, 'bad'); toast('Семян нет — купи в магазине', 'bad'); return openModal('seeds', 'seeds'); } ui.seed = d.k; lastSeed = ''; renderBar(); },

@@ -14,7 +14,7 @@ if (fs.existsSync(texDir)) {
 const texJs = fs.existsSync(path.join(dir, 'textures.js')) ? `<script>${js('textures.js')}</script>\n` : '';
 const body = html.match(/<div id="app">[\s\S]*?<\/div>\s*(?=<script)/)[0];
 const page = `<title>Ферма и Город</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <style>${rd('style.css')}</style>
 ${body}
 <script>${js('vendor/three.min.js')}</script>
