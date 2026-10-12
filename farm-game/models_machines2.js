@@ -265,16 +265,15 @@
   // ====================================================================== лестница, фара, зеркало
   function ladder(g, P, p0, p1, wd, n, rail) {
     p0 = toV(p0); p1 = toV(p1);
-    for (const s of [-1, 1]) { rod(g, P.steel, V3(p0.x, p0.y, p0.z + s * wd / 2), V3(p1.x, p1.y, p1.z + s * wd / 2), 0.022, 8); }
-    for (let i = 0; i < n; i++) { const t = (i + 0.5) / n, p = p0.clone().lerp(p1, t); rod(g, P.steel, V3(p.x, p.y, p.z - wd / 2), V3(p.x, p.y, p.z + wd / 2), 0.014, 6); put(g, rb(0.2, 0.025, wd * 0.96, 0.01), P.dark, p.x + (p1.x >= p0.x ? 0.1 : -0.1) * 0, p.y, p.z); }
-    if (rail) rod(g, P.steel, V3(p0.x, p0.y + 0.9, p0.z - wd / 2 - 0.06), V3(p1.x, p1.y + 0.4, p1.z - wd / 2 - 0.06), 0.02, 8);
+    for (const s of [-1, 1]) rod(g, P.steel, V3(p0.x, p0.y, p0.z + s * wd / 2), V3(p1.x, p1.y, p1.z + s * wd / 2), 0.022, 6);
+    for (let i = 0; i < n; i++) { const p = p0.clone().lerp(p1, (i + 0.5) / n); bx(g, P.dark, 0.16, 0.025, wd * 0.96, p.x, p.y, p.z); }
+    if (rail) rod(g, P.steel, V3(p0.x, p0.y + 0.9, p0.z - wd / 2 - 0.06), V3(p1.x, p1.y + 0.4, p1.z - wd / 2 - 0.06), 0.02, 6);
   }
   /** Фара: корпус + линза (светящаяся), смотрит по dir ('z+','z-','x+','x-'). */
   function lampUnit(g, P, x, y, z, w, h, dir, mat) {
-    const d = 0.05, hs = dir[0] === 'x';
-    put(g, rb(hs ? d : w, h, hs ? w : d, 0.02), P.black, x, y, z);
-    const off = (dir[1] === '+' ? 1 : -1) * (d / 2 + 0.001);
-    put(g, rb(hs ? 0.01 : w * 0.8, h * 0.78, hs ? w * 0.8 : 0.01, 0.004), mat || P.lamp, x + (hs ? off : 0), y, z + (hs ? 0 : off));
+    const d = 0.05, hs = dir[0] === 'x', off = (dir[1] === '+' ? 1 : -1) * (d / 2 + 0.001);
+    bx(g, P.black, hs ? d : w, h, hs ? w : d, x, y, z);
+    bx(g, mat || P.lamp, hs ? 0.01 : w * 0.8, h * 0.78, hs ? w * 0.8 : 0.01, x + (hs ? off : 0), y, z + (hs ? 0 : off));
   }
   function mirror(g, P, x, y, z, side, sz) {
     sz = sz || 1;
@@ -372,6 +371,9 @@
 
   // @@CAB@@
   // ====================================================================== общие узлы: крыло-дуга, гусеница, винтовая лента шнека
+  const _bxg = new T.BoxGeometry(1, 1, 1);
+  /** Дешёвая коробка (12 треугольников) с центром в (x,y,z) и размерами w,h,d. */
+  function bx(g, mat, w, h, d, x, y, z, rx, ry, rz) { const m = mk(_bxg, mat, x, y, z, rx, ry, rz); m.scale.set(w, h, d); g.add(m); return m; }
   /** Дуговая пластина (крыло): дуга радиусов rIn..rOut вокруг (cz,cy), углы a0..a1 от +Z вверх, ширина по X. */
   function arcPlate(g, mat, x, cy, cz, rIn, rOut, a0, a1, width, step) {
     const pts = [], n = step || 14;
@@ -379,102 +381,100 @@
     for (let i = n; i >= 0; i--) { const a = a0 + (a1 - a0) * i / n; pts.push([cz + Math.cos(a) * rIn, cy + Math.sin(a) * rIn]); }
     return put(g, ex(pts, width, { plane: 'zy', r: 0, b: 0.012, q: 0 }), mat, x, 0, 0);
   }
-  /** Винтовая лента шнека вдоль оси X: от x0 на длину L, радиусы r1..r2, шаг pitch, направление dir (+1/-1). Двусторонняя. */
+  /** Винтовая лента шнека вдоль оси X: на длину L, радиусы r1..r2, шаг pitch, направление dir (+1/-1). Двусторонняя. */
   function helixGeo(L, r1, r2, pitch, dir, steps) {
-    const turns = L / pitch, N = Math.max(8, Math.round(turns * (steps || 12))), pos = [], idx = [];
+    const turns = L / pitch, N = Math.max(8, Math.round(turns * (steps || 10))), pos = [], idx = [];
     for (let i = 0; i <= N; i++) { const u = i / N, th = u * turns * TAU * dir, x = u * L; for (const r of [r1, r2]) pos.push(x, Math.cos(th) * r, Math.sin(th) * r); }
     for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     const g1 = new T.BufferGeometry(); g1.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g1.setIndex(idx); g1.computeVertexNormals();
     const g2 = g1.clone(), i2 = idx.slice(); for (let k = 0; k < i2.length; k += 3) { const t = i2[k + 1]; i2[k + 1] = i2[k + 2]; i2[k + 2] = t; } g2.setIndex(i2); g2.computeVertexNormals();
-    const a = g1.toNonIndexed(), b = g2.toNonIndexed(), p = new Float32Array(a.attributes.position.count * 6), nn = new Float32Array(p.length);
-    p.set(a.attributes.position.array, 0); p.set(b.attributes.position.array, a.attributes.position.array.length); nn.set(a.attributes.normal.array, 0); nn.set(b.attributes.normal.array, a.attributes.normal.array.length);
-    const out = new T.BufferGeometry(); out.setAttribute('position', new T.BufferAttribute(p, 3)); out.setAttribute('normal', new T.BufferAttribute(nn, 3)); return out;
+    return mergeGeos([g1.toNonIndexed(), g2.toNonIndexed()]);
   }
-  /** Резиновая полугусеница: три катка (z,y,r) по часовой стрелке наоборот; x — центр гусеницы, tw — ширина. */
+  /** Резиновая полугусеница: круги катков (z,y,r) против часовой; x — центр, tw — ширина, side — наружу. */
   function trackUnit(g, P, x, side, circ, tw) {
-    const outer = hull2D(circ, 10), inner = hull2D(circ.map((c) => [c[0], c[1], c[2] - 0.085]), 10);
+    const outer = hull2D(circ, 9), inner = hull2D(circ.map((c) => [c[0], c[1], c[2] - 0.085]), 9);
     const sh = new T.Shape(); outer.forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1])));
     const hp = new T.Path(); inner.forEach((p, i) => (i ? hp.lineTo(p[0], p[1]) : hp.moveTo(p[0], p[1]))); sh.holes.push(hp);
     put(g, ex(null, tw, { shape: sh, b: 0.012, plane: 'zy', q: 0 }), P.rubber, x, 0, 0);
-    // грунтозацепы по внешнему контуру
     const cum = [0]; for (let i = 1; i <= outer.length; i++) { const a = outer[i - 1], b = outer[i % outer.length]; cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
-    const Lt = cum[cum.length - 1], nc = Math.round(Lt / 0.26), cg = new T.BoxGeometry(tw * 0.97, 0.075, 0.12);
+    const Lt = cum[cum.length - 1], nc = Math.round(Lt / 0.27), cg = new T.BoxGeometry(tw * 0.97, 0.07, 0.12);
     for (let k = 0; k < nc; k++) {
       const s = (k + 0.5) / nc * Lt; let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
       const a = outer[i - 1], b = outer[i % outer.length], f = (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1), px = a[0] + (b[0] - a[0]) * f, py = a[1] + (b[1] - a[1]) * f, dz = b[0] - a[0], dy = b[1] - a[1], dl = Math.hypot(dz, dy) || 1;
-      const nz = dy / dl, ny = -dz / dl; put(g, cg, P.rubber, x, py + ny * 0.03, px + nz * 0.03, Math.atan2(-dy, dz), 0, 0);
+      put(g, cg, P.rubber, x, py - dz / dl * 0.028, px + dy / dl * 0.028, Math.atan2(-dy, dz), 0, 0);
     }
-    // катки, ведущая звёздочка, ступицы (видны сбоку)
     const fx = x + side * (tw * 0.5 - 0.06);
-    circ.forEach((c, i) => {
-      const r = c[2] - 0.11; put(g, new T.CylinderGeometry(r, r, 0.42, 22), P.dark, x, c[1], c[0], 0, 0, PI / 2);
-      put(g, new T.CylinderGeometry(r * 0.6, r * 0.6, 0.06, 18), P.body, fx + side * 0.19, c[1], c[0], 0, 0, PI / 2);
-      put(g, new T.CylinderGeometry(r * 0.28, r * 0.28, 0.08, 14), P.steel, fx + side * 0.2, c[1], c[0], 0, 0, PI / 2);
-      for (let b = 0; b < 8; b++) { const a = b / 8 * TAU, rr = r * 0.46; put(g, new T.CylinderGeometry(0.018, 0.018, 0.05, 6), P.steel, fx + side * 0.2, c[1] + Math.cos(a) * rr, c[0] + Math.sin(a) * rr, 0, 0, PI / 2); }
+    circ.forEach((c) => {
+      const r = c[2] - 0.11; put(g, new T.CylinderGeometry(r, r, 0.42, 20), P.dark, x, c[1], c[0], 0, 0, PI / 2);
+      put(g, new T.CylinderGeometry(r * 0.62, r * 0.62, 0.06, 16), P.body, fx + side * 0.19, c[1], c[0], 0, 0, PI / 2);
+      put(g, new T.CylinderGeometry(r * 0.28, r * 0.28, 0.08, 12), P.steel, fx + side * 0.2, c[1], c[0], 0, 0, PI / 2);
     });
     const z0 = circ[0][0], z1 = circ[1][0];
-    for (let i = 0; i < 4; i++) { const z = z0 + (z1 - z0) * (0.2 + i * 0.2); put(g, new T.CylinderGeometry(0.17, 0.17, 0.42, 16), P.dark, x, 0.255, z, 0, 0, PI / 2); put(g, new T.CylinderGeometry(0.09, 0.09, 0.07, 12), P.steel, fx + side * 0.2, 0.255, z, 0, 0, PI / 2); }
+    for (let i = 0; i < 4; i++) { const z = z0 + (z1 - z0) * (0.2 + i * 0.2); put(g, new T.CylinderGeometry(0.17, 0.17, 0.42, 14), P.dark, x, 0.255, z, 0, 0, PI / 2); put(g, new T.CylinderGeometry(0.09, 0.09, 0.07, 10), P.steel, fx + side * 0.2, 0.255, z, 0, 0, PI / 2); }
+  }
+  /** Поручень по ломаной (стойки + верхняя труба). */
+  function railing(g, P, pts, h, spacing) {
+    h = h || 0.9;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = toV(pts[i]), b = toV(pts[i + 1]), len = a.distanceTo(b), n = Math.max(1, Math.round(len / (spacing || 0.7)));
+      for (let k = 0; k <= n; k++) { const p = a.clone().lerp(b, k / n); if (i && !k) continue; rod(g, P.steel, p, V3(p.x, p.y + h, p.z), 0.017, 5); }
+      rod(g, P.steel, V3(a.x, a.y + h, a.z), V3(b.x, b.y + h, b.z), 0.019, 6); rod(g, P.steel, V3(a.x, a.y + h * 0.5, a.z), V3(b.x, b.y + h * 0.5, b.z), 0.013, 5);
+    }
   }
 
   // ====================================================================== жатка комбайна
   function header(g, P, hw, z0, t, lv) {
     tag('hdr-body');
-    // корпус: корыто с задней стенкой, лоток шнека и передняя губа
     const pr = [[0, 0.45], [0.12, 0.27], [1.2, 0.25], [1.56, 0.27], [1.58, 0.36], [1.2, 0.42], [0.85, 0.5]];
-    for (let a = -90; a >= -180; a -= 15) pr.push([0.5 + 0.4 * Math.cos(a * PI / 180), 0.95 + 0.4 * Math.sin(a * PI / 180)]);
+    for (let a = -90; a >= -180; a -= 22.5) pr.push([0.5 + 0.4 * Math.cos(a * PI / 180), 0.95 + 0.4 * Math.sin(a * PI / 180)]);
     pr.push([0.1, 1.3], [0.0, 1.38]);
-    put(g, ex(pr, hw, { plane: 'zy', r: 0.03, b: 0.015, q: 0 }), P.body, 0, 0, z0);
-    // тёмная вставка на лотке и полозья снизу
-    put(g, rb(hw - 0.08, 0.05, 0.62, 0.02), P.dark, 0, 0.5, z0 + 0.95); put(g, rb(hw - 0.06, 0.05, 1.4, 0.02), P.dark, 0, 0.23, z0 + 0.8);
+    put(g, ex(pr, hw, { plane: 'zy', r: 0.04, b: 0.015, q: 0 }), P.body, 0, 0, z0);
+    put(g, rb(hw - 0.08, 0.05, 0.62, 0.02, 0), P.dark, 0, 0.5, z0 + 0.95);
+    bx(g, P.dark, hw - 0.06, 0.05, 1.3, 0, 0.23, z0 + 0.8);
+    // задняя стенка: кронштейн наклонной камеры и логотип
+    put(g, rb(1.7, 1.0, 0.1, 0.05, 0), P.dark, 0, 0.9, z0 - 0.05);
+    decal(g, 't1', 0.95, 0.24, 0, 1.06, z0 - 0.0 - 0.004, PI, 0, 1);
+    for (const s of [-1, 1]) { decal(g, 'logo', 0.3, 0.3, s * (hw / 2 + 0.003), 0.78, z0 + 0.35, s * PI / 2, 0, 1); if (t >= 1 || lv >= 3) decal(g, 'haz', 0.7, 0.2, s * (hw / 2 + 0.003), 1.12, z0 + 0.5, s * PI / 2, 0, 1); }
     tag('hdr-auger');
-    // шнек: ось + две встречные винтовые ленты + пальцы по центру
     const ax = z0 + 0.5, ay = 0.95, half = hw / 2 - 0.06;
-    rod(g, P.steel, V3(-half, ay, ax), V3(half, ay, ax), 0.2, 20);
-    const pitch = 0.46; for (const s of [-1, 1]) { const m = put(g, helixGeo(half - 0.08, 0.19, 0.385, pitch, -1, 12), P.steel, s * 0.04, ay, ax); if (s < 0) m.scale.x = -1; }
-    put(g, rb(1.5, 0.52, 0.4, 0.06), P.dark, 0, 0.98, ax + 0.0);
-    for (let i = 0; i < 6; i++) rod(g, P.steel, V3(-0.62 + i * 0.25, ay, ax + 0.2), V3(-0.62 + i * 0.25, ay + 0.1, ax + 0.45), 0.018, 6);
+    rod(g, P.steel, V3(-half, ay, ax), V3(half, ay, ax), 0.2, 16);
+    const pitch = 0.5; for (const s of [-1, 1]) { const m = put(g, helixGeo(half - 0.08, 0.19, 0.385, pitch, -1, 9), P.steel, s * 0.04, ay, ax); if (s < 0) m.scale.x = -1; }
+    put(g, rb(1.5, 0.52, 0.4, 0.06, 0), P.dark, 0, 0.98, ax);
+    for (let i = 0; i < 5; i++) rod(g, P.steel, V3(-0.5 + i * 0.25, ay, ax + 0.2), V3(-0.5 + i * 0.25, ay + 0.08, ax + 0.46), 0.016, 5);
     tag('cutter');
-    // ножевой брус: пальцы-гребёнка вперёд от губы + нож
     comb(g, 'guard', hw, 0.34, hw / 0.152, 0, 0.305, z0 + 1.7, -PI / 2, 0, 0);
-    rod(g, P.steel, V3(-hw / 2 + 0.02, 0.325, z0 + 1.58), V3(hw / 2 - 0.02, 0.325, z0 + 1.58), 0.014, 6);
-    put(g, rb(hw - 0.02, 0.05, 0.08, 0.02), P.steel, 0, 0.3, z0 + 1.56);
+    rod(g, P.steel, V3(-hw / 2 + 0.02, 0.325, z0 + 1.58), V3(hw / 2 - 0.02, 0.325, z0 + 1.58), 0.014, 5);
+    bx(g, P.steel, hw - 0.02, 0.05, 0.08, 0, 0.3, z0 + 1.56);
     tag('reel');
-    // мотовило
-    const rcz = z0 + 1.1, rcy = 1.3, rR = 0.56, nArm = hw > 6 ? 3 + Math.floor((hw - 6) / 3) : 2, nb = 6;
+    const rcz = z0 + 1.12, rcy = 1.22, rR = 0.6, nArm = hw > 6 ? 3 + Math.floor((hw - 6) / 3) : 2, nb = 6;
     const arms = []; for (let i = 0; i < nArm; i++) arms.push(-hw / 2 + 0.2 + (hw - 0.4) * i / (nArm - 1));
-    rod(g, P.steel, V3(-hw / 2 + 0.06, rcy, rcz), V3(hw / 2 - 0.06, rcy, rcz), 0.05, 12);
+    rod(g, P.steel, V3(-hw / 2 + 0.06, rcy, rcz), V3(hw / 2 - 0.06, rcy, rcz), 0.05, 10);
     for (const xs of arms) {
-      put(g, new T.CylinderGeometry(0.1, 0.1, 0.14, 14), P.dark, xs, rcy, rcz, 0, 0, PI / 2);
-      for (let k = 0; k < nb; k++) { const a = k / nb * TAU + 0.2; rod(g, P.dark, V3(xs, rcy, rcz), V3(xs, rcy + Math.cos(a) * rR * 0.93, rcz + Math.sin(a) * rR * 0.93), 0.016, 5); }
-      bar(g, P.dark, V3(xs, 1.28, z0 + 0.1), V3(xs, rcy, rcz - 0.05), 0.09, 0.12, 0.03);
+      put(g, new T.CylinderGeometry(0.1, 0.1, 0.14, 12), P.dark, xs, rcy, rcz, 0, 0, PI / 2);
+      for (let k = 0; k < nb; k++) { const a = k / nb * TAU + 0.2; rod(g, P.dark, V3(xs, rcy, rcz), V3(xs, rcy + Math.cos(a) * rR * 0.93, rcz + Math.sin(a) * rR * 0.93), 0.02, 5); }
+      bar(g, P.dark, V3(xs, 1.28, z0 + 0.08), V3(xs, rcy, rcz - 0.05), 0.09, 0.12, 0.03, V3(1, 0, 0));
     }
+    for (const s of [-1, 1]) { rod(g, P.dark, V3(s * (hw / 2 - 0.12), 0.9, z0 + 0.2), V3(s * (hw / 2 - 0.12), 1.12, z0 + 0.62), 0.045, 8); rod(g, P.steel, V3(s * (hw / 2 - 0.12), 1.12, z0 + 0.62), V3(s * (hw / 2 - 0.12), 1.2, z0 + 0.9), 0.025, 6); }
     for (let k = 0; k < nb; k++) {
       const a = k / nb * TAU + 0.2, ca = Math.cos(a), sa = Math.sin(a), br = rR * 0.93;
-      rod(g, P.dark, V3(-hw / 2 + 0.12, rcy + ca * br, rcz + sa * br), V3(hw / 2 - 0.12, rcy + ca * br, rcz + sa * br), 0.024, 8);
-      comb(g, 'tine', hw - 0.3, 0.2, (hw - 0.3) / 0.72, 0, rcy + ca * (br + 0.07), rcz + sa * (br + 0.07), Math.atan2(sa, ca) + 0.0, 0, 0);
+      rod(g, P.dark, V3(-hw / 2 + 0.12, rcy + ca * br, rcz + sa * br), V3(hw / 2 - 0.12, rcy + ca * br, rcz + sa * br), 0.026, 6);
+      comb(g, 'tine', hw - 0.3, 0.24, (hw - 0.3) / 0.72, 0, rcy + ca * (br + 0.1), rcz + sa * (br + 0.1), Math.atan2(sa, ca), 0, 0);
     }
     tag('dividers');
     for (const s of [-1, 1]) {
-      put(g, ex([[1.35, 0.3], [2.4, 0.3], [2.5, 0.42], [1.5, 1.0], [1.05, 1.34], [0.85, 0.95]], 0.14, { plane: 'zy', r: 0.05, b: 0.02, q: 1 }), P.body, s * (hw / 2 + 0.07), 0, z0);
+      put(g, ex([[1.35, 0.3], [2.4, 0.3], [2.5, 0.42], [1.5, 1.0], [1.05, 1.34], [0.85, 0.95]], 0.14, { plane: 'zy', r: 0.04, b: 0.015, q: 0 }), P.body, s * (hw / 2 + 0.07), 0, z0);
       decal(g, 'hazY', 0.5, 0.2, s * (hw / 2 + 0.143), 0.52, z0 + 2.0, s * PI / 2, 0, 1);
-      put(g, rb(0.1, 0.4, 0.14, 0.03), P.dark, s * (hw / 2 + 0.06), 0.88, z0 + 0.22);
     }
-    // боковые щитки с логотипом и фонари
-    for (const s of [-1, 1]) {
-      if (t >= 1) { decal(g, 'haz', 0.6, 0.26, s * (hw / 2 + 0.0), 1.12, z0 + 0.0 - 0.0, 0, 0, 1); }
-    }
-    decal(g, 't1', 0.9, 0.22, 0, 0.7, z0 - 0.003, PI, 0, 1);
     if (t >= 1) for (const s of [-1, 1]) { lampUnit(g, P, s * (hw / 2 - 0.25), 1.38, z0 + 0.03, 0.14, 0.1, 'z-', P.amber); lampUnit(g, P, s * (hw / 2 - 0.5), 1.38, z0 + 0.03, 0.2, 0.1, 'z-', P.lamp); }
-    // транспортная рама на колёсах (топ-комплектации): жатка 10-12 м едет на собственной раме
     if (t >= 2) {
+      tag('hdr-frame');
       const tx = hw / 2 - 1.7;
       for (const s of [-1, 1]) {
         const wx = s * tx;
         bar(g, P.dark, V3(wx, 0.75, z0), V3(wx, 0.62, z0 - 1.05), 0.14, 0.16, 0.04);
-        bar(g, P.dark, V3(wx + s * 0.25, 0.62, z0 - 0.05), V3(wx + s * 0.2, 0.55, z0 - 1.05), 0.1, 0.1, 0.03);
         rod(g, P.dark, V3(wx - 0.4, 0.5, z0 - 1.05), V3(wx + 0.4, 0.5, z0 - 1.05), 0.07, 10);
-        wheel(g, P, wx - 0.4, 0.36, z0 - 1.05, -1, { R: 0.36, W: 0.26, rimR: 0.2, lugs: 0, N: 28, rimMat: P.grey, bolts: 5 });
-        wheel(g, P, wx + 0.4, 0.36, z0 - 1.05, 1, { R: 0.36, W: 0.26, rimR: 0.2, lugs: 0, N: 28, rimMat: P.grey, bolts: 5 });
+        wheel(g, P, wx - 0.4, 0.36, z0 - 1.05, -1, { R: 0.36, W: 0.26, rimR: 0.2, lugs: 0, N: 24, rimMat: P.grey, bolts: 4 });
+        wheel(g, P, wx + 0.4, 0.36, z0 - 1.05, 1, { R: 0.36, W: 0.26, rimR: 0.2, lugs: 0, N: 24, rimMat: P.grey, bolts: 4 });
       }
       bar(g, P.dark, V3(-tx, 0.9, z0 - 0.2), V3(tx, 0.9, z0 - 0.2), 0.12, 0.1, 0.03);
     }
@@ -484,92 +484,96 @@
   const HDR_W = [4.5, 4.5, 4.8, 7.2, 7.5, 7.8, 10.0, 10.8, 11.4, 12.0];
   function buildCombine(lv) {
     const g = new T.Group(), gl = [], t = lv <= 3 ? 0 : lv <= 6 ? 1 : 2, tracks = lv >= 8;
-    const P = palette({ body: [0x9b241f, 0xa81e19, 0xa5151a][t], rough: [0.46, 0.34, 0.22][t], dark: 0x3a3e44 });
-    const zEnd = -(3.75 + 0.42 * t), tankL = [2.55, 3.15, 3.7][t], tankTop = [3.95, 4.12, 4.28][t], tankHW = [1.3, 1.38, 1.46][t], tankZ1 = 0.72, tankZ0 = tankZ1 - tankL;
+    const P = palette({ body: [0x9b241f, 0xa81e19, 0xa5151a][t], rough: [0.46, 0.34, 0.22][t], dark: 0x3a3e44, grey: 0xc3c7cb });
+    const zEnd = -(3.8 + 0.45 * t), tankL = [2.6, 3.2, 3.8][t], tankTop = [4.0, 4.18, 4.34][t], tankHW = [1.32, 1.4, 1.48][t], tankZ1 = 0.72, tankZ0 = tankZ1 - tankL, tcz = (tankZ0 + tankZ1) / 2;
     const fz = 1.55, fR = [0.86, 0.98, 1.1][t], fW = [0.62, 0.74, 0.9][t], fx = [1.37, 1.43, 1.5][t], rzA = zEnd + 0.8, rR = [0.55, 0.6, 0.66][t], rW = [0.38, 0.42, 0.5][t], rx = [1.0, 1.05, 1.1][t];
-    // --- нижний корпус: молотилка/соломотряс (сзади) и передний модуль
-    tag('нижний корпус');
-    put(g, ex([[zEnd, 2.05], [zEnd + 0.35, 1.45], [0.45, 1.38], [0.55, 2.72], [zEnd + 0.1, 2.72], [zEnd - 0.02, 2.45]], 2.5, { plane: 'zy', r: 0.15, b: 0.03, q: 1 }), P.body, 0, 0, 0);
+    const cabT = lv >= 3 ? Math.max(t, 1) : 0, cabW = [1.9, 1.98, 2.06][t];
+    tag('lower body');
+    put(g, ex([[zEnd, 2.1], [zEnd + 0.4, 1.5], [0.45, 1.4], [0.55, 2.75], [zEnd + 0.15, 2.75], [zEnd, 2.5]], 2.5, { plane: 'zy', r: 0.18, b: 0.03, q: 1 }), P.body, 0, 0, 0);
     put(g, ex([[0.35, 1.34], [2.4, 1.22], [2.64, 1.5], [2.66, 2.46], [0.35, 2.5]], 2.0, { plane: 'zy', r: 0.12, b: 0.03, q: 1 }), P.body, 0, 0, 0);
-    // --- бункер для зерна со скошенными стенками
-    tag('бункер для зер');
-    { const y0 = 2.62, ys = tankTop - 0.62, tw = tankHW - 0.42;
-      put(g, ex([[-1.0, y0], [1.0, y0], [tankHW, y0 + 0.38], [tankHW, ys], [tw, tankTop], [-tw, tankTop], [-tankHW, ys], [-tankHW, y0 + 0.38]], tankL, { r: 0.22, b: 0.06, q: 2 }), P.body, 0, 0, (tankZ0 + tankZ1) / 2);
-      for (const s of [-1, 1]) { put(g, rb(0.05, tankTop - y0 - 0.55, tankL - 0.5, 0.02), P.grey, s * (tankHW + 0.015), (tankTop + y0) / 2 - 0.05, (tankZ0 + tankZ1) / 2); }
-      put(g, rb(2 * tw - 0.3, 0.07, tankL - 0.35, 0.03), P.grey, 0, tankTop + 0.015, (tankZ0 + tankZ1) / 2 + 0.05);
-      for (let i = 0; i < 3; i++) put(g, rb(2 * tw - 0.3, 0.025, 0.05, 0.01), P.dark, 0, tankTop + 0.07, tankZ0 + 0.5 + i * (tankL - 1) / 2);
+    for (const s of [-1, 1]) {
+      bar(g, P.dark, V3(s * 1.22, 1.5, zEnd + 0.6), V3(s * 1.22, 1.5, 0.3), 0.07, 0.1, 0.02);
+      for (let i = 0; i < 3; i++) { const z = zEnd + 1.0 + i * 1.5 - (t ? 0 : 0.15); put(g, rb(0.035, 0.85, 1.1, 0.05, 0), P.body, s * 1.265, 2.05, z); bx(g, P.dark, 0.03, 0.07, 0.16, s * 1.29, 2.05, z + 0.4); }
+      decal(g, 'grid', 0.9, 0.16, s * 1.284, 2.62, zEnd + 1.95, s * PI / 2, 0, 1);
     }
-    // --- моторный отсек с решётками и выхлопом
-    tag('моторный отсек');
-    { const ez0 = zEnd + 0.12, ez1 = tankZ0 - 0.04, ey = 3.55;
-      put(g, ex([[ez0, 2.7], [ez1, 2.7], [ez1, ey - 0.05], [ez0 + 0.45, ey], [ez0 - 0.02, 3.1]], 1.9, { plane: 'zy', r: 0.2, b: 0.04, q: 1 }), P.grey, 0, 0, 0);
-      decal(g, 'grid', 1.5, 0.52, 0, 3.33, ez0 - 0.12 + 0.06, PI, 0.78, 1);
-      for (const s of [-1, 1]) { for (let i = 0; i < 7; i++) put(g, rb(0.03, 0.06, 0.6, 0.012), P.black, s * 0.955, 2.95 + i * 0.08, (ez0 + ez1) / 2 + 0.2, 0, 0, 0); decal(g, 'num', 0.5, 0.25, s * 0.958, 3.28, ez1 - 0.45, s * PI / 2, 0, 1); }
-      put(g, rb(1.2, 0.03, (ez1 - ez0) - 0.9, 0.012), P.black, 0, ey + 0.02, (ez0 + ez1) / 2 + 0.3);
-      for (let i = 0; i < 6; i++) put(g, rb(1.2, 0.02, 0.025, 0.008), P.dark, 0, ey + 0.04, ez0 + 0.9 + i * 0.12 * 1.0);
-      // выхлоп и предочиститель воздуха
-      const exz = ez1 - 0.25, exx = -0.78;
-      rod(g, P.steel, V3(exx, ey - 0.05, exz), V3(exx, ey + 0.95, exz), 0.065, 12); rod(g, P.steel, V3(exx, ey + 0.95, exz), V3(exx + 0.0, ey + 1.13, exz - 0.1), 0.065, 12);
-      put(g, new T.CylinderGeometry(0.1, 0.1, 0.05, 14), P.black, exx, ey + 0.08, exz); put(g, new T.TorusGeometry(0.067, 0.012, 6, 14), P.dark, exx, ey + 0.2, exz, PI / 2, 0, 0);
-      put(g, lathe([[0, 0], [0.16, 0], [0.18, 0.4], [0.12, 0.6], [0.0, 0.64]], 18), P.dark, 0.45, ey, ez1 - 0.45);
+    tag('tank');
+    { const y0 = 2.62, ys = tankTop - 0.62, tw = tankHW - 0.45;
+      put(g, ex([[-1.0, y0], [1.0, y0], [tankHW, y0 + 0.38], [tankHW, ys], [tw, tankTop], [-tw, tankTop], [-tankHW, ys], [-tankHW, y0 + 0.38]], tankL, { r: 0.22, b: 0.06, q: 1 }), P.body, 0, 0, tcz);
+      for (const s of [-1, 1]) {
+        put(g, rb(0.05, 0.68, tankL - 0.5, 0.02, 0), P.grey, s * (tankHW + 0.02), (y0 + 0.4 + ys) / 2, tcz);
+        pane(gl, 0.02, 0.2, s * (tankHW + 0.05), (y0 + 0.4 + ys) / 2 + 0.05, tankZ1 - 0.7, 0, 0, 0).scale.z = 0.9 / 0.014;
+        for (const k of [0, 1, 2, 3]) bx(g, P.dark, 0.02, 0.27, 0.025, s * (tankHW + 0.05), (y0 + 0.4 + ys) / 2 + 0.05, tankZ1 - 1.15 + k * 0.3);
+        decal(g, t >= 1 ? 't1' : 't2', 1.15, 0.29, s * (tankHW + 0.047), tankTop - 0.82, tcz - 0.25, s * PI / 2, 0, 1);
+      }
+      put(g, rb(2 * tw - 0.35, 0.06, tankL - 0.4, 0.025), P.grey, 0, tankTop + 0.02, tcz + 0.05);
+      for (let i = 0; i < 3; i++) put(g, rb(2 * tw - 0.4, 0.05, 0.12, 0.02, 0), P.dark, 0, tankTop + 0.07, tankZ0 + 0.55 + i * (tankL - 1.1) / 2);
+      put(g, rb(0.46, 0.06, 0.46, 0.04, 0), P.dark, tw - 0.45, tankTop + 0.07, tcz + 0.4);
+      railing(g, P, [[-tw + 0.1, tankTop + 0.045, tankZ0 + 0.15], [-tw + 0.1, tankTop + 0.045, tankZ1 - 0.2]], 0.5, 1.0);
     }
-    // --- задняя часть: измельчитель, разбрасыватель, фонари
-    tag('задняя часть');
-    put(g, rb(1.9, 0.5, 0.55, 0.1), P.dark, 0, 1.85, zEnd - 0.1);
-    for (const s of [-1, 1]) { put(g, lathe([[0, 0], [0.34, 0.02], [0.36, 0.05], [0, 0.04]], 20), P.steel, s * 0.45, 1.5, zEnd - 0.2, 0.2, 0, 0); }
-    for (const s of [-1, 1]) { lampUnit(g, P, s * 0.88, 2.38, zEnd + 0.0, 0.2, 0.12, 'z-', P.body); lampUnit(g, P, s * 0.88, 2.2, zEnd - 0.01, 0.2, 0.08, 'z-', P.amber); }
-    if (t >= 2) decal(g, 'haz', 1.1, 0.3, 0, 2.0, zEnd - 0.375, PI, 0, 4);
-    // --- рама, мосты, подъёмные цилиндры
-    tag('рама, мосты, п');
+    tag('engine');
+    { const ez0 = zEnd + 0.12, ez1 = tankZ0 - 0.04, ey = 3.58, ec = (ez0 + ez1) / 2;
+      put(g, ex([[ez0, 2.7], [ez1, 2.7], [ez1, ey - 0.05], [ez0 + 0.5, ey], [ez0 - 0.02, 3.1]], 1.9, { plane: 'zy', r: 0.2, b: 0.04, q: 1 }), P.body, 0, 0, 0);
+      put(g, rb(1.5, 0.05, ez1 - ez0 - 0.9, 0.02, 0), P.grey, 0, ey + 0.015, ec + 0.35);
+      decal(g, 'grid', 1.2, ez1 - ez0 - 1.2, 0, ey + 0.045, ec + 0.35, 0, -PI / 2, 1);
+      decal(g, 'grid', 1.5, 0.62, 0, 3.33, ez0 - 0.06, PI, 0.78, 1);
+      for (const s of [-1, 1]) { decal(g, 'grid', 0.9, 0.55, s * 0.958, 3.0, ec + 0.2, s * PI / 2, 0, 1); decal(g, 'num', 0.5, 0.25, s * 0.958, 3.33, ez1 - 0.4, s * PI / 2, 0, 1); }
+      const exz = ez1 - 0.2, exx = -0.78;
+      rod(g, P.steel, V3(exx, ey - 0.05, exz), V3(exx, ey + 0.95, exz), 0.065, 12); rod(g, P.steel, V3(exx, ey + 0.95, exz), V3(exx, ey + 1.12, exz - 0.1), 0.065, 12);
+      put(g, new T.CylinderGeometry(0.1, 0.1, 0.05, 12), P.black, exx, ey + 0.08, exz); put(g, new T.CylinderGeometry(0.085, 0.085, 0.03, 12), P.black, exx, ey + 1.13, exz - 0.1, 0.4, 0, 0);
+      put(g, lathe([[0, 0], [0.16, 0], [0.18, 0.4], [0.12, 0.6], [0.0, 0.64]], 14), P.dark, 0.45, ey, ez1 - 0.45);
+      rod(g, P.dark, V3(0.45, ey + 0.55, ez1 - 0.45), V3(0.2, ey + 0.2, ez1 - 0.05), 0.045, 8);
+    }
+    tag('rear');
+    put(g, ex([[zEnd + 0.1, 2.25], [zEnd - 0.5, 2.0], [zEnd - 0.55, 1.65], [zEnd + 0.1, 1.55]], 1.8, { plane: 'zy', r: 0.1, b: 0.03, q: 0 }), P.body, 0, 0, 0);
+    for (const s of [-1, 1]) { put(g, lathe([[0, 0], [0.34, 0.02], [0.37, 0.05], [0, 0.05]], 16), P.steel, s * 0.45, 1.5, zEnd - 0.3, 0.25, 0, 0); lampUnit(g, P, s * 0.88, 2.38, zEnd + 0.0, 0.2, 0.12, 'z-', P.body); lampUnit(g, P, s * 0.88, 2.2, zEnd - 0.01, 0.2, 0.08, 'z-', P.amber); }
+    decal(g, 'haz', 1.3, 0.26, 0, 1.8, zEnd - 0.53, PI, 0, 4);
+    if (t >= 1) decal(g, 'warn', 0.3, 0.3, 0.6, 2.4, zEnd - 0.0 - 0.004, PI, 0, 1);
+    tag('chassis');
     for (const s of [-1, 1]) bar(g, P.dark, V3(s * 0.85, 1.12, zEnd + 0.3), V3(s * 0.85, 1.12, 2.3), 0.16, 0.26, 0.04);
-    rod(g, P.dark, V3(-fx + 0.2, fR, fz), V3(fx - 0.2, fR, fz), 0.19, 14);
+    rod(g, P.dark, V3(-fx + 0.2, fR, fz), V3(fx - 0.2, fR, fz), 0.19, 12);
     bar(g, P.dark, V3(-rx, rR, rzA), V3(rx, rR, rzA), 0.22, 0.2, 0.05);
-    for (const s of [-1, 1]) { rod(g, P.steel, V3(s * 0.35, 1.0, rzA + 0.28), V3(s * (rx - 0.15), rR + 0.05, rzA + 0.2), 0.03, 8); put(g, new T.CylinderGeometry(0.06, 0.06, 0.5, 10), P.dark, s * 0.45, 1.0, rzA + 0.26, 0, 0, PI / 2); }
-    // --- колёса или гусеницы
-    tag('колёса или гус');
+    for (const s of [-1, 1]) { rod(g, P.steel, V3(s * 0.35, 1.0, rzA + 0.28), V3(s * (rx - 0.15), rR + 0.05, rzA + 0.2), 0.03, 6); put(g, new T.CylinderGeometry(0.06, 0.06, 0.5, 8), P.dark, s * 0.45, 1.0, rzA + 0.26, 0, 0, PI / 2); }
+    tag('wheels');
     for (const s of [-1, 1]) {
       if (tracks) trackUnit(g, P, s * fx, s, [[fz - 1.05, 0.46, 0.46], [fz + 1.2, 0.5, 0.5], [fz - 0.38, 1.36, 0.6]], 0.78);
       else wheel(g, P, s * fx, fR, fz, s, { R: fR, W: fW, rimR: fR * 0.62, lugs: [22, 24, 26][t], lugH: fR * 0.055, N: 44, rimMat: P.body });
       wheel(g, P, s * rx, rR, rzA, s, { R: rR, W: rW, rimR: rR * 0.58, lugs: 16, lugH: rR * 0.04, N: 32, chev: 18, rimMat: P.dark, bolts: 5 });
-      arcPlate(g, P.body, s * rx, rR, rzA, rR + 0.04, rR + 0.09, 0.12, PI * 0.88, rW + 0.1, 12);
+      arcPlate(g, P.body, s * rx, rR, rzA, rR + 0.04, rR + 0.09, 0.12, PI * 0.88, rW + 0.1, 10);
     }
-    // --- кабина
-    tag('кабина');
-    cab(g, gl, P, { cz: 1.78, y0: 2.5, w: [1.75, 1.85, 1.95][t], d: 1.64, h: [1.5, 1.55, 1.6][t], sill: 0.3, tilt: 0.16, tier: t, lowerMat: P.body });
-    // --- наклонная камера и подъёмные цилиндры
-    tag('наклонная каме');
+    tag('cab');
+    cab(g, gl, P, { cz: 1.74, y0: 2.5, w: cabW, d: 1.76, h: [1.62, 1.66, 1.7][t], sill: 0.3, tilt: 0.16, tier: cabT, beacon: lv >= 3, gps: lv >= 6, lowerMat: P.body, mirror: 1.15 });
+    tag('feeder');
     bar(g, P.body, V3(0, 1.82, 2.4), V3(0, 1.0, 3.98), 1.55, 0.9, 0.12);
-    put(g, rb(1.8, 1.05, 0.16, 0.05), P.dark, 0, 1.0, 3.98);
+    put(g, rb(1.8, 1.05, 0.16, 0.05, 0), P.dark, 0, 1.0, 3.98);
     for (const s of [-1, 1]) { rod(g, P.dark, V3(s * 0.6, 1.0, 2.2), V3(s * 0.6, 1.12, 2.85), 0.075, 10); rod(g, P.steel, V3(s * 0.6, 1.12, 2.85), V3(s * 0.6, 1.2, 3.3), 0.04, 8); }
-    // --- разгрузочный шнек (сложен вдоль левого борта бункера, сторона +X)
-    tag('разгрузочный ш');
+    hose(g, P.black, [[0.5, 1.25, 2.45], [0.5, 0.95, 3.0], [0.55, 0.75, 3.6], [0.45, 0.75, 3.95]], 0.025, 12, 5);
+    hose(g, P.black, [[-0.5, 1.25, 2.45], [-0.5, 0.95, 3.0], [-0.55, 0.75, 3.6], [-0.45, 0.75, 3.95]], 0.025, 12, 5);
+    tag('auger');
     { const xa = tankHW + 0.2, za = tankZ0 + 0.12, yT = tankTop + 0.02, zF = tankZ1 + [-0.15, 1.5, 2.0][t];
-      rod(g, P.body, V3(xa, 2.75, za), V3(xa, yT, za), 0.21, 18); put(g, new T.SphereGeometry(0.235, 18, 14), P.body, xa, yT, za);
-      rod(g, P.body, V3(xa, yT, za), V3(xa, yT, zF), 0.2, 18);
-      for (const zz of [za + 0.5, (za + zF) / 2, zF - 0.4]) put(g, new T.TorusGeometry(0.21, 0.02, 8, 20), P.grey, xa, yT, zz, 0, PI / 2, 0);
-      rod(g, P.dark, V3(xa, yT, zF), V3(xa, yT - 0.2, zF + 0.32), 0.19, 14, 0.12); put(g, new T.TorusGeometry(0.15, 0.015, 6, 16), P.steel, xa, yT - 0.18, zF + 0.3, PI / 2 - 0.5, 0, 0);
-      rod(g, P.dark, V3(xa - 0.1, 3.0, za + 0.05), V3(xa - 0.05, yT - 0.12, za + 0.8), 0.04, 8); rod(g, P.steel, V3(xa - 0.05, yT - 0.12, za + 0.8), V3(xa, yT - 0.05, za + 1.1), 0.026, 8);
-      if (t >= 1) rod(g, P.dark, V3(xa, 2.62, za), V3(xa, 2.8, za), 0.24, 14);
-      if (t >= 2) { put(g, new T.SphereGeometry(0.22, 16, 12), P.grey, xa, yT, (za + zF) / 2); }
+      rod(g, P.body, V3(xa, 2.75, za), V3(xa, yT, za), 0.21, 16); put(g, new T.SphereGeometry(0.235, 14, 10), P.body, xa, yT, za);
+      rod(g, P.body, V3(xa, yT, za), V3(xa, yT, zF), 0.2, 16);
+      for (const zz of [za + 0.5, (za + zF) / 2, zF - 0.4]) put(g, new T.CylinderGeometry(0.225, 0.225, 0.06, 16), P.grey, xa, yT, zz, PI / 2, 0, 0);
+      rod(g, P.dark, V3(xa, yT, zF), V3(xa, yT - 0.2, zF + 0.32), 0.19, 14, 0.12); put(g, new T.CylinderGeometry(0.14, 0.16, 0.04, 14), P.steel, xa, yT - 0.2, zF + 0.32, 0.5, 0, 0);
+      rod(g, P.dark, V3(xa - 0.1, 3.0, za + 0.05), V3(xa - 0.05, yT - 0.12, za + 0.8), 0.04, 8); rod(g, P.steel, V3(xa - 0.05, yT - 0.12, za + 0.8), V3(xa, yT - 0.05, za + 1.1), 0.026, 6);
+      if (t >= 1) put(g, new T.CylinderGeometry(0.24, 0.24, 0.18, 14), P.dark, xa, 2.7, za);
+      if (t >= 2) put(g, new T.SphereGeometry(0.22, 12, 8), P.grey, xa, yT, (za + zF) / 2);
     }
-    // --- лестница, площадка, поручни слева
-    tag('лестница, площ');
-    ladder(g, P, V3(tankHW + 0.28, 0.35, 0.25), V3(tankHW + 0.15, 2.55, 0.7), 0.46, 9, true);
-    put(g, rb(0.5, 0.05, 0.2, 0.02), P.dark, tankHW - 0.05 + 0.0, 2.55, 0.85);
-    rod(g, P.steel, V3(1.12, 3.5, 0.85), V3(1.12, 3.5, 1.0), 0.02, 6);
-    // --- фары и габариты
-    tag('фары и габарит');
+    tag('ladder');
+    { const yp = 2.55; ladder(g, P, V3(tankHW + 0.3, 0.3, 0.15), V3(tankHW + 0.18, yp, 0.62), 0.46, 9, false);
+      put(g, rb(0.62, 0.05, 1.8, 0.02, 0), P.dark, cabW / 2 + 0.28 + 0.06, yp, 1.72);
+      bar(g, P.dark, V3(cabW / 2 + 0.05, 2.05, 1.2), V3(cabW / 2 + 0.55, 2.5, 1.2), 0.06, 0.08, 0.02); bar(g, P.dark, V3(cabW / 2 + 0.05, 2.05, 2.3), V3(cabW / 2 + 0.55, 2.5, 2.3), 0.06, 0.08, 0.02);
+      railing(g, P, [[cabW / 2 + 0.6, yp, 0.6], [cabW / 2 + 0.6, yp, 2.6], [cabW / 2 + 0.2, yp, 2.65]], 0.9, 0.65);
+      put(g, rb(0.5, 0.05, 0.4, 0.02, 0), P.dark, -(cabW / 2 + 0.2), 2.5, 2.4);
+    }
+    tag('lights');
     for (const s of [-1, 1]) { lampUnit(g, P, s * 0.78, 2.12, 2.66, 0.28, 0.14, 'z+'); lampUnit(g, P, s * 0.48, 2.12, 2.66, 0.28, 0.14, 'z+'); lampUnit(g, P, s * 0.9, 1.78, 2.66, 0.18, 0.1, 'z+', P.amber); }
-    // --- декали: полоса вдоль борта, шильдики
-    tag('декали');
+    if (t >= 1) for (const s of [-1, 1]) lampUnit(g, P, s * 0.45, 1.78, 2.665, 0.22, 0.1, 'z+');
+    tag('decals');
     for (const s of [-1, 1]) {
-      decal(g, 'band1', 2.4, 0.2, s * 1.254, 2.12, -1.3, s * PI / 2, 0, 1);
-      decal(g, t >= 1 ? 't1' : 't2', 1.3, 0.33, s * (tankHW + 0.047), tankTop - 0.65, (tankZ0 + tankZ1) / 2, s * PI / 2, 0, 1);
+      if (lv >= 2) decal(g, 'band1', 2.4, 0.2, s * 1.285, 2.3, -1.3, s * PI / 2, 0, 1);
       decal(g, 'logo', 0.34, 0.34, s * 1.012, 2.0, 2.05, s * PI / 2, 0, 1);
+      if (t >= 2) decal(g, 'band2', 2.8, 0.14, s * 1.285, 1.82, -1.0, s * PI / 2, 0, 1);
     }
-    if (t >= 2) for (const s of [-1, 1]) decal(g, 'band2', 2.8, 0.14, s * 1.254, 1.82, -1.0, s * PI / 2, 0, 1);
-    // --- жатка
-    tag('жатка');
     header(g, P, HDR_W[lv - 1], 4.0, t, lv);
     return finish(g, gl);
   }
