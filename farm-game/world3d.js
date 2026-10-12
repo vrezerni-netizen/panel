@@ -231,7 +231,7 @@
         barn.add(gable(3.1, 3.8, 1.4, 0x3d3d44, 0, 2.4, 0, hasTex('roof_metal') ? texMat('roof_metal', 2, 2, 0x555a60) : mat(0x3d3d44, { side: T.DoubleSide })));
         barn.position.set(-1.6, 0, -1); g.add(barn);
         g.add(part('cyl', 0xcfd8dc, 1.6, 1.8, -1.4, 1.1, 3.6, 1.1)); for (let i = 1; i < 6; i++) g.add(part('cyl', 0x90a4ae, 1.6, i * 0.6, -1.4, 1.14, 0.05, 1.14)); g.add(part('sph', 0x90a4ae, 1.6, 3.7, -1.4, 1.1, 0.8, 1.1));
-        for (let i = 0; i < 3; i++) g.add(part('box', i % 2 ? 0x8bc34a : 0x558b2f, -0.8 + i * 1.5, 0.16, 2.0, 1.2, 0.12, 1.4));
+        for (let i = 0; i < 3; i++) { const fl = part('box', i % 2 ? 0x8bc34a : 0x558b2f, -0.8 + i * 1.5, 0.16, 2.0, 1.2, 0.12, 1.4); if (hasTex('wheat_field') && i !== 1) fl.material = texMat('wheat_field', 1, 1, 0xe0a84a); else if (hasTex('soil_plowed')) fl.material = texMat('soil_plowed', 1, 1, 0x7a4e2b); g.add(fl); }
         if (id === 'hills') g.add(part('cone', 0x78909c, 2.2, 1.6, 0.6, 2.2, 3.2, 2.2));
         if (id === 'lake') g.add(part('cyl', 0x4fc3f7, 1.6, 0.14, 1.6, 2.6, 0.08, 1.8));
         if (id === 'meadow') for (let i = 0; i < 6; i++) g.add(part('sph', [0xff4081, 0xffeb3b, 0xffffff][i % 3], -1.5 + i * 0.7, 0.3, 2.5, 0.3));
@@ -357,7 +357,7 @@
       const barn = buildingModel(f.id === 'home' ? 'home' : f.id); barn.scale.setScalar(0.85); barn.position.set(-w / 2 + 1.2, 0, -h / 2 - 4.4); barn.children[0].visible = false; F.props.add(barn);
       // загон животных
       const px = w / 2 - 1.6, pz = -h / 2 - 3.8; F.pen = { x: px, z: pz, w: 6, d: 4.4 };
-      F.props.add(part('box', 0x93c46d, px, 0.04, pz, F.pen.w, 0.08, F.pen.d));
+      { const pf = part('box', 0x93c46d, px, 0.04, pz, F.pen.w, 0.08, F.pen.d); pf.material = texMat('dirt_path', 3, 2, 0x93c46d); pf.castShadow = false; F.props.add(pf); }
       for (let i = 0; i <= 12; i++) { const fx = px - F.pen.w / 2 + i * F.pen.w / 12; F.props.add(part('box', fenceC, fx, 0.3, pz + F.pen.d / 2, 0.1, 0.6, 0.1)); F.props.add(part('box', fenceC, fx, 0.3, pz - F.pen.d / 2, 0.1, 0.6, 0.1)); }
       for (let i = 0; i <= 8; i++) { const fz = pz - F.pen.d / 2 + i * F.pen.d / 8; F.props.add(part('box', fenceC, px - F.pen.w / 2, 0.3, fz, 0.1, 0.6, 0.1)); F.props.add(part('box', fenceC, px + F.pen.w / 2, 0.3, fz, 0.1, 0.6, 0.1)); }
       F.props.add(part('box', fenceC, px, 0.42, pz + F.pen.d / 2, F.pen.w, 0.07, 0.07)); F.props.add(part('box', fenceC, px, 0.42, pz - F.pen.d / 2, F.pen.w, 0.07, 0.07));
