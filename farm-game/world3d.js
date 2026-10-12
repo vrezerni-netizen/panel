@@ -336,7 +336,8 @@
     const ground = new T.Mesh(new T.PlaneGeometry(5200, 5200), texMat('grass', 1300, 1300, 0x6fae4f)); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
     const world = new T.Group(); scene.add(world);
-    const W = { mode: 'map', cb, renderer, scene, camera, time: 0, S: null, inputOn: true };
+    const W = { mode: 'map', cb, renderer, scene, camera, time: 0, S: null, inputOn: true, lite: !!(root.matchMedia && root.matchMedia('(hover:none) and (pointer:coarse)').matches) };
+    if (W.lite) { sun.shadow.mapSize.set(2048, 2048); }
 
     // --- DOM-метки
     const labels = [];
@@ -603,8 +604,8 @@
     const cam = { tx: -150, tz: -20, yaw: 0, pitch: 0.95, dist: 90, gx: -150, gz: -20, gd: 90 };
     const keys = {};
     function applyCamera() {
-      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-      camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * cam.dist, sp * cam.dist, cam.tz + Math.cos(cam.yaw) * cp * cam.dist);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), dd = cam.dist * (camera.aspect < 1 ? 1 + (1 - camera.aspect) * 1.4 : 1);
+      camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * dd, sp * dd, cam.tz + Math.cos(cam.yaw) * cp * dd);
       camera.lookAt(cam.tx, 0, cam.tz);
     }
     function panBy(dx, dz) { // в осях экрана (вправо, вперёд)
@@ -614,7 +615,7 @@
     function focus(x, z, d) { cam.gx = x; cam.gz = z; if (d) cam.gd = d; }
     function resize() {
       const r = canvas.parentElement.getBoundingClientRect(); const w = Math.max(300, r.width), h = Math.max(300, r.height);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setSize(w, h, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, W.lite ? 1.25 : 2)); renderer.setSize(w, h, false);
       camera.aspect = w / h; camera.updateProjectionMatrix();
     }
     window.addEventListener('keydown', (e) => { if (!W.inputOn || /INPUT|TEXTAREA/.test((e.target || {}).tagName || '')) return; const k = e.key.toLowerCase(); keys[k] = true; keys[e.code] = true; });
@@ -654,8 +655,12 @@
       return out;
     }
     let drag = null, paint = null, pan = null, lastTile = '';
+    const ptrs = new Map(); let gest = null;
+    const gInfo = () => { const a = [...ptrs.values()]; return { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1, cx: (a[0].x + a[1].x) / 2, cy: (a[0].y + a[1].y) / 2, ang: Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x) }; };
     canvas.addEventListener('pointerdown', (ev) => {
       canvas.setPointerCapture && canvas.setPointerCapture(ev.pointerId);
+      ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (ptrs.size >= 2) { drag = null; paint = null; highlight(null); gest = gInfo(); return; }
       if (ev.button === 2 || ev.button === 1) { pan = { x: ev.clientX, y: ev.clientY, mode: ev.button === 1 || ev.shiftKey ? 'rot' : 'pan' }; return; }
       const k = pickVehicle(ev);
       if (k && vehs[k]) { const p = groundAt(ev); drag = { k, off: p ? [vehs[k].g.position.x - p.x, vehs[k].g.position.z - p.z] : [0, 0], moved: false, sx: ev.clientX, sy: ev.clientY }; vehs[k].g.position.y = 0.35; cb.onVehicleGrab && cb.onVehicleGrab(k); return; }
@@ -664,6 +669,12 @@
       if (hit && hit.owned && !hit.pen) { lastTile = hit.sfi + ',' + hit.x + ',' + hit.y; paint.active = true; cb.onTile(hit.sfi, hit.x, hit.y, true); }
     });
     canvas.addEventListener('pointermove', (ev) => {
+      if (ptrs.has(ev.pointerId)) ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (ptrs.size >= 2 && gest) {
+        const g = gInfo(); cam.gd = Math.min(900, Math.max(14, cam.gd * gest.d / g.d)); cam.dist = cam.gd;
+        cam.yaw -= (g.ang - gest.ang) * 1; const k = cam.dist * 0.0016; panBy(-(g.cx - gest.cx) * k, -(g.cy - gest.cy) * k * 1.3); cam.tx = cam.gx; cam.tz = cam.gz;
+        gest = g; return;
+      }
       if (pan) { const dx = ev.clientX - pan.x, dy = ev.clientY - pan.y; pan.x = ev.clientX; pan.y = ev.clientY;
         if (pan.mode === 'rot') { cam.yaw -= dx * 0.006; cam.pitch = Math.max(0.35, Math.min(1.35, cam.pitch + dy * 0.005)); }
         else { const k = cam.dist * 0.0017; panBy(-dx * k, -dy * k * 1.3); cam.tx = cam.gx; cam.tz = cam.gz; } return; }
@@ -681,6 +692,7 @@
       }
     });
     canvas.addEventListener('pointerup', (ev) => {
+      const wasG = ptrs.size >= 2 || gest; ptrs.delete(ev.pointerId); if (wasG) { if (ptrs.size < 2) gest = ptrs.size ? gest : null; if (ptrs.size === 0) gest = null; paint = null; drag = null; return; }
       if (pan) { pan = null; return; }
       if (drag) {
         const v = vehs[drag.k], S = W.S; v.g.position.y = 0.1; highlight(null);
@@ -695,6 +707,7 @@
       }
       paint = null; lastTile = '';
     });
+    canvas.addEventListener('pointercancel', (ev) => { ptrs.delete(ev.pointerId); if (!ptrs.size) { gest = null; drag = null; paint = null; highlight(null); } });
     canvas.addEventListener('pointerleave', () => { cb.onHover && cb.onHover(null); });
 
     // --- эффекты
