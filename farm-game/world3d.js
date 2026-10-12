@@ -169,14 +169,17 @@
         for (let i = 0; i < 5; i++) g.add(part('sph', [0xffeb3b, 0xff4081, 0x40c4ff][i % 3], -1.8 + i * 0.9, 3.35, 1.55, 0.2, 0.2, 0.2, { emissive: 0x555500 }));
         break;
       }
-      case 'home': case 'valley': case 'hills': {
-        const colors = { home: 0xc62828, valley: 0x1565c0, hills: 0x6a1b9a };
-        const barn = new T.Group(); barn.add(part('box', colors[id], 0, 1.2, 0, 2.6, 2.4, 3)); barn.add(part('box', 0xffffff, 0, 1.0, 1.52, 1.0, 1.6, 0.05));
+      default: {
+        const colors = { home: 0xc62828, meadow: 0xd81b60, grove: 0x2e7d32, valley: 0x1565c0, lake: 0x00838f, hills: 0x6a1b9a, orchard: 0xf9a825 };
+        const barn = new T.Group(); barn.add(part('box', colors[id] || 0x2e7d32, 0, 1.2, 0, 2.6, 2.4, 3)); barn.add(part('box', 0xffffff, 0, 1.0, 1.52, 1.0, 1.6, 0.05));
         const roof = part('cone', 0x5d4037, 0, 3.1, 0, 3.3, 1.5, 3.3); roof.rotation.y = Math.PI / 4; roof.scale.z = 2.6; barn.add(roof);
         barn.position.set(-1.6, 0, -1); g.add(barn);
         g.add(part('cyl', 0xb0bec5, 1.6, 1.8, -1.4, 1.1, 3.6, 1.1)); g.add(part('sph', 0x90a4ae, 1.6, 3.7, -1.4, 1.1, 0.8, 1.1));
         for (let i = 0; i < 3; i++) g.add(part('box', i % 2 ? 0x8bc34a : 0x558b2f, -0.8 + i * 1.5, 0.16, 2.0, 1.2, 0.12, 1.4));
         if (id === 'hills') g.add(part('cone', 0x78909c, 2.2, 1.6, 0.6, 2.2, 3.2, 2.2));
+        if (id === 'lake') g.add(part('cyl', 0x4fc3f7, 1.6, 0.14, 1.6, 2.6, 0.08, 1.8));
+        if (id === 'meadow') for (let i = 0; i < 6; i++) g.add(part('sph', [0xff4081, 0xffeb3b, 0xffffff][i % 3], -1.5 + i * 0.7, 0.3, 2.5, 0.3));
+        if (id === 'grove' || id === 'orchard') for (let i = 0; i < 3; i++) { const t = tree(0.7); t.position.set(1.4 + i * 0.7, 0.1, 1.9); g.add(t); if (id === 'orchard') g.add(part('sph', 0xe53935, 1.4 + i * 0.7, 1.1, 2.2, 0.2)); }
         break;
       }
     }
@@ -185,13 +188,15 @@
 
   // ---------------------------------------------------------------- мир
   const CITY = {
-    size: [46, 34],
+    size: [46, 50],
     buildings: {
       home: { x: -16, z: -6, rot: 0 }, valley: { x: -16, z: 7, rot: 0 }, hills: { x: 16, z: 7, rot: 0 },
-      market: { x: 16, z: -6, rot: 0 }, seeds: { x: -5.5, z: -6, rot: 0 }, tech: { x: 5.5, z: -6, rot: 0 },
+      market: { x: 16, z: -6, rot: 0 },
+      meadow: { x: -16, z: -19, rot: 0 }, grove: { x: -5.5, z: -19, rot: 0 }, lake: { x: 5.5, z: -19, rot: 0 }, orchard: { x: 16, z: -19, rot: 0 },
+      seeds: { x: -5.5, z: -6, rot: 0 }, tech: { x: 5.5, z: -6, rot: 0 },
       bank: { x: -5.5, z: 6.5, rot: Math.PI }, casino: { x: 5.5, z: 6.5, rot: Math.PI },
     },
-    names: { home: '🏡 Моя ферма', valley: '🌄 Долина', hills: '⛰️ Горы', market: '🏪 Рынок', seeds: '🌱 Семена и корм', tech: '🚜 Техцентр', bank: '🏦 Банк', casino: '🎰 Колесо удачи' },
+    names: { home: '🏡 Моя ферма', meadow: '🌼 Луг', grove: '🌳 Роща', valley: '🌄 Долина', lake: '🏞️ Озеро', hills: '⛰️ Горы', orchard: '🍎 Сад', market: '🏪 Рынок', seeds: '🌱 Семена и корм', tech: '🚜 Техцентр', bank: '🏦 Банк', casino: '🎰 Колесо удачи' },
     route: [[-12.5, -6], [-12.5, 0.4], [12.5, 0.4], [12.5, -6], [13, -6]],
   };
 
@@ -224,7 +229,7 @@
     (function buildCity() {
       const [cw, cd] = CITY.size;
       const road = (x, z, w, d) => { const m = part('box', 0x4a4f57, x, 0.04, z, w, 0.08, d); m.castShadow = false; city.add(m); };
-      road(0, 0.4, cw, 3); road(-12.5, -1, 3, cd - 2); road(12.5, -1, 3, cd - 2); road(0, -1, 3, cd - 2);
+      road(0, 0.4, cw, 3); road(0, -12.5, cw, 3); road(-12.5, -1, 3, cd - 2); road(12.5, -1, 3, cd - 2); road(0, -1, 3, cd - 2);
       for (let x = -cw / 2 + 1; x < cw / 2; x += 3) { const m = part('box', 0xf5f5f5, x, 0.09, 0.4, 1.3, 0.02, 0.14); m.castShadow = false; city.add(m); }
       for (const [id, p] of Object.entries(CITY.buildings)) {
         const b = buildingModel(id); b.position.set(p.x, 0, p.z); b.rotation.y = p.rot; b.userData.id = id; city.add(b); bMeshes[id] = b;
@@ -234,7 +239,7 @@
       const spots = Object.values(CITY.buildings);
       for (let i = 0; i < 90; i++) {
         const x = (rng() - 0.5) * (cw + 14), z = (rng() - 0.5) * (cd + 10);
-        if (Math.abs(z - 0.4) < 3.2 || Math.abs(Math.abs(x) - 12.5) < 2.6 || Math.abs(x) < 2.6 && Math.abs(z) < cd / 2) continue;
+        if (Math.abs(z - 0.4) < 3.2 || Math.abs(z + 12.5) < 3.2 || Math.abs(Math.abs(x) - 12.5) < 2.6 || Math.abs(x) < 2.6 && Math.abs(z) < cd / 2) continue;
         if (spots.some((p) => Math.abs(p.x - x) < 5 && Math.abs(p.z - z) < 4.6)) continue;
         if (rng() < 0.78) { const t = tree(0.8 + rng() * 0.7); t.position.set(x, 0, z); city.add(t); }
         else { const h = house(1.6 + rng(), 1.6 + rng(), 1.3 + rng(), [0xf4d6a0, 0xe8c0c0, 0xc9e0f0, 0xe0e8b0][i % 4], [0xb23a2a, 0x37618a][i % 2]); h.position.set(x, 0, z); h.rotation.y = rng() * 6; city.add(h); }
@@ -246,12 +251,20 @@
       for (let i = 0; i < 6; i++) { const cl = new T.Group(); for (let k = 0; k < 4; k++) { const b = part('sph', 0xffffff, k * 1.1 - 1.6, 0.2 * (k % 2), 0, 2.4, 1.1, 1.6, { transparent: true, opacity: 0.92 }); b.castShadow = false; cl.add(b); } cl.position.set(-40 + i * 17, 34 + (i % 3) * 2, -20 + (i % 4) * 12); clouds.push(cl); scene.add(cl); }
     })();
     const lblCity = {};
+    function paintLocks(s) {
+      for (const id of Object.keys(CITY.buildings)) {
+        const fd = L.FARM_DEFS.find((d) => d.id === id); if (!fd) continue;
+        const locked = !s.farms.some((f) => f.id === id);
+        bMeshes[id].traverse((o) => { if (!o.isMesh) return; o.userData.orig = o.userData.orig || o.material; o.material = locked ? mat(0x9aa5ad) : o.userData.orig; });
+      }
+    }
     function layoutCityLabels(s) {
+      paintLocks(s);
       clearLabels('city');
       for (const [id, p] of Object.entries(CITY.buildings)) {
         const fd = L.FARM_DEFS.find((d) => d.id === id);
         const locked = fd && !s.farms.some((f) => f.id === id);
-        const txt = CITY.names[id] + (locked ? ` 🔒 ${fd.level} ур.` : '');
+        const txt = CITY.names[id] + (locked ? (s.level >= fd.level ? ` 🛒 ${fd.cost} 🪙` : ` 🔒 ${fd.level} ур.`) : '');
         lblCity[id] = addLabel('city', txt, new T.Vector3(p.x, 5.4, p.z), 'bld' + (locked ? ' locked' : ''), () => cb.onBuilding(id));
       }
     }
@@ -269,7 +282,7 @@
       F.w = w; F.h = h; F.key = farmKey(s);
       for (const g of [F.tileGroup, F.crops, F.props]) while (g.children.length) g.remove(g.children[0]);
       F.tiles = []; clearLabels('farm'); F.animals = []; F.animalSig = ''; F.vehicles = []; F.sprSig = ''; F.extra = null; F.drone = null;
-      const groundCol = f.id === 'hills' ? 0x8aa65a : f.id === 'valley' ? 0x5fb66a : 0x6fae4f;
+      const groundCol = { hills: 0x8aa65a, valley: 0x5fb66a, meadow: 0x7cc25a, grove: 0x4e9a4a, lake: 0x62b87a, orchard: 0x8cc152 }[f.id] || 0x6fae4f;
       ground.material = mat(groundCol);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const m = part('box', tileCol.grass[(x + y) & 1], x - w / 2 + 0.5, 0.05, y - h / 2 + 0.5, 0.97, 0.1, 0.97);
@@ -355,7 +368,7 @@
     function layoutCamera() {
       const a = camera.aspect, tan = Math.tan(camera.fov * Math.PI / 360);
       let W2, D2, tx, tz;
-      if (W.mode === 'city') { W2 = a < 0.9 ? 20 : 46; D2 = a < 0.9 ? 20 : 36; tx = 0; tz = 0; view.elev = 0.92; }
+      if (W.mode === 'city') { W2 = a < 0.9 ? 20 : 46; D2 = a < 0.9 ? 20 : 50; tx = 0; tz = 0; view.elev = 0.92; }
       else { const fw = F.w || 8, fh = F.h || 6; W2 = fw + 5; D2 = fh + 13; tx = 0; tz = -3; view.elev = 1.0; }
       const dw = W2 / (2 * tan * a), dh = D2 * Math.sin(view.elev) / (2 * tan);
       view.d = Math.max(dw, dh) * 1.02; view.target.set(tx, 0, tz);
@@ -405,7 +418,7 @@
       if (down && down.moved && W.mode === 'city') {
         const r = canvas.getBoundingClientRect(), k = (2 * view.d * W.zoom * Math.tan(camera.fov * Math.PI / 360)) / r.height;
         view.pan.x = Math.max(-24, Math.min(24, view.pan.x - (ev.clientX - (down.lx == null ? down.x : down.lx)) * k));
-        view.pan.z = Math.max(-18, Math.min(18, view.pan.z - (ev.clientY - (down.ly == null ? down.y : down.ly)) * k / Math.sin(view.elev)));
+        view.pan.z = Math.max(-26, Math.min(20, view.pan.z - (ev.clientY - (down.ly == null ? down.y : down.ly)) * k / Math.sin(view.elev)));
       }
       if (down) { down.lx = ev.clientX; down.ly = ev.clientY; }
     });
@@ -505,7 +518,7 @@
         for (const b of Object.values(bMeshes)) b.traverse((o) => { if (o.userData.spin) o.rotation.y += dt * 1.2; });
         for (const c of cars) { const u = c.userData, len = 44, t = ((W.time * (u.car ? 3.2 : 2.4) + u.off * 5) % len); c.position.set(u.dir > 0 ? -22 + t : 22 - t, 0.02, u.dir > 0 ? 1.15 : -0.35); c.rotation.y = u.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
         syncTrips(s);
-        for (const [id, el] of Object.entries(lblCity)) { const fd = L.FARM_DEFS.find((d) => d.id === id); if (fd) { const lock = !s.farms.some((f) => f.id === id); el.el.classList.toggle('locked', lock); const txt = CITY.names[id] + (lock ? ` 🔒 ${fd.level} ур.` : ''); if (el.el.textContent !== txt) el.el.textContent = txt; } }
+        for (const [id, el] of Object.entries(lblCity)) { const fd = L.FARM_DEFS.find((d) => d.id === id); if (fd) { const lock = !s.farms.some((f) => f.id === id); el.el.classList.toggle('locked', lock); const txt = CITY.names[id] + (lock ? (s.level >= fd.level ? ` 🛒 ${fd.cost} 🪙` : ` 🔒 ${fd.level} ур.`) : ''); if (el.el.textContent !== txt) el.el.textContent = txt; } }
         const notifs = { market: Object.keys(s.stall).length ? '📦' : '', seeds: '', tech: '', bank: '', casino: s.tickets > 0 ? ` 🎟️${s.tickets}` : '' };
         for (const id of Object.keys(notifs)) { const el = lblCity[id]; if (!el) continue; const txt = CITY.names[id] + notifs[id]; if (el.el.textContent !== txt) el.el.textContent = txt; }
       } else {

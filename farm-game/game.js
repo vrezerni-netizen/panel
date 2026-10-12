@@ -128,7 +128,7 @@
       <div class="row2">
         <button class="tab2" id="h-mf" data-act="mode" data-m="farm">🌾 Ферма</button>
         <button class="tab2" id="h-mc" data-act="mode" data-m="city">🏙️ Город</button>
-        <span class="chip" id="h-w"></span><span class="chip boost" id="h-b"></span><span class="chip" id="h-tr"></span>
+        <button class="tab2" id="h-fm" data-act="modal" data-id="farms"></button><span class="chip" id="h-w"></span><span class="chip boost" id="h-b"></span><span class="chip" id="h-tr"></span>
         <div class="hsp"></div>
         <button class="ibtn glow" id="h-d" data-act="daily">🎁</button>
         <button class="ibtn" data-act="modal" data-id="orders">📜<span class="bd" id="h-o"></span></button>
@@ -140,6 +140,7 @@
     $('h-xp').style.width = Math.min(100, S.xp / need * 100) + '%';
     setT('h-c', fmt(v.coins)); setT('h-g', fmt(v.crystals)); setT('h-t', fmt(v.tickets));
     $('h-mf').classList.toggle('on', ui.mode === 'farm'); $('h-mc').classList.toggle('on', ui.mode === 'city');
+    setH('h-fm', ui.mode !== 'farm'); setT('h-fm', `${L.FARM_DEFS.find((d) => d.id === L.farm(S).id).icon} ${L.FARM_DEFS.find((d) => d.id === L.farm(S).id).name} ▾`);
     setT('h-w', `${w[0]} ${w[1]} · ${clockText()} · день ${S.day}`);
     setH('h-b', !(S.boost > 0)); setT('h-b', `⚡ рост ×2 · ${mmss(S.boost)}`);
     setH('h-tr', !S.trips.length); setT('h-tr', `🚚 в пути: ${S.trips.length}`);
@@ -397,12 +398,26 @@
     },
   };
 
+  // --- Все фермы
+  MODALS.farms = {
+    title: '🗺️ Мои фермы',
+    render() {
+      let h = '<div class="hint">Новые фермы открываются с уровнем. Сначала они пустые: копай, сей, ставь поливалки. Чем дальше ферма, тем быстрее на ней всё растёт.</div>';
+      for (const d of L.FARM_DEFS) {
+        const i = S.farms.findIndex((f) => f.id === d.id), own = i >= 0, lock = S.level < d.level;
+        const sub = `Рост быстрее на ${Math.round((d.bonus - 1) * 100)}%${own ? '' : lock ? ` · откроется на ${d.level} уровне` : ` · цена ${fmt(d.cost)} 🪙`}`;
+        const b = own ? (i === S.cur ? '<b>здесь</b>' : btn('gofarm', { i }, 'Перейти', 'b')) : lock ? '🔒' : btn('farmbuy', { id: d.id }, `${fmt(d.cost)} 🪙`, 'y', !canBuy(d.cost));
+        h += card(d.icon, d.name, sub, b, own || !lock ? '' : 'lock');
+      }
+      return h;
+    },
+  };
   // --- Покупка фермы
   MODALS.buyfarm = {
     title: '🗺️ Новая ферма',
     render() {
       const d = L.FARM_DEFS.find((x) => x.id === ui.buyId); if (!d) return '';
-      return `<div class="center" style="font-size:60px">${d.id === 'valley' ? '🌄' : '⛰️'}</div><div class="center big">${d.name}</div><div class="hint center">Отдельная ферма на карте города. Растения здесь растут на ${Math.round((d.bonus - 1) * 100)}% быстрее!<br>Нужен ${d.level} уровень · цена ${fmt(d.cost)} 🪙</div><div class="center">${btn('farmbuy', { id: d.id }, `Купить за ${fmt(d.cost)} 🪙`, 'y', S.level < d.level || !canBuy(d.cost))}</div>`;
+      return `<div class="center" style="font-size:60px">${d.icon}</div><div class="center big">${d.name}</div><div class="hint center">Отдельная ферма на карте города. Растения здесь растут на ${Math.round((d.bonus - 1) * 100)}% быстрее!<br>Нужен ${d.level} уровень · цена ${fmt(d.cost)} 🪙</div><div class="center">${btn('farmbuy', { id: d.id }, `Купить за ${fmt(d.cost)} 🪙`, 'y', S.level < d.level || !canBuy(d.cost))}</div>`;
     },
   };
 
@@ -471,6 +486,7 @@
     collect: (d) => { const r = L.collect(S, d.k); if (r.ok) { sfx.harvest(); toast(`+${r.n} ${gi(r.item)}`, 'good'); } else toast(r.msg, 'bad'); },
     ex: (d) => { const r = L.exchange(S, d.d, +d.n); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
     farmbuy: (d) => { const r = L.unlockFarm(S, d.id); if (r.ok) { sfx.level(); toast('Новая ферма твоя! 🎉', 'good'); closeModal(); world.refreshCity(S); goMode('farm'); } else toast(r.msg, 'bad'); },
+    gofarm: (d) => { L.setFarm(S, +d.i); closeModal(); },
     snd: () => { ui.sound = !ui.sound; renderModal(); },
     reset: () => { if (ui.confirm !== 'reset') { ui.confirm = 'reset'; renderModal(); return; } store.del(SAVE); location.reload(); },
     spin: () => {

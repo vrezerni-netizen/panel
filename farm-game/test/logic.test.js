@@ -172,3 +172,10 @@ test('автокурьер отправляет машину при полном
 test('автомашины становятся быстрее с уровнем', () => {
   assert.ok(L.autoEvery('drone', 10) < L.autoEvery('drone', 1) / 4); assert.equal(L.autoN('collector', 10), 20);
 });
+test('пустые закрытые фермы открываются с 3, 6, 8 уровня', () => {
+  const s = fresh(); s.coins = 1e6;
+  assert.equal(L.unlockFarm(s, 'meadow').ok, false); s.level = 3; assert.ok(L.unlockFarm(s, 'meadow').ok);
+  assert.ok(L.farm(s).tiles.every((t) => t.k === 'grass'));
+  assert.equal(L.unlockFarm(s, 'grove').ok, false); s.level = 6; assert.ok(L.unlockFarm(s, 'grove').ok);
+  assert.equal(s.farms.length, 3); assert.deepEqual(L.FARM_DEFS.map((d) => d.level).slice(0, 4), [1, 3, 6, 8]);
+});

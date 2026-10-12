@@ -82,10 +82,15 @@
   const autoEvery = (k, lv) => Math.round(MACHINES[k].every * Math.pow(0.82, lv - 1) * 10) / 10;
   const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1 }[k]);
   const speedOf = (lv) => 1 + 0.08 * lv, doubleOf = (lv) => 0.04 * lv, feedUseOf = (lv) => Math.max(0.4, 1 - 0.06 * lv);
-  const FARM_DEFS = [
-    { id: 'home', name: 'Моя ферма', level: 1, cost: 0, bonus: 1, plots: [[8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, 120, 350, 900] },
-    { id: 'valley', name: 'Долина', level: 8, cost: 4000, bonus: 1.2, plots: [[8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, 600, 1800, 4500] },
-    { id: 'hills', name: 'Горные террасы', level: 16, cost: 15000, bonus: 1.4, plots: [[10, 7], [12, 8], [14, 9]], plotCost: [0, 3000, 9000] },
+  const plotsOf = (c, first) => ({ plots: [first || [8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900] });
+  const FARM_DEFS = [  // фермы открываются с уровнем; новые участки пустые
+    Object.assign({ id: 'home', name: 'Моя ферма', icon: '🏡', level: 1, cost: 0, bonus: 1 }, plotsOf(0)),
+    Object.assign({ id: 'meadow', name: 'Цветочный луг', icon: '🌼', level: 3, cost: 500, bonus: 1.05 }, plotsOf(500)),
+    Object.assign({ id: 'grove', name: 'Тихая роща', icon: '🌳', level: 6, cost: 2000, bonus: 1.1 }, plotsOf(2000)),
+    Object.assign({ id: 'valley', name: 'Долина', icon: '🌄', level: 8, cost: 4000, bonus: 1.2 }, plotsOf(4000)),
+    Object.assign({ id: 'lake', name: 'Берег озера', icon: '🏞️', level: 11, cost: 9000, bonus: 1.3 }, plotsOf(9000)),
+    Object.assign({ id: 'hills', name: 'Горные террасы', icon: '⛰️', level: 16, cost: 15000, bonus: 1.4 }, plotsOf(15000, [10, 7])),
+    Object.assign({ id: 'orchard', name: 'Королевский сад', icon: '🍎', level: 20, cost: 40000, bonus: 1.6 }, plotsOf(40000, [10, 7])),
   ];
   const WATER_MS = [60000, 90000, 150000, 240000], CAN_COSTS = [0, 150, 400, 1000];
   const BARN_CAP = [200, 500, 1200, 3000], BARN_COSTS = [0, 400, 1500, 5000];
