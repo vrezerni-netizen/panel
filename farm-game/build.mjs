@@ -7,7 +7,7 @@ const out = process.argv[2] || path.join(dir, 'dist', 'farm.html'), fragment = p
 const html = rd('index.html');
 const body = html.match(/<div id="app">[\s\S]*?<\/div>\s*(?=<script)/)[0];
 const page = `<title>Ферма и Город</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>${rd('style.css')}</style>
 ${body}
 <script>${js('vendor/three.min.js')}</script>

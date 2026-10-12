@@ -368,7 +368,7 @@
     function layoutCamera() {
       const a = camera.aspect, tan = Math.tan(camera.fov * Math.PI / 360);
       let W2, D2, tx, tz;
-      if (W.mode === 'city') { W2 = a < 0.9 ? 20 : 46; D2 = a < 0.9 ? 20 : 50; tx = 0; tz = 0; view.elev = 0.92; }
+      if (W.mode === 'city') { W2 = 46; D2 = 50; tx = 0; tz = 0; view.elev = 0.92; }
       else { const fw = F.w || 8, fh = F.h || 6; W2 = fw + 5; D2 = fh + 13; tx = 0; tz = -3; view.elev = 1.0; }
       const dw = W2 / (2 * tan * a), dh = D2 * Math.sin(view.elev) / (2 * tan);
       view.d = Math.max(dw, dh) * 1.02; view.target.set(tx, 0, tz);
@@ -412,7 +412,7 @@
     canvas.addEventListener('pointermove', (ev) => {
       if (W.mode === 'farm') {
         const t = tileFrom(ev); cb.onHover && cb.onHover(t && t.x >= 0 ? t : null);
-        if (down && t && t.x >= 0 && (ev.buttons || ev.pointerType === 'touch')) { const k = t.x + ',' + t.y; if (k !== last) { last = k; cb.onTile(t.x, t.y, false); } }
+        if (down && t && t.x >= 0 && ev.buttons) { const k = t.x + ',' + t.y; if (k !== last) { last = k; cb.onTile(t.x, t.y, false); } }
       }
       if (down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6) down.moved = true;
       if (down && down.moved && W.mode === 'city') {
@@ -432,12 +432,6 @@
     });
     canvas.addEventListener('pointerleave', () => { cb.onHover && cb.onHover(null); });
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); W.zoom = Math.min(1.5, Math.max(0.5, W.zoom * (e.deltaY > 0 ? 1.08 : 0.92))); }, { passive: false });
-    const touches = new Map(); let pinch0 = 0;
-    canvas.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch0) W.zoom = Math.min(1.5, Math.max(0.5, W.zoom * pinch0 / d)); pinch0 = d; down = null; e.preventDefault(); }
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => { pinch0 = 0; });
-
     // --- эффекты
     const parts = [];
     function burst(kind, x, y, z) {

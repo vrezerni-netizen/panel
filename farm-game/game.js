@@ -57,6 +57,7 @@
     { id: 'fert', icon: '🧪', name: 'Удобр.' }, { id: 'superfert', icon: '⚡', name: 'Супер' }, { id: 'sprinkler', icon: '🚿', name: 'Поливалка' },
     { id: 'tractor', icon: '🚜', name: 'Трактор' }, { id: 'combine', icon: '🌾', name: 'Комбайн' }, { id: 'waterer', icon: '🚒', name: 'Поливмаш' }, { id: 'spreader', icon: '🧂', name: 'Удобр.маш' }, { id: 'remove', icon: '🪓', name: 'Убрать' },
   ];
+  const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
   const needSeed = () => ui.tool === 'seed' || ui.tool === 'tractor';
   function pickSeed() {
     if (ui.seed && S.seeds[ui.seed] > 0) return;
@@ -158,7 +159,8 @@
           else if (S.cool[t.id] > 0) extra = `<span class="cd">${Math.ceil(S.cool[t.id] / 1000)}</span>`;
         }
         if (t.id === 'sprinkler' && S.level < L.SPRINKLER.need) { dis = 'dis'; extra = `<span class="cd">🔒${L.SPRINKLER.need}</span>`; }
-        html += `<button class="tool ${ui.tool === t.id ? 'on' : ''} ${dis}" data-act="tool" data-t="${t.id}"><b>${t.icon}</b>${t.name}${extra}</button>`;
+        const ti = TOOLS.indexOf(t);
+        html += `<button class="tool ${ui.tool === t.id ? 'on' : ''} ${dis}" data-act="tool" data-t="${t.id}"><span class="key">${HOTKEYS[ti] || ''}</span><b>${t.icon}</b>${t.name}${extra}</button>`;
       }
       html += `<button class="bigbtn" data-act="modal" data-id="animals">🐄 Загон</button><button class="bigbtn g" data-act="modal" data-id="barn">📦 Склад ${fmt(L.total(S.goods))}/${L.barnCap(S)}</button><button class="bigbtn b" data-act="mode" data-m="city">🏙️ В город</button>`;
     } else {
@@ -442,7 +444,7 @@
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
         <b>5.</b> Копи монеты 🪙 → покупай животных, 🚜 трактор и 🌾 комбайн, машины побольше, новые фермы.<br>
         <b>6.</b> Билеты 🎟️ крутят 🎰 колесо: можно рискнуть и удвоить приз! 💎 кристаллы дают ускорение ×2.<br>
-        Нажми на здание в городе — откроется магазин.</div>${btn('close', {}, 'Поехали!', 'y')}`;
+        Нажми на здание в городе — откроется магазин.<br><br><b>Клавиши:</b> <span class="kbd">1</span>–<span class="kbd">=</span> инструменты · <span class="kbd">Tab</span> ферма/город · <span class="kbd">B</span> склад · <span class="kbd">M</span> рынок · <span class="kbd">Esc</span> закрыть · колесо мыши — приближение. Можно вести мышью с зажатой кнопкой по грядкам, чтобы копать, сеять или собирать сразу много.</div>${btn('close', {}, 'Поехали!', 'y')}`;
     },
   };
 
@@ -510,6 +512,16 @@
     const el = e.target.closest('[data-act]'); if (!el || el.classList.contains('dis')) return;
     const f = A[el.dataset.act]; if (!f) return;
     f(el.dataset); lastBar = ''; lastSeed = ''; renderHud(); renderBar(); if (ui.modal) renderModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.key === 'Escape') { if (ui.modal) closeModal(); return; }
+    if (ui.modal) return;
+    if (e.key === 'Tab') { e.preventDefault(); goMode(ui.mode === 'farm' ? 'city' : 'farm'); return; }
+    const i = HOTKEYS.indexOf(e.key);
+    if (ui.mode === 'farm' && i >= 0 && TOOLS[i]) A.tool({ t: TOOLS[i].id });
+    else if (e.key === 'b' || e.key === 'и') openModal('barn');
+    else if (e.key === 'm' || e.key === 'ь') openModal('market');
   });
   $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
 
