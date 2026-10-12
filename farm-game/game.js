@@ -222,6 +222,8 @@
       for (const sp of [0, 1, 2, 4]) { const e = $('sp' + sp); if (e) e.classList.toggle('on', ui.speed === sp); }
     }
   }
+  function fitBar() { const h = $('bar').offsetHeight; if (h && h !== ui.barh) { ui.barh = h; document.documentElement.style.setProperty('--barh', h + 'px'); } }
+  window.addEventListener('resize', fitBar);
   function renderBar() {
     let html = `<div class="bstats"><div class="bst" id="b-up" title="Товар, который сейчас дорожает на рынке"></div><div class="bst" id="b-dn" title="Товар, который сейчас дешевеет"></div><div class="bst" id="b-stock" data-act="modal" data-id="barn" title="Склад"></div></div><div class="tools">`;
     for (const t of TOOLS) {
@@ -245,6 +247,7 @@
       <div class="speed"><button id="sp0" data-act="speed" data-s="0" title="Пауза">${SV('<path d="M8 5v14M16 5v14"/>')}</button><button id="sp1" data-act="speed" data-s="1" title="Обычная скорость">${SV('<path d="M7 5l12 7-12 7z"/>', 'currentColor')}</button><button id="sp2" data-act="speed" data-s="2" title="Скорость ×2">${SV('<path d="M4 5l8 7-8 7zM12 5l8 7-8 7z"/>', 'currentColor')}</button><button id="sp4" data-act="speed" data-s="4" title="Скорость ×4">${SV('<path d="M2 5l6 7-6 7zM9 5l6 7-6 7zM16 5l6 7-6 7z"/>', 'currentColor')}</button></div>
       <div class="dt"><b id="b-date"></b><span id="b-w"></span></div></div>`;
     if (html !== lastBar) { lastBar = html; $('bar').innerHTML = html; renderHud(); }
+    fitBar();
     // семена
     let sh = '';
     if (needSeed()) {
@@ -556,13 +559,13 @@
     title: '❓ Как играть',
     render() {
       return `<div class="hint" style="font-size:15px">
-        <b>На телефоне:</b> один палец — действие или перетаскивание техники, два пальца — двигать, приближать и вращать карту.<br><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br><b>Лес:</b> на «Целине с лесом» (север карты, с 2 уровня) сначала нужно расчистить землю: 🪓 топором руби деревья (брёвна идут на склад), пни и камни убирай инструментом «Убрать», потом копай и сей. Харвестер 🌲 и корчеватель 🪓 делают это на большой площади. Брёвна пили на 🪚 лесопилке в доски и строй из них 🏗 дома и сараи на продажу.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
+        <span class="to"><b>Управление пальцами:</b> один палец, тащишь по карте — двигаешь её; короткое касание — действие выбранным инструментом; два пальца — приближать и вращать. Технику (🚜🌾🚒🧂) перетащи пальцем на любую грядку — она поработает там. Кнопка 🖌 слева включает «кисть»: тащишь палец по грядкам — копаешь, сеешь или собираешь сразу много.<br></span><span class="dto"><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br></span><b>Лес:</b> на «Целине с лесом» (север карты, с 2 уровня) сначала нужно расчистить землю: 🪓 топором руби деревья (брёвна идут на склад), пни и камни убирай инструментом «Убрать», потом копай и сей. Харвестер 🌲 и корчеватель 🪓 делают это на большой площади. Брёвна пили на 🪚 лесопилке в доски и строй из них 🏗 дома и сараи на продажу.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
         <b>2.</b> Когда созреет — 🧺 собери. Урожай попадает на <b>склад</b>.<br>
         <b>3.</b> Продать урожай можно <b>только на рынке в городе</b>: открой «📦 Склад», выбери машину, загрузи и отправь 🚚. В пути бывают пробки, поломки и разбойники.<br>
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
         <b>5.</b> Копи монеты 🪙 → покупай животных, 🚜 трактор и 🌾 комбайн, машины побольше, новые фермы.<br>
         <b>6.</b> Билеты 🎟️ крутят 🎰 колесо: можно рискнуть и удвоить приз! 💎 кристаллы дают ускорение ×2.<br>
-        Нажми на здание в городе — откроется магазин.<br><br><b>Клавиши:</b> <span class="kbd">1</span>–<span class="kbd">=</span> инструменты · <span class="kbd">Tab</span> ферма/город · <span class="kbd">B</span> склад · <span class="kbd">M</span> рынок · <span class="kbd">Esc</span> закрыть · колесо мыши — приближение. Можно вести мышью с зажатой кнопкой по грядкам, чтобы копать, сеять или собирать сразу много.</div>${btn('close', {}, 'Поехали!', 'y')}`;
+        Нажми на здание в городе — откроется магазин.<br><br><span class="dto"><b>Клавиши:</b> <span class="kbd">1</span>–<span class="kbd">=</span> инструменты · <span class="kbd">Tab</span> ферма/город · <span class="kbd">B</span> склад · <span class="kbd">M</span> рынок · <span class="kbd">Esc</span> закрыть · колесо мыши — приближение. Можно вести мышью с зажатой кнопкой по грядкам, чтобы копать, сеять или собирать сразу много.</span></div>${btn('close', {}, 'Поехали!', 'y')}`;
     },
   };
 
@@ -674,6 +677,7 @@
 
   function start() {
     { const sk = $('skipdesk'); if (sk) sk.onclick = () => $('desktop').classList.add('skip'); }
+    if (matchMedia('(hover:none) and (pointer:coarse)').matches) $('desktop').classList.add('skip'); // на телефоне играем сразу, без предупреждения
     window.__boot = { t0: performance.now() };
     const d = load();
     S = d ? L.migrate(d.s) : L.createState();

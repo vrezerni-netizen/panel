@@ -449,11 +449,39 @@
       street(-150, 150, 130, 0); street(-150, 150, 170, 40);
       for (const [vx, vz] of VILLAGES) street(vx - 50, vx + 50, vz, vx);
       world.add(bake(fenceG, 0.04));
-      for (let i = 0; i < 120; i++) { // рощи между фермами и дорогами
-        const x = (rng() - 0.5) * 400, z = 6 + rng() * 58;
-        if (ROAD_X.some((rx) => Math.abs(x - rx) < 8)) continue; if (z < 8 || z > 62) continue;
-        if (Object.values(SLOT).some(([sx, sz]) => sz > 0 && Math.abs(x - sx) < 52 && z > 16 && z < 62)) continue;
-        const t = treeM(i); t.position.set(x, 0, z); decor.add(t);
+      // рощи: деревья растут группами (как в природе), а не одиночками посреди травы
+      const farmBoxes = Object.values(SLOT).map(([sx, sz]) => [sx - 66, sx + 66, sz - 46, sz + 46]);
+      const free = (x, z, m) => {
+        if (ROAD_X.some((rx) => Math.abs(x - rx) < RW / 2 + m)) return false;
+        if (ROAD_Z.concat([ROAD_N]).some((rz) => Math.abs(z - rz) < RW / 2 + m)) return false;
+        if (farmBoxes.some(([a, b, c, d]) => x > a - m && x < b + m && z > c - m && z < d + m)) return false;
+        if (z > 60 && z < 106 && x > -135 && x < 90) return false; // город
+        if (z > 110 && z < 190 && x > -165 && x < 165) return false; // улицы с домами
+        if (Math.hypot(x - 214, z - 30) < 36) return false; // пруд
+        if (Math.abs(x - SAWMILL_POS[0]) < 36 && z < ROAD_N + 2 && z > ROAD_N - 50) return false;
+        if (SITE_POS.some(([sx, sz]) => Math.abs(x - sx) < 24 && Math.abs(z - sz) < 26)) return false;
+        if (VILLAGES.some(([vx, vz]) => Math.abs(x - vx) < 60 && Math.abs(z - vz) < 24)) return false;
+        if (Math.abs(x) > 335) return false;
+        return true;
+      };
+      const bushM = (i) => { i = Math.abs(Math.round(i)); return MODEL('tree', 'bush', { seed: i % 3 }, () => part('sph', 0x3f6b2a, 0, 0.8, 0, 1.8, 1.4, 1.8)); };
+      let tn = 0;
+      for (let c = 0, tries = 0; c < 46 && tries < 900; tries++) { // рощи
+        const cx = (rng() - 0.5) * 640, cz = -96 + rng() * 300, R = 7 + rng() * 11, n = 7 + Math.floor(rng() * 12);
+        if (!free(cx, cz, R * 0.6)) continue; c++;
+        for (let j = 0; j < n; j++) {
+          const a = rng() * 6.283, d = Math.sqrt(rng()) * R, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+          if (!free(x, z, 3)) continue; tn++;
+          const edge = d > R * 0.7 && rng() < 0.55, m = edge ? bushM(tn) : treeM(tn + c * 3, rng() < 0.28);
+          m.position.set(x, 0, z); m.rotation.y = rng() * 6.283; if (!edge) m.scale.multiplyScalar(0.8 + rng() * 0.5); decor.add(m);
+        }
+      }
+      for (let k = 0, tries = 0; k < 60 && tries < 500; tries++) { // живые изгороди и одиночные кусты вдоль дорог
+        const horiz = rng() < 0.5, z0 = ROAD_Z[Math.floor(rng() * ROAD_Z.length)], x0 = ROAD_X[Math.floor(rng() * ROAD_X.length)];
+        const len = 14 + Math.floor(rng() * 20), sd = rng() < 0.5 ? -1 : 1, off = RW / 2 + 3.2;
+        const ax = horiz ? (rng() - 0.5) * 560 : x0 + sd * off, az = horiz ? z0 + sd * off : -90 + rng() * 280;
+        if (!free(ax, az, 1.5) || !free(horiz ? ax + len : ax, horiz ? az : az + len, 1.5)) continue; k++;
+        for (let q = 0; q < len; q += 3.2) { tn++; const b = bushM(tn); b.position.set(horiz ? ax + q : ax, 0, horiz ? az : az + q); b.rotation.y = rng() * 6.283; decor.add(b); }
       }
       world.add(bakeTex(decor));
       // пятна на траве: сухая трава и тёмные места с мягкими краями, чтобы земля не была однотонной
@@ -472,12 +500,19 @@
       // лес по краям карты (instancing)
       const treeSpots = [];
       const deco = [[-345, -30, 110, 60], [-345, 60, 110, 60], [345, -30, 110, 60], [345, 60, 110, 60], [-110, -270, 130, 50], [110, -270, 130, 50], [-60, 190, 120, 34], [210, 195, 100, 34]];
-      for (let i = 0; i < 16000 && treeSpots.length < 6500; i++) {
-        const x = (rng() - 0.5) * 1100, z = -420 + rng() * 900;
-        const inCore = x > -300 && x < 290 && z > -192 && z < 190; if (inCore) continue;
-        if (deco.some(([cx, cz, w, d]) => Math.abs(x - cx) < w / 2 + 4 && Math.abs(z - cz) < d / 2 + 4)) continue;
-        if (VILLAGES.some(([vx, vz]) => Math.abs(x - vx) < 60 && Math.abs(z - vz) < 28)) continue;
-        treeSpots.push([x, z, 1.8 + rng() * 1.8, rng()]);
+      // лес растёт массивами (поляны и густые чащи), а не равномерной россыпью одиночных деревьев
+      const nz = (x, z) => (Math.sin(x * 0.0113 + 1.3) + Math.sin(z * 0.0131 + 0.4) + Math.sin((x + z) * 0.0071 + 2.1) + Math.sin((x - z) * 0.0173 + 0.7) + 0.7 * Math.sin(x * 0.031 + z * 0.027)) / 4.7;
+      const sm = (e0, e1, v) => { const q = Math.min(1, Math.max(0, (v - e0) / (e1 - e0))); return q * q * (3 - 2 * q); };
+      const FS = W.lite ? 8 : 6;
+      for (let x = -560; x <= 560; x += FS) for (let z = -430; z <= 480; z += FS) {
+        const px = x + (rng() - 0.5) * (FS - 1), pz = z + (rng() - 0.5) * (FS - 1);
+        const inCore = px > -300 && px < 290 && pz > -192 && pz < 190; if (inCore) continue;
+        if (deco.some(([cx, cz, w, d]) => Math.abs(px - cx) < w / 2 + 4 && Math.abs(pz - cz) < d / 2 + 4)) continue;
+        if (VILLAGES.some(([vx, vz]) => Math.abs(px - vx) < 60 && Math.abs(pz - vz) < 28)) continue;
+        const dc = Math.hypot(Math.max(-300 - px, px - 290, 0), Math.max(-192 - pz, pz - 190, 0)); // расстояние до обжитой части карты
+        const p = sm(-0.12, 0.18, nz(px, pz) + 0.55 * sm(40, 200, dc) - 0.15 * (1 - sm(0, 40, dc))); if (rng() > p && rng() > 0.001) continue;
+        const stand = nz(px * 0.6 + 90, pz * 0.6 - 40) > 0;
+        treeSpots.push([px, pz, 1.8 + rng() * 1.8, stand ? rng() * 0.62 : 0.4 + rng() * 0.6]);
       }
       // большие поля по краям карты: просто для красоты, как на настоящей ферме
       deco.forEach(([cx, cz, w, d], i) => {
@@ -488,7 +523,7 @@
       const pines = treeSpots.filter((t) => t[3] < 0.55), oaks = treeSpots.filter((t) => t[3] >= 0.55);
       const trunkGeo = G.cyl(), coneGeo = G.cone(), sphGeo = new T.SphereGeometry(0.5, 7, 6);
       const mk = (geoms, list, build) => {
-        const m = new T.InstancedMesh(geoms, new T.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), list.length); m.castShadow = true; m.receiveShadow = true;
+        const m = new T.InstancedMesh(geoms, new T.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), list.length); m.castShadow = !W.lite; m.receiveShadow = true;
         const d = new T.Object3D(), c = new T.Color();
         list.forEach((t, i) => { build(d, t, c); d.updateMatrix(); m.setMatrixAt(i, d.matrix); m.setColorAt(i, c); }); m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; world.add(m); return m;
       };
