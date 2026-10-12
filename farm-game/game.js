@@ -13,7 +13,7 @@
   };
 
   let S, world;
-  const ui = { mode: 'farm', tool: 'hoe', seed: null, modal: null, tab: {}, load: {}, truck: 0, sound: true, spinning: false, hold: null, wheelAngle: 0, lastLog: 0, confirm: null, toastAt: {} };
+  const ui = { speed: 1, mode: 'map', tool: 'hoe', seed: null, modal: null, tab: {}, load: {}, truck: 0, sound: true, spinning: false, hold: null, wheelAngle: 0, lastLog: 0, confirm: null, toastAt: {} };
   window.__game = { get S() { return S; }, ui, L, open: (id, t) => openModal(id, t) };
 
   // ---------------------------------------------------------------- звук
@@ -51,47 +51,97 @@
   function floatAt(x, y, html) { const el = document.createElement('div'); el.className = 'fl'; el.style.left = x + 'px'; el.style.top = y + 'px'; el.innerHTML = html; $('floats').appendChild(el); setTimeout(() => el.remove(), 1200); }
   const gi = (k) => (L.GOODS[k] ? L.GOODS[k].icon : '❓');
 
+  // ---------------------------------------------------------------- значки
+  const SV = (d, fill) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="${fill || 'none'}" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICON = {
+    hoe: SV('<path d="M4 20l8-8"/><path d="M11 7c2-3 6-3 9 0-3 0-5 1-6 3z" fill="currentColor"/><path d="M13 10l-2 2"/>'),
+    seed: SV('<path d="M12 21v-9"/><path d="M12 12C12 8 9 6 5 6c0 4 3 6 7 6z"/><path d="M12 15c0-3 2-5 6-5 0 3-2 5-6 5z"/>'),
+    water: SV('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/>'),
+    harvest: SV('<path d="M4 11h16l-2 9H6z"/><path d="M8 11l4-6 4 6"/>'),
+    fert: SV('<path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.500 15h9"/>'),
+    superfert: SV('<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>', 'currentColor'),
+    sprinkler: SV('<path d="M12 21v-8"/><circle cx="12" cy="10" r="3"/><path d="M5 6l2 2M19 6l-2 2M3 11h3M18 11h3"/>'),
+    remove: SV('<path d="M6 6l12 12M18 6L6 18"/>'),
+    barn: SV('<path d="M3 11l9-7 9 7v9H3z"/><path d="M9 20v-6h6v6"/>'),
+    paw: SV('<circle cx="7" cy="9" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="17" cy="9" r="2"/><path d="M8 17c0-3 2-5 4-5s4 2 4 5c0 2-2 2-4 2s-4 0-4-2z"/>'),
+    market: SV('<path d="M3 9l2-5h14l2 5z"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/>'),
+    orders: SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
+    farm: SV('<path d="M3 20h18"/><path d="M5 20v-8l7-5 7 5v8"/><path d="M10 20v-5h4v5"/>'),
+    town: SV('<path d="M4 20V9l5-3v14"/><path d="M9 20V5l6 3v12"/><path d="M15 20V11l5 2v7"/>'),
+    map: SV('<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>'),
+    gift: SV('<rect x="3" y="9" width="18" height="11" rx="1"/><path d="M12 9v11M3 13h18"/><path d="M12 9S9 3 7 5s1 4 5 4zM12 9s3-6 5-4-1 4-5 4z"/>'),
+    menu: SV('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+    gem: SV('<path d="M6 4h12l4 6-10 11L2 10z"/><path d="M2 10h20M9 4l-2 6 5 11 5-11-2-6"/>'),
+    ticket: SV('<path d="M3 8a2 2 0 0 0 0 4v4h18v-4a2 2 0 0 0 0-4V6H3z"/><path d="M10 6v12" stroke-dasharray="2 2"/>'),
+    mail: SV('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
+    fields: SV('<path d="M3 8l9-4 9 4v10l-9 3-9-3z"/><path d="M3 8l9 4 9-4M12 12v9"/>'),
+    gear: SV('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.600 5.600l2.100 2.100M16.300 16.300l2.100 2.100M5.600 18.400l2.100-2.100M16.300 7.700l2.100-2.100"/>'),
+    help: SV('<circle cx="12" cy="12" r="9"/><path d="M9.500 9.500a2.500 2.500 0 1 1 3.500 2.300c-.7.400-1 1-1 1.700M12 17v.1"/>'),
+    camera: SV('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.500"/>'),
+    bank: SV('<path d="M3 10l9-6 9 6z"/><path d="M5 10v8M9.500 10v8M14.500 10v8M19 10v8M3 20h18"/>'),
+    truck: SV('<path d="M2 6h11v10H2zM13 9h5l3 3v4h-8z"/><circle cx="6" cy="17" r="2" fill="currentColor"/><circle cx="17" cy="17" r="2" fill="currentColor"/>'),
+  };
+
   // ---------------------------------------------------------------- действия на ферме
   const TOOLS = [
-    { id: 'hoe', icon: '⛏️', name: 'Копать' }, { id: 'seed', icon: '🌱', name: 'Сеять' }, { id: 'water', icon: '💧', name: 'Полив' }, { id: 'harvest', icon: '🧺', name: 'Сбор' },
-    { id: 'fert', icon: '🧪', name: 'Удобр.' }, { id: 'superfert', icon: '⚡', name: 'Супер' }, { id: 'sprinkler', icon: '🚿', name: 'Поливалка' },
-    { id: 'tractor', icon: '🚜', name: 'Трактор' }, { id: 'combine', icon: '🌾', name: 'Комбайн' }, { id: 'waterer', icon: '🚒', name: 'Поливмаш' }, { id: 'spreader', icon: '🧂', name: 'Удобр.маш' }, { id: 'remove', icon: '🪓', name: 'Убрать' },
+    { id: 'hoe', name: 'Копать' }, { id: 'seed', name: 'Сеять' }, { id: 'water', name: 'Полив' }, { id: 'harvest', name: 'Сбор' },
+    { id: 'fert', name: 'Удобрение' }, { id: 'superfert', name: 'Супер' }, { id: 'sprinkler', name: 'Поливалка' }, { id: 'remove', name: 'Убрать' },
   ];
-  const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
-  const needSeed = () => ui.tool === 'seed' || ui.tool === 'tractor';
+  const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  const needSeed = () => ui.tool === 'seed' || S.up.tractor > 0;
+  const FXK = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest', waterer: 'water', spreader: 'fert' };
   function pickSeed() {
     if (ui.seed && S.seeds[ui.seed] > 0) return;
     ui.seed = L.CROP_ORDER.find((k) => S.seeds[k] > 0 && L.CROPS[k].level <= S.level) || null;
   }
-  function onTile(x, y, first) {
-    if (ui.modal) return;
-    pickSeed();
-    const tool = ui.tool;
-    if (needSeed() && tool === 'seed' && !ui.seed) { toastOnce('Нет семян — купи в магазине 🌱 в городе', 'bad'); return; }
-    const had = S.level;
-    const r = L.act(S, tool, x, y, ui.seed);
-    if (!r.ok) { toastOnce(r.msg, 'bad'); if (first) sfx.bad(); return; }
-    const sp = world.tileScreen(x, y);
-    const kind = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest', waterer: 'water', spreader: 'fert' }[r.fx] || 'dig';
-    if (L.MACHINES[tool] && L.MACHINES[tool].kind === 'field') {
-      world.drive(tool, y);
-      for (const [cx, cy] of L.areaCells(S, tool, x, y)) world.fx(kind, cx, cy);
-    } else world.fx(kind, x, y, { gold: r.gold });
+  function afterAction(r, sfi, x, y, tool, kind) {
+    const sp = world.tileScreen(sfi, x, y);
     let txt = '';
     if (r.item) txt += `+${r.n}${gi(r.item)} `;
-    if (tool === 'combine') txt += `+${r.n}📦 `;
+    if (tool === 'combine' && r.n) txt += `+${r.n}📦 `;
     if (tool === 'tractor' && r.planted) txt += `🌱×${r.planted} `;
     if (r.xp) txt += `<span style="color:#ffd54f">+${r.xp}⭐</span>`;
     if (r.gold) txt = `✨ ЗОЛОТОЙ ×3 ${txt}`;
     if (txt) floatAt(sp.x, sp.y, txt);
     (sfx[kind] || sfx.dig)(); if (r.gold) sfx.coin();
-    if (S.level > had) onLevelUp();
     pickSeed(); lastBar = ''; renderBar();
+  }
+  function onTile(sfi, x, y, first) {
+    if (ui.modal) return;
+    pickSeed(); L.setFarm(S, sfi);
+    const tool = ui.tool;
+    if (tool === 'seed' && !ui.seed) { toastOnce('Нет семян — купи в магазине семян в городе', 'bad'); return; }
+    const had = S.level;
+    const r = L.act(S, tool, x, y, ui.seed);
+    if (!r.ok) { toastOnce(r.msg, 'bad'); if (first) sfx.bad(); return; }
+    const kind = FXK[r.fx] || 'dig';
+    world.fx(kind, sfi, x, y, { gold: r.gold });
+    afterAction(r, sfi, x, y, tool, kind);
+    if (S.level > had) onLevelUp();
+  }
+  /** Машину отпустили над грядкой: она работает в этом месте. */
+  function onVehicleDrop(key, sfi, x, y) {
+    if (ui.modal) return;
+    pickSeed(); L.setFarm(S, sfi);
+    const had = S.level, r = L.act(S, key, x, y, ui.seed);
+    if (!r.ok) { toastOnce(r.msg, 'bad'); sfx.bad(); return; }
+    const kind = FXK[r.fx] || 'dig';
+    for (const [cx, cy] of L.areaCells(S, key, x, y)) world.fx(kind, sfi, cx, cy);
+    world.workAnim(key); afterAction(r, sfi, x, y, key, kind);
+    if (S.level > had) onLevelUp();
+  }
+  function onVehicleClick(key) {
+    const lv = S.up[key] || 0, c = S.cool[key] || 0;
+    toastOnce(`${L.MACHINES[key].icon} ${L.MACHINES[key].name}, ур. ${lv}: ${c > 0 ? 'остывает ' + Math.ceil(c / 1000) + ' с' : 'готов. Перетащи мышью на грядку, чтобы поработать'}`);
   }
   function onHover(t) {
     if (!t) { world.highlight(null); return; }
-    const big = L.MACHINES[ui.tool] && L.MACHINES[ui.tool].kind === 'field' && S.up[ui.tool] > 0;
-    world.highlight(big ? L.areaCells(S, ui.tool, t.x, t.y) : [[t.x, t.y]], big ? 0xffc83d : 0xffffff);
+    world.highlight([t.wx], 0xffffff);
+  }
+  function onFarmSign(id) {
+    const d = L.FARM_DEFS.find((x) => x.id === id); if (!d || ui.modal) return;
+    if (S.level < d.level) return toast(`${d.name} откроется на ${d.level} уровне`, 'bad');
+    ui.buyId = id; openModal('buyfarm');
   }
   function unlocksAt(lv) {
     const out = [];
@@ -106,96 +156,106 @@
   function onLevelUp() {
     sfx.level(); const u = unlocksAt(S.level);
     toast(`🎉 Уровень ${S.level}!${u.length ? ' Открылось: ' + u.join(', ') : ''}`, 'good');
-    world.refreshCity(S);
   }
 
   // ---------------------------------------------------------------- HUD
-  let lastHud = '', lastBar = '', lastSeed = '';
+  let lastHud = '', lastBar = '', lastSeed = '', hudStale = false;
   function clockText() { const h = (S.clock / L.DAY_MS) * 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`; }
   const WEATHER = { sun: ['☀️', 'Ясно'], rain: ['🌧️', 'Дождь'], drought: ['🌵', 'Засуха'], pests: ['🐛', 'Вредители'] };
   function mmss(ms) { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
   let hudBuilt = false;
   const setT = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
   const setH = (id, hide) => { const e = $(id); if (e && e.hidden !== hide) e.hidden = hide; };
+  const setHtml = (id, h) => { const e = $(id); if (e && e._h !== h) { e._h = h; e.innerHTML = h; } };
+  const rb = (act, data, icon, tip, extra) => `<button class="rbtn" title="${tip}" data-act="${act}" ${Object.entries(data).map(([k, v]) => `data-${k}="${v}"`).join(' ')}>${icon}${extra || ''}</button>`;
+  function temp() { const base = { sun: 22, rain: 13, drought: 33, pests: 20 }[S.weather.type]; return Math.round(base + 6 * Math.sin((S.clock / L.DAY_MS) * Math.PI * 2 - Math.PI / 2)); }
   function renderHud() {
     if (!hudBuilt) {
       hudBuilt = true;
       $('hud').innerHTML = `
-      <div class="lvl" data-act="modal" data-id="levels"><div class="b" id="h-lv"></div><div class="t"><b id="h-lvt"></b><small id="h-xpt"></small><div class="xp"><i id="h-xp"></i></div></div></div>
-      <div class="hsp"></div>
-      <div class="pill" data-act="modal" data-id="bank">🪙 <span id="h-c"></span></div>
-      <div class="pill" data-act="modal" data-id="bank">💎 <span id="h-g"></span><span class="plus">+</span></div>
-      <div class="pill" data-act="modal" data-id="casino">🎟️ <span id="h-t"></span></div>
-      <div class="row2">
-        <button class="tab2" id="h-mf" data-act="mode" data-m="farm">🌾 Ферма</button>
-        <button class="tab2" id="h-mc" data-act="mode" data-m="city">🏙️ Город</button>
-        <button class="tab2" id="h-fm" data-act="modal" data-id="farms"></button><span class="chip" id="h-w"></span><span class="chip boost" id="h-b"></span><span class="chip" id="h-tr"></span>
-        <div class="hsp"></div>
-        <button class="ibtn glow" id="h-d" data-act="daily">🎁</button>
-        <button class="ibtn" data-act="modal" data-id="orders">📜<span class="bd" id="h-o"></span></button>
-        <button class="ibtn" data-act="modal" data-id="menu">☰</button>
-      </div>`;
+      <div class="topbar" id="goodsbar" data-act="modal" data-id="barn"></div>
+      <div class="avatar" data-act="modal" data-id="levels" title="Уровни и награды"><div class="av"><b id="h-lv"></b></div><i class="chev">⌄</i><div class="xpr"><i id="h-xp"></i></div></div>
+      <div class="lcol">
+        ${rb('modal', { id: 'orders' }, ICON.orders, 'Заказы жителей', '<span class="bd" id="h-o"></span>')}
+        ${rb('modal', { id: 'log' }, ICON.mail, 'Журнал событий', '<span class="bd g" id="h-l"></span>')}
+        ${rb('cam', { v: 'home' }, ICON.farm, 'К моей ферме (Tab)')}
+        ${rb('cam', { v: 'town' }, ICON.town, 'К городу (Tab)')}
+        ${rb('cam', { v: 'all' }, ICON.map, 'Вся карта')}
+        ${rb('modal', { id: 'farms' }, ICON.fields, 'Мои фермы')}
+        <button class="rbtn glow" id="h-d" data-act="daily" title="Ежедневный подарок">${ICON.gift}</button>
+      </div>
+      <div class="lcol2">
+        ${rb('modal', { id: 'menu' }, ICON.gear, 'Меню и настройки')}
+        ${rb('modal', { id: 'help' }, ICON.help, 'Как играть')}
+        ${rb('photo', {}, ICON.camera, 'Сделать снимок')}
+      </div>
+      <div class="topr"><span class="chip boost" id="h-b"></span><span class="chip" id="h-tr"></span><span class="chip hintc" id="h-v"></span></div>`;
     }
-    const v = ui.hold || S, need = L.xpNeeded(S.level), w = WEATHER[S.weather.type];
-    setT('h-lv', S.level); setT('h-lvt', 'Уровень ' + S.level); setT('h-xpt', `${fmt(S.xp)} / ${fmt(need)} ⭐ · репутация ${S.rep}`);
-    $('h-xp').style.width = Math.min(100, S.xp / need * 100) + '%';
-    setT('h-c', fmt(v.coins)); setT('h-g', fmt(v.crystals)); setT('h-t', fmt(v.tickets));
-    $('h-mf').classList.toggle('on', ui.mode === 'farm'); $('h-mc').classList.toggle('on', ui.mode === 'city');
-    setH('h-fm', ui.mode !== 'farm'); setT('h-fm', `${L.FARM_DEFS.find((d) => d.id === L.farm(S).id).icon} ${L.FARM_DEFS.find((d) => d.id === L.farm(S).id).name} ▾`);
-    setT('h-w', `${w[0]} ${w[1]} · ${clockText()} · день ${S.day}`);
+    const need = L.xpNeeded(S.level);
+    setT('h-lv', S.level); $('h-xp').style.width = Math.min(100, S.xp / need * 100) + '%'; $('h-xp').parentElement.title = `Уровень ${S.level}: ${fmt(S.xp)} / ${fmt(need)} опыта`;
+    const gl = Object.keys(S.goods).filter((k) => S.goods[k] > 0).sort((a, b) => S.goods[b] - S.goods[a]).slice(0, 8);
+    setHtml('goodsbar', gl.length ? gl.map((k) => `<span title="${L.GOODS[k].name}"><i>${gi(k)}</i>${fmt(S.goods[k])}</span>`).join('') : '<span class="dim">Склад пуст: собери урожай</span>');
     setH('h-b', !(S.boost > 0)); setT('h-b', `⚡ рост ×2 · ${mmss(S.boost)}`);
     setH('h-tr', !S.trips.length); setT('h-tr', `🚚 в пути: ${S.trips.length}`);
+    const hasVeh = ['tractor', 'combine', 'waterer', 'spreader'].some((k) => S.up[k] > 0); setH('h-v', !hasVeh); setT('h-v', '🖱 Технику можно тащить мышью на грядки');
     setH('h-d', S.daily.key === todayKey()); setH('h-o', !S.orders.length); setT('h-o', S.orders.length);
+    const unread = S.log.filter((l) => l.n > (ui.logSeen || 0)).length; setH('h-l', !unread); setT('h-l', unread);
+    // нижняя панель: динамические части
+    if ($('b-money')) {
+      const v = ui.hold || S, w = WEATHER[S.weather.type];
+      setT('b-c', fmt(v.coins)); setT('b-g', fmt(v.crystals)); setT('b-t', fmt(v.tickets));
+      setT('b-date', `День ${S.day} · ${clockText()}`); setT('b-w', `${w[0]} ${temp()}°C`);
+      const ks = L.GOOD_KEYS.filter((k) => !L.CROPS[k] || L.CROPS[k].level <= S.level);
+      let up = ks[0], dn = ks[0]; for (const k of ks) { if (S.market.m[k] > S.market.m[up]) up = k; if (S.market.m[k] < S.market.m[dn]) dn = k; }
+      const pc = (k) => Math.round((S.market.m[k] - 1) * 100);
+      setHtml('b-up', `<span class="trend up">▲</span>${gi(up)}<b>${pc(up) >= 0 ? '+' : ''}${pc(up)}%</b>`); setHtml('b-dn', `<span class="trend dn">▼</span>${gi(dn)}<b>${pc(dn) >= 0 ? '+' : ''}${pc(dn)}%</b>`);
+      setHtml('b-stock', `${ICON.barn}<b>${fmt(L.total(S.goods))}/${L.barnCap(S)}</b>`);
+      for (const sp of [0, 1, 2, 4]) { const e = $('sp' + sp); if (e) e.classList.toggle('on', ui.speed === sp); }
+    }
   }
   function renderBar() {
-    let html = '';
-    if (ui.mode === 'farm') {
-      for (const t of TOOLS) {
-        let extra = '', dis = '';
-        if (t.id === 'fert') extra = `<span class="n">${S.items.fert}</span>`;
-        if (t.id === 'superfert') extra = `<span class="n">${S.items.superfert}</span>`;
-        if (L.MACHINES[t.id]) {
-          if (!S.up[t.id]) { dis = 'dis'; extra = `<span class="cd">🔒${L.MACHINES[t.id].need}</span>`; }
-          else if (S.cool[t.id] > 0) extra = `<span class="cd">${Math.ceil(S.cool[t.id] / 1000)}</span>`;
-        }
-        if (t.id === 'sprinkler' && S.level < L.SPRINKLER.need) { dis = 'dis'; extra = `<span class="cd">🔒${L.SPRINKLER.need}</span>`; }
-        const ti = TOOLS.indexOf(t);
-        html += `<button class="tool ${ui.tool === t.id ? 'on' : ''} ${dis}" data-act="tool" data-t="${t.id}"><span class="key">${HOTKEYS[ti] || ''}</span><b>${t.icon}</b>${t.name}${extra}</button>`;
-      }
-      html += `<button class="bigbtn" data-act="modal" data-id="animals">🐄 Загон</button><button class="bigbtn g" data-act="modal" data-id="barn">📦 Склад ${fmt(L.total(S.goods))}/${L.barnCap(S)}</button><button class="bigbtn b" data-act="mode" data-m="city">🏙️ В город</button>`;
-    } else {
-      html = `<button class="bigbtn g" data-act="modal" data-id="barn">📦 Склад: отправить на рынок</button><button class="bigbtn" data-act="modal" data-id="market">🏪 Рынок</button><button class="bigbtn" data-act="modal" data-id="orders">📜 Заказы ${S.orders.length}</button><button class="bigbtn b" data-act="mode" data-m="farm">🌾 На ферму</button>`;
+    let html = `<div class="bstats"><div class="bst" id="b-up" title="Товар, который сейчас дорожает на рынке"></div><div class="bst" id="b-dn" title="Товар, который сейчас дешевеет"></div><div class="bst" id="b-stock" data-act="modal" data-id="barn" title="Склад"></div></div><div class="tools">`;
+    for (const t of TOOLS) {
+      let extra = '', dis = '';
+      if (t.id === 'fert') extra = `<span class="n">${S.items.fert}</span>`;
+      if (t.id === 'superfert') extra = `<span class="n">${S.items.superfert}</span>`;
+      if (t.id === 'sprinkler' && S.level < L.SPRINKLER.need) { dis = 'dis'; extra = `<span class="cd">${L.SPRINKLER.need}</span>`; }
+      html += `<button class="tool ${ui.tool === t.id ? 'on' : ''} ${dis}" data-act="tool" data-t="${t.id}" title="${t.name} (${HOTKEYS[TOOLS.indexOf(t)]})"><span class="key">${HOTKEYS[TOOLS.indexOf(t)]}</span>${ICON[t.id]}${extra}</button>`;
     }
-    if (html !== lastBar) { lastBar = html; $('bar').innerHTML = html; }
+    html += `<i class="sep"></i>
+      <button class="tool" data-act="modal" data-id="animals" title="Загон и сараи">${ICON.paw}</button>
+      <button class="tool" data-act="modal" data-id="barn" title="Склад: отправить на рынок (B)">${ICON.barn}</button>
+      <button class="tool" data-act="modal" data-id="market" title="Рынок (M)">${ICON.market}${Object.keys(S.stall).length ? '<span class="n g">•</span>' : ''}</button>
+      <button class="tool" data-act="modal" data-id="seeds" title="Магазин семян">${ICON.seed}<span class="n g">+</span></button>
+      <button class="tool" data-act="modal" data-id="tech" title="Техцентр">${ICON.truck}</button>
+      <button class="tool" data-act="modal" data-id="bank" title="Банк">${ICON.bank}</button>
+      <button class="tool" data-act="modal" data-id="casino" title="Колесо удачи">${ICON.ticket}</button></div>
+      <div class="bright" id="b-money"><div class="mny" data-act="modal" data-id="bank" title="Монеты"><i class="coin"></i><b id="b-c"></b></div><div class="mny" data-act="modal" data-id="bank" title="Кристаллы"><i class="dgem">D</i><b id="b-g"></b></div><div class="mny" data-act="modal" data-id="casino" title="Билеты"><span class="gm tk">${ICON.ticket}</span><b id="b-t"></b></div>
+      <div class="speed"><button id="sp0" data-act="speed" data-s="0" title="Пауза">${SV('<path d="M8 5v14M16 5v14"/>')}</button><button id="sp1" data-act="speed" data-s="1" title="Обычная скорость">${SV('<path d="M7 5l12 7-12 7z"/>', 'currentColor')}</button><button id="sp2" data-act="speed" data-s="2" title="Скорость ×2">${SV('<path d="M4 5l8 7-8 7zM12 5l8 7-8 7z"/>', 'currentColor')}</button><button id="sp4" data-act="speed" data-s="4" title="Скорость ×4">${SV('<path d="M2 5l6 7-6 7zM9 5l6 7-6 7zM16 5l6 7-6 7z"/>', 'currentColor')}</button></div>
+      <div class="dt"><b id="b-date"></b><span id="b-w"></span></div></div>`;
+    if (html !== lastBar) { lastBar = html; $('bar').innerHTML = html; renderHud(); }
     // семена
     let sh = '';
-    if (ui.mode === 'farm' && needSeed()) {
+    if (needSeed()) {
       const list = L.CROP_ORDER.filter((k) => L.CROPS[k].level <= S.level + 1);
-      sh = list.map((k) => { const c = L.CROPS[k], lock = c.level > S.level, n = S.seeds[k] || 0; return `<div class="seed ${ui.seed === k ? 'on' : ''} ${lock || !n ? 'off' : ''}" data-act="seedpick" data-k="${k}"><b>${c.icon}</b><span>${lock ? '🔒' + c.level : n}</span></div>`; }).join('');
-      sh += '<div class="seed" data-act="modal" data-id="seeds"><b>🛒</b><span>купить</span></div>';
+      sh = list.map((k) => { const c = L.CROPS[k], lock = c.level > S.level, n = S.seeds[k] || 0; return `<div class="seed ${ui.seed === k ? 'on' : ''} ${lock || !n ? 'off' : ''}" data-act="seedpick" data-k="${k}" title="${c.name}"><b>${c.icon}</b><span>${lock ? 'ур.' + c.level : n}</span></div>`; }).join('');
+      sh += '<div class="seed" data-act="modal" data-id="seeds"><b>+</b><span>купить</span></div>';
     }
     if (sh !== lastSeed) { lastSeed = sh; $('seedbar').innerHTML = sh; }
     $('seedbar').style.display = sh ? '' : 'none';
   }
-
-  // ---------------------------------------------------------------- переключение сцены
-  function goMode(m) {
-    if (m === ui.mode) return;
-    $('fade').classList.add('on');
-    setTimeout(() => {
-      ui.mode = m; world.setMode(m, S); lastBar = ''; renderBar(); renderHud(); world.highlight(null);
-      if (m === 'city') { world.refreshCity(S); if (L.total(S.goods) > 0) toastOnce('📦 На складе есть урожай — отправь машину на рынок!', 'good'); }
-      $('fade').classList.remove('on');
-    }, 230);
+  let camAt = 'home';
+  function goCam(v) {
+    camAt = v; if (v === 'home') world.focusHome(); else if (v === 'town') { world.focusTown(); if (L.total(S.goods) > 0) toastOnce('📦 На складе есть урожай — отправь машину на рынок!', 'good'); } else world.focusAll();
   }
 
   // ---------------------------------------------------------------- окна
   const MODALS = {};
   function openModal(id, tab) {
     ui.modal = id; if (tab != null) ui.tab[id] = tab; ui.confirm = null;
-    $('modal').hidden = false; renderModal(true);
+    $('modal').hidden = false; world.inputOn = false; renderModal(true);
   }
-  function closeModal() { if (ui.spinning) return; ui.modal = null; $('modal').hidden = true; world.highlight(null); }
+  function closeModal() { if (ui.spinning) return; ui.modal = null; $('modal').hidden = true; world.inputOn = true; world.highlight(null); }
   function renderModal(reset) {
     const m = MODALS[ui.modal]; if (!m) return;
     const tab = ui.tab[ui.modal] != null ? ui.tab[ui.modal] : (m.tabs ? m.tabs[0][0] : null);
@@ -318,7 +378,7 @@
     title: '🚜 Техцентр',
     tabs: [['tech', '🚜 Полевая'], ['animals', '🐄 Для животных'], ['auto', '🤖 Автоматика'], ['trucks', '🚚 Транспорт'], ['farm', '🏡 Ферма']],
     render(tab) {
-      if (tab === 'tech') return '<div class="hint">Техника работает по площади за одно нажатие. Каждый уровень сильнее, но улучшение дорожает вдвое, с 5-го уровня нужны кристаллы, а требуемый уровень игрока растёт.</div>' + L.FIELD_TOOLS.map(machCard).join('');
+      if (tab === 'tech') return '<div class="hint">Купленная техника стоит на карте у твоей фермы: <b>перетащи её мышью на любую грядку</b> и она вспашет, соберёт, польёт или удобрит целую площадь. Каждый уровень сильнее, но улучшение дорожает вдвое, с 5-го уровня нужны кристаллы, а требуемый уровень игрока растёт.</div>' + L.FIELD_TOOLS.map(machCard).join('');
       if (tab === 'animals') return '<div class="hint">Оборудование для животных. Для каждой группы своё: яйца, молоко, шерсть, мёд и трюфели. Сарай для каждого вида строится в загоне 🐄.</div>' + L.MACH_KEYS.filter((k) => L.MACHINES[k].kind === 'animal').map(machCard).join('');
       if (tab === 'auto') return '<div class="hint">Автоматика работает сама, пока ты в игре или ушёл. Каждый вид тратит монеты на топливо: если монет нет, он стоит. Сильнее с каждым уровнем.</div>' + L.AUTO_KEYS.map(machCard).join('');
       if (tab === 'trucks') {
@@ -423,6 +483,15 @@
     },
   };
 
+  MODALS.log = {
+    title: 'Журнал событий',
+    render() {
+      ui.logSeen = S.logN || 0;
+      if (!S.log.length) return '<div class="hint center">Пока тихо.</div>';
+      return S.log.slice().reverse().map((l) => card(l.kind === 'good' ? '✅' : l.kind === 'bad' ? '⚠️' : 'ℹ️', l.msg, '', '', '')).join('');
+    },
+  };
+  MODALS.photo = { title: 'Снимок', render() { return `<div class="hint">Нажми правой кнопкой мыши на картинку и выбери «Сохранить изображение».</div><img alt="Снимок фермы" style="width:100%;border-radius:6px" src="${ui.photo || ''}">`; } };
   // --- Меню
   MODALS.menu = {
     title: '☰ Меню',
@@ -438,7 +507,7 @@
     title: '❓ Как играть',
     render() {
       return `<div class="hint" style="font-size:15px">
-        <b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
+        <b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
         <b>2.</b> Когда созреет — 🧺 собери. Урожай попадает на <b>склад</b>.<br>
         <b>3.</b> Продать урожай можно <b>только на рынке в городе</b>: открой «📦 Склад», выбери машину, загрузи и отправь 🚚. В пути бывают пробки, поломки и разбойники.<br>
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
@@ -453,7 +522,9 @@
     close: closeModal,
     modal: (d) => openModal(d.id),
     tab: (d) => { ui.tab[ui.modal] = d.t; ui.confirm = null; renderModal(true); },
-    mode: (d) => goMode(d.m),
+    cam: (d) => goCam(d.v),
+    speed: (d) => { ui.speed = +d.s; },
+    photo: () => { ui.photo = world.screenshot(); openModal('photo'); },
     tool: (d) => { ui.tool = d.t; lastBar = ''; if (d.t === 'sprinkler' && S.level < L.SPRINKLER.need) toast(`Поливалки с ${L.SPRINKLER.need} уровня`, 'bad'); if (L.MACHINES[d.t] && !S.up[d.t]) { toast(`${L.MACHINES[d.t].name} покупается в Техцентре 🏙️ (с ${L.MACHINES[d.t].need} уровня)`, 'bad'); } pickSeed(); renderBar(); },
     seedpick: (d) => { if (!S.seeds[d.k]) { if (L.CROPS[d.k].level > S.level) return toast(`С ${L.CROPS[d.k].level} уровня`, 'bad'); toast('Семян нет — купи в магазине', 'bad'); return openModal('seeds', 'seeds'); } ui.seed = d.k; lastSeed = ''; renderBar(); },
     daily: () => { const r = L.claimDaily(S, todayKey()); if (r.ok) { sfx.coin(); toast(`🎁 Подарок: ${r.coins}🪙 ${r.gems}💎 ${r.tickets}🎟️`, 'good'); } else toast(r.msg, 'bad'); },
@@ -469,7 +540,7 @@
     send: () => {
       const r = L.startTrip(S, ui.truck, ui.load);
       if (!r.ok) return toast(r.msg, 'bad');
-      ui.load = {}; sfx.coin(); toast(`${L.TRUCKS[S.trucks[ui.truck].lvl].icon} Машина выехала на рынок!${r.trip.ev ? ' ' + r.trip.ev.text : ''}`, 'good'); closeModal(); goMode('city');
+      ui.load = {}; sfx.coin(); toast(`${L.TRUCKS[S.trucks[ui.truck].lvl].icon} Машина выехала на рынок!${r.trip.ev ? ' ' + r.trip.ev.text : ''}`, 'good'); closeModal(); goCam('town');
     },
     sell: (d) => { const r = L.sellStall(S, d.k, d.n === 'all' ? 'all' : +d.n); if (r.ok) { sfx.coin(); toast(`+${fmt(r.gain)} 🪙`, 'good'); } else toast(r.msg, 'bad'); },
     sellall: () => { const r = L.sellAllStall(S); if (r.ok) { sfx.coin(); toast(`Продано на ${fmt(r.gain)} 🪙`, 'good'); } else toast(r.msg, 'bad'); },
@@ -487,8 +558,8 @@
     abuy: (d) => { const r = L.buyAnimal(S, d.k); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
     collect: (d) => { const r = L.collect(S, d.k); if (r.ok) { sfx.harvest(); toast(`+${r.n} ${gi(r.item)}`, 'good'); } else toast(r.msg, 'bad'); },
     ex: (d) => { const r = L.exchange(S, d.d, +d.n); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
-    farmbuy: (d) => { const r = L.unlockFarm(S, d.id); if (r.ok) { sfx.level(); toast('Новая ферма твоя! 🎉', 'good'); closeModal(); world.refreshCity(S); goMode('farm'); } else toast(r.msg, 'bad'); },
-    gofarm: (d) => { L.setFarm(S, +d.i); closeModal(); },
+    farmbuy: (d) => { const r = L.unlockFarm(S, d.id); if (r.ok) { sfx.level(); toast('Новая ферма твоя! 🎉', 'good'); closeModal(); world.focusFarm(d.id); } else toast(r.msg, 'bad'); },
+    gofarm: (d) => { L.setFarm(S, +d.i); closeModal(); world.focusFarm(S.farms[+d.i].id); },
     snd: () => { ui.sound = !ui.sound; renderModal(); },
     reset: () => { if (ui.confirm !== 'reset') { ui.confirm = 'reset'; renderModal(); return; } store.del(SAVE); location.reload(); },
     spin: () => {
@@ -517,9 +588,9 @@
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === 'Escape') { if (ui.modal) closeModal(); return; }
     if (ui.modal) return;
-    if (e.key === 'Tab') { e.preventDefault(); goMode(ui.mode === 'farm' ? 'city' : 'farm'); return; }
+    if (e.key === 'Tab') { e.preventDefault(); goCam(camAt === 'town' ? 'home' : 'town'); return; }
     const i = HOTKEYS.indexOf(e.key);
-    if (ui.mode === 'farm' && i >= 0 && TOOLS[i]) A.tool({ t: TOOLS[i].id });
+    if (i >= 0 && TOOLS[i]) A.tool({ t: TOOLS[i].id });
     else if (e.key === 'b' || e.key === 'и') openModal('barn');
     else if (e.key === 'm' || e.key === 'ь') openModal('market');
   });
@@ -527,22 +598,15 @@
 
   function onBuilding(id) {
     if (ui.modal) return;
-    const fd = L.FARM_DEFS.find((d) => d.id === id);
-    if (fd) {
-      const i = S.farms.findIndex((f) => f.id === id);
-      if (i >= 0) { L.setFarm(S, i); goMode('farm'); }
-      else { ui.buyId = id; openModal('buyfarm'); }
-      return;
-    }
-    openModal(id);
+    openModal(id === 'warehouse' ? 'barn' : id);
   }
 
   // ---------------------------------------------------------------- главный цикл
   let last = performance.now(), acc = 0, uiAcc = 0, modalAcc = 0, saveAcc = 0;
   function frame(now) {
     const dt = Math.min(0.2, (now - last) / 1000); last = now;
-    acc += dt * 1000; uiAcc += dt; modalAcc += dt; saveAcc += dt;
-    if (acc >= 100) { L.tick(S, acc); acc = 0; }
+    acc += dt * 1000 * ui.speed; uiAcc += dt; modalAcc += dt; saveAcc += dt;
+    if (acc >= 100) { L.tick(S, acc); acc = 0; } if (ui.speed === 0) acc = 0;
     if (uiAcc >= 0.25) {
       uiAcc = 0; renderHud(); renderBar();
       for (const l of S.log) if (l.n > ui.lastLog) { ui.lastLog = l.n; toast(l.msg, l.kind === 'good' ? 'good' : l.kind === 'bad' ? 'bad' : ''); if (l.kind === 'good') sfx.coin(); else if (l.kind === 'bad') sfx.bad(); }
@@ -559,9 +623,8 @@
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(`С возвращением! Тебя не было ${Math.round(away / 60000)} мин — работа не стояла 🌾`, 'good'); } }
     ui.lastLog = S.logN || 0;
     try {
-      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onPen: () => { if (!ui.modal) openModal('animals'); } });
+      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onPen: () => { if (!ui.modal) openModal('animals'); } });
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }
-    world.setMode('farm', S); world.refreshCity(S);
     pickSeed();
     window.__world = world;
     renderHud(); renderBar();
