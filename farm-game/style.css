@@ -115,3 +115,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 8px;t
 @media (max-width:899px),(hover:none) and (pointer:coarse){#desktop{display:grid}}
 #nogl{position:absolute;inset:0;display:grid;place-items:center;padding:30px;text-align:center;background:#16201a;z-index:30}
 [hidden]{display:none!important}
+
+#loading{position:absolute;inset:0;z-index:40;background:radial-gradient(circle at 50% 40%,#2c3a26,#121a12);display:grid;place-items:center;transition:opacity .5s}
+#loading.done{opacity:0;pointer-events:none}
+.ld{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}.ld b{font-size:30px;letter-spacing:1px}.ld span{color:var(--mut)}
+.ld i{width:180px;height:5px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden;position:relative}.ld i:after{content:"";position:absolute;inset:0;width:40%;background:var(--green);animation:ldb 1.1s infinite ease-in-out}
+@keyframes ldb{from{transform:translateX(-100%)}to{transform:translateX(260%)}}

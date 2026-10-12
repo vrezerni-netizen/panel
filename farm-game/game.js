@@ -614,10 +614,12 @@
     if (modalAcc >= 1 && ui.modal && !ui.spinning) { modalAcc = 0; renderModal(); }
     if (saveAcc >= 8) { saveAcc = 0; save(); }
     world.update(dt, S);
+    if (window.__boot && !window.__boot.t1) { window.__boot.t1 = performance.now(); const ld = $('loading'); if (ld) { ld.classList.add('done'); setTimeout(() => ld.remove(), 700); } }
     requestAnimationFrame(frame);
   }
 
   function start() {
+    window.__boot = { t0: performance.now() };
     const d = load();
     S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(`С возвращением! Тебя не было ${Math.round(away / 60000)} мин — работа не стояла 🌾`, 'good'); } }
@@ -625,7 +627,7 @@
     try {
       world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onPen: () => { if (!ui.modal) openModal('animals'); } });
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }
-    pickSeed();
+    pickSeed(); if (window.__boot) window.__boot.tc = performance.now();
     window.__world = world;
     renderHud(); renderBar();
     if (!store.get(HELP)) { store.set(HELP, '1'); openModal('help'); }
@@ -633,5 +635,5 @@
     requestAnimationFrame(frame);
   }
   // смена фермы из города должна пересобрать сцену
-  window.addEventListener('load', start);
+  window.addEventListener('load', () => setTimeout(start, 60));
 })();
