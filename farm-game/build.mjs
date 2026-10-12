@@ -20,7 +20,7 @@ ${body}
 <script>${js('vendor/three.min.js')}</script>
 <script>${js('logic.js')}</script>
 ${texJs}<script>${js('world3d.js')}</script>
-${['models_buildings.js', 'models_vehicles.js', 'models_props.js', 'models_crops.js'].filter((f) => fs.existsSync(path.join(dir, f))).map((f) => `<script>${js(f)}</script>`).join('\n')}
+${['models_buildings.js', 'models_vehicles.js', 'models_props.js', 'models_crops.js', 'models_machines.js', 'models_machines2.js', 'models_trucks.js', 'models_forestry.js', 'models_forest.js', 'models_construct.js'].filter((f) => fs.existsSync(path.join(dir, f))).map((f) => `<script>${js(f)}</script>`).join('\n')}
 <script>${js('game.js')}</script>
 `;
 fs.mkdirSync(path.dirname(out), { recursive: true });

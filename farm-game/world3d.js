@@ -77,7 +77,7 @@
     const buckets = new Map(), v = new T.Vector3(), n = new T.Vector3(), nm = new T.Matrix3(), c = new T.Color();
     group.traverse((o) => {
       if (!o.isMesh || o.material.transparent) return;
-      const tex = !!o.material.map, key = tex ? o.material.uuid : 'vc';
+      const tex = !!o.material.map || !!o.material.isMeshStandardMaterial, key = tex ? o.material.uuid : 'vc';
       if (!buckets.has(key)) buckets.set(key, { mat: tex ? o.material : bakedMat, pos: [], nor: [], col: [], uv: [], tex });
       const B = buckets.get(key); let g = o.geometry; if (g.index) g = g.toNonIndexed();
       const pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv; nm.getNormalMatrix(o.matrixWorld);
@@ -103,6 +103,46 @@
     const uvs = []; for (let i = 0; i < tri.length / 3; i++) uvs.push((i % 3) * 0.5, (i % 2));
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(tri, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals();
     const m = new T.Mesh(g, material || mat(color, { side: T.DoubleSide })); m.userData.bakeColor = color; m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  // ---- физически корректные материалы (PBR): краска, резина, хром, стекло. Освещаются картой окружения (scene.environment).
+  const pbrCache = {};
+  function pmat(color, o) { const k = color + JSON.stringify(o || {}); return pbrCache[k] || (pbrCache[k] = new T.MeshStandardMaterial(Object.assign({ color, metalness: 0.1, roughness: 0.6, envMapIntensity: 0.4 }, o || {}))); }
+  const paint = (color, o) => pmat(color, Object.assign({ metalness: 0.45, roughness: 0.32, envMapIntensity: 0.6 }, o || {}));
+  const matte = (color, o) => pmat(color, Object.assign({ metalness: 0.0, roughness: 0.85 }, o || {}));
+  const metal = (color, o) => pmat(color, Object.assign({ metalness: 0.85, roughness: 0.35, envMapIntensity: 0.8 }, o || {}));
+  const rubberM = () => pmat(0x161618, { metalness: 0, roughness: 0.92 });
+  const chromeM = () => pmat(0xdfe3e8, { metalness: 1, roughness: 0.14, envMapIntensity: 1.0 });
+  const glassM = (tint) => pbrCache['glass' + (tint || 0)] || (pbrCache['glass' + (tint || 0)] = new T.MeshStandardMaterial({ color: tint || 0x9cc3d6, metalness: 0.9, roughness: 0.04, envMapIntensity: 1.0, transparent: true, opacity: 0.38, depthWrite: false }));
+  const lightM = (color) => pmat(color || 0xfff6d0, { emissive: color || 0xfff6d0, emissiveIntensity: 1.2, metalness: 0, roughness: 0.3 });
+  /** Скруглённый параллелепипед: ширина w (x), высота h (y), глубина d (z), радиус скругления r. Геометрия с гладкими нормалями. */
+  function rbox(w, h, d, r, seg) {
+    r = Math.max(0.001, Math.min(r == null ? 0.1 : r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)); const bev = Math.min(r * 0.7, d / 2 - 0.001, 0.3), cr = Math.max(0.0005, r - bev * 0.0);
+    const hw = w / 2 - bev, hh = h / 2 - bev, rr = Math.max(0.0005, Math.min(cr, hw - 0.0005, hh - 0.0005)), sh = new T.Shape();
+    sh.moveTo(-hw + rr, -hh); sh.lineTo(hw - rr, -hh); sh.quadraticCurveTo(hw, -hh, hw, -hh + rr); sh.lineTo(hw, hh - rr); sh.quadraticCurveTo(hw, hh, hw - rr, hh); sh.lineTo(-hw + rr, hh); sh.quadraticCurveTo(-hw, hh, -hw, hh - rr); sh.lineTo(-hw, -hh + rr); sh.quadraticCurveTo(-hw, -hh, -hw + rr, -hh);
+    const g = new T.ExtrudeGeometry(sh, { depth: Math.max(0.0005, d - 2 * bev), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelOffset: 0, bevelSegments: seg || 3, curveSegments: 6 });
+    g.translate(0, 0, -(d - 2 * bev) / 2); return g;
+  }
+  /** Выдавливание контура (массив [x,y]) по оси Z на глубину d с фаской b: профиль кузова, капот, крыло. */
+  function ext(points, d, b, seg) {
+    const sh = new T.Shape(); points.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+    const g = new T.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - 2 * (b || 0)), bevelEnabled: !!b, bevelThickness: b || 0, bevelSize: b || 0, bevelSegments: seg || 2, curveSegments: 8 });
+    g.translate(0, 0, -(d - 2 * (b || 0)) / 2); return g;
+  }
+  /** Mesh из любой геометрии и материала (тени включены). */
+  function mesh(g, m, x, y, z, rx, ry, rz) { const o = new T.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); o.rotation.set(rx || 0, ry || 0, rz || 0); o.castShadow = true; o.receiveShadow = true; return o; }
+  /** Карта окружения для металла и стекла: небо, горизонт, земля и яркое солнце. */
+  function makeEnv(renderer) {
+    const es = new T.Scene(), sg = new T.SphereGeometry(50, 32, 16), pos = sg.attributes.position, col = [];
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i) / 50, t = Math.max(0, y), g = Math.max(0, -y);
+      const r = y >= 0 ? 0.52 + (0.2 - 0.52) * Math.pow(t, 0.55) : 0.26 + (0.1 - 0.26) * Math.min(1, g * 1.6), gg = y >= 0 ? 0.6 + (0.34 - 0.6) * Math.pow(t, 0.55) : 0.3 + (0.14 - 0.3) * Math.min(1, g * 1.6), bb = y >= 0 ? 0.68 + (0.58 - 0.68) * Math.pow(t, 0.55) : 0.2 + (0.08 - 0.2) * Math.min(1, g * 1.6);
+      col.push(r, gg, bb);
+    }
+    sg.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    es.add(new T.Mesh(sg, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide })));
+    const sun = new T.Mesh(new T.PlaneGeometry(9, 9), new T.MeshBasicMaterial({ color: new T.Color(2.4, 2.2, 1.8), side: T.DoubleSide })); sun.position.set(22, 30, 14); sun.lookAt(0, 0, 0); es.add(sun);
+    const fill = new T.Mesh(new T.PlaneGeometry(40, 10), new T.MeshBasicMaterial({ color: new T.Color(0.8, 0.85, 0.95), side: T.DoubleSide })); fill.position.set(-30, 10, -20); fill.lookAt(0, 2, 0); es.add(fill);
+    const pm = new T.PMREMGenerator(renderer), tex = pm.fromScene(es, 0.03).texture; pm.dispose(); return tex;
   }
   const geoCache = {};
   const geo = (k, f) => geoCache[k] || (geoCache[k] = f());
@@ -326,6 +366,7 @@
     const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     const scene = new T.Scene(); scene.background = new T.Color(0x8ecbf0); scene.fog = new T.Fog(0x8ecbf0, 320, 1500);
+    try { scene.environment = makeEnv(renderer); } catch (e) { console.warn('env', e); }
     const camera = new T.PerspectiveCamera(42, 1, 0.5, 3200);
     const hemi = new T.HemisphereLight(0xd6e2ec, 0x4a5530, 0.7); scene.add(hemi);
     const sun = new T.DirectionalLight(0xfff1d0, 0.9); sun.castShadow = true;
@@ -831,6 +872,6 @@
     list(kind) { return kind ? Object.keys(REG[kind] || {}) : Object.fromEntries(Object.entries(REG).map(([k, v]) => [k, Object.keys(v)])); },
   };
   function addProc(name, draw, size) { const cv = document.createElement('canvas'); cv.width = cv.height = size || 256; draw(cv, cv.getContext('2d')); PROC[name] = cv; delete imgs[name]; }
-  root.FarmCore = { T, mat, part, texMat, gable, bake, bakeTex, hasTex, G, geo, rgb, lerp, addProc, cropModel, animalModel, vehicleModel, truckModel, tree, house, buildingModel };
+  root.FarmCore = { pmat, paint, matte, metal, rubberM, chromeM, glassM, lightM, rbox, ext, mesh, makeEnv, T, mat, part, texMat, gable, bake, bakeTex, hasTex, G, geo, rgb, lerp, addProc, cropModel, animalModel, vehicleModel, truckModel, tree, house, buildingModel };
   root.World3D = { create, CITY, cropModel, animalModel };
 })(typeof self !== 'undefined' ? self : this);
