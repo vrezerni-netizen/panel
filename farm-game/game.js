@@ -1,426 +1,528 @@
-/* Весёлая ферма — графика, ввод, интерфейс. Вся игровая логика в logic.js. */
-(() => {
+/* Ферма и Город — интерфейс, меню, магазины, сохранение. 3D живёт в world3d.js, правила в logic.js */
+(function () {
   'use strict';
-  const L = FarmLogic;
-  const S = 48;                // размер клетки (логические пиксели)
-  const YARD = 2 * S;          // двор с постройками над полем
-  const KEY = 'farm_save_v1';
-  const $ = (s) => document.querySelector(s);
-
-  let state, tool = 'hoe', sel = 'wheat', hover = null, muted = false, shake = 0;
-  const particles = [], floats = [];
-
-  // ---------------------------------------------------------------- сохранение
-  function load() {
-    try {
-      const d = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (d && d.state && d.state.v === 1) {
-        state = d.state; tool = d.tool || tool; sel = d.sel || sel; muted = !!d.muted;
-        const away = Date.now() - d.t;
-        if (away > 60000) {
-          L.catchUp(state, away);
-          const m = Math.round(Math.min(away, L.OFFLINE_CAP) / 60000);
-          setTimeout(() => toast(`Пока тебя не было (${m >= 60 ? Math.floor(m / 60) + ' ч ' : ''}${m % 60} мин), урожай рос 🌱`), 600);
-        }
-      }
-    } catch { /* повреждённое сохранение — начнём заново */ }
-    if (!state) state = L.createState();
-  }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), state, tool, sel, muted })); } catch { /* ignore */ } }
-
-  // ---------------------------------------------------------------- звук
-  let ac;
-  function beep(f, dur, type = 'square', vol = 0.05, slide = 0) {
-    if (muted) return;
-    try {
-      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
-      o.type = type; o.frequency.setValueAtTime(f, t);
-      if (slide) o.frequency.linearRampToValueAtTime(f + slide, t + dur);
-      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur);
-    } catch { /* звук недоступен */ }
-  }
-  const SFX = {
-    dig: () => beep(130, 0.12, 'sawtooth', 0.07, -50),
-    plant: () => beep(520, 0.1, 'triangle', 0.07),
-    water: () => beep(720, 0.1, 'sine', 0.05, -350),
-    harvest: () => { beep(660, 0.08, 'square', 0.05); setTimeout(() => beep(880, 0.12, 'square', 0.05), 80); },
-    coin: () => { beep(988, 0.07, 'square', 0.05); setTimeout(() => beep(1319, 0.16, 'square', 0.05), 70); },
-    no: () => beep(160, 0.15, 'square', 0.05),
-    level: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.2, 'triangle', 0.08), i * 110)),
+  const L = window.FarmLogic;
+  const $ = (id) => document.getElementById(id);
+  const SAVE = 'farm2.save', HELP = 'farm2.help';
+  const fmt = (n) => Math.floor(n).toLocaleString('ru-RU');
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ничего */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* ничего */ } },
   };
 
-  // ---------------------------------------------------------------- спрайты (рисуются кодом)
-  function rng(seed) { let a = seed; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-  function sprite(fn) {
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
-    const x = c.getContext('2d');
-    fn((px, py, w, h, col) => { x.fillStyle = col; x.fillRect(px, py, w, h); });
-    return c;
-  }
-  const SP = { grass: [], soil: null, wet: null, crop: {}, drop: null, star: null };
-  function buildSprites() {
-    for (let v = 0; v < 5; v++) {
-      const r = rng(100 + v);
-      SP.grass.push(sprite((p) => {
-        p(0, 0, 16, 16, '#74c365');
-        for (let i = 0; i < 9; i++) p((r() * 15) | 0, (r() * 15) | 0, 1, 1, r() > 0.5 ? '#62b356' : '#8bd47a');
-        if (v === 3) { p(7, 9, 1, 3, '#3f9b3f'); p(6, 7, 3, 3, '#fff'); p(7, 8, 1, 1, '#f5b932'); }
-        if (v === 4) { p(10, 5, 1, 3, '#3f9b3f'); p(9, 3, 3, 3, '#ff8fb1'); p(10, 4, 1, 1, '#fff2a8'); }
-      }));
-    }
-    const soil = (base, dark, light) => sprite((p) => {
-      p(0, 0, 16, 16, base);
-      for (const y of [3, 7, 11]) { p(1, y, 14, 1, dark); p(1, y + 1, 14, 1, light); }
-      p(0, 0, 16, 1, dark); p(0, 15, 16, 1, dark); p(0, 0, 1, 16, dark); p(15, 0, 1, 16, dark);
-    });
-    SP.soil = soil('#8a5a30', '#6e4520', '#9d6c3c');
-    SP.wet = soil('#5f3c1c', '#4a2d12', '#6c4524');
-    const tint = { wheat: '#e8c14a', carrot: '#f08a2c', corn: '#f4d63c', strawberry: '#e23b3b', pumpkin: '#f08a2c' };
-    for (const key of L.CROP_ORDER) {
-      const st = [];
-      st.push(sprite((p) => { p(7, 10, 2, 3, '#4caf50'); p(6, 9, 1, 1, '#66c866'); p(9, 9, 1, 1, '#66c866'); }));
-      st.push(sprite((p) => { p(7, 6, 2, 7, '#3f9b3f'); p(5, 8, 2, 2, '#4caf50'); p(9, 7, 2, 2, '#4caf50'); }));
-      st.push(sprite((p) => { p(7, 4, 2, 9, '#3f9b3f'); p(4, 6, 3, 2, '#4caf50'); p(9, 5, 3, 2, '#4caf50'); p(5, 9, 2, 2, '#4caf50'); p(9, 9, 2, 2, '#4caf50'); p(7, 3, 2, 2, tint[key]); }));
-      st.push(sprite((p) => ripe(p, key)));
-      SP.crop[key] = st;
-    }
-    SP.drop = sprite((p) => { p(7, 3, 2, 2, '#58b8ff'); p(6, 5, 4, 4, '#58b8ff'); p(7, 9, 2, 1, '#58b8ff'); p(7, 5, 1, 2, '#c9ecff'); });
-    SP.star = sprite((p) => { p(7, 2, 2, 12, '#ffe066'); p(2, 7, 12, 2, '#ffe066'); p(5, 5, 6, 6, '#fff3b0'); });
-  }
-  function ripe(p, key) {
-    if (key === 'wheat') { for (const x of [3, 6, 9, 12]) { p(x, 6, 1, 8, '#d9a93a'); p(x - 1, 2, 3, 5, '#f2d36b'); p(x, 1, 1, 1, '#f2d36b'); } p(2, 12, 12, 2, '#6fbf4a'); }
-    else if (key === 'carrot') { p(5, 3, 2, 5, '#3f9b3f'); p(7, 2, 2, 6, '#4caf50'); p(9, 3, 2, 5, '#3f9b3f'); p(5, 8, 6, 3, '#f08a2c'); p(6, 11, 4, 2, '#e07818'); p(7, 13, 2, 1, '#e07818'); }
-    else if (key === 'corn') { p(7, 1, 2, 13, '#3f9b3f'); p(3, 4, 4, 2, '#4caf50'); p(9, 6, 4, 2, '#4caf50'); p(9, 8, 3, 5, '#f4d63c'); p(4, 9, 3, 4, '#f4d63c'); p(10, 9, 1, 3, '#d9b82a'); }
-    else if (key === 'strawberry') { p(2, 6, 12, 7, '#2f8f3f'); p(3, 5, 10, 2, '#3fa84f'); for (const [x, y] of [[4, 8], [7, 7], [10, 9], [6, 10], [11, 7]]) { p(x, y, 2, 2, '#e23b3b'); p(x, y, 1, 1, '#ff7a7a'); } }
-    else if (key === 'pumpkin') { p(3, 7, 10, 6, '#f08a2c'); p(2, 8, 12, 4, '#f08a2c'); p(5, 7, 1, 6, '#d9701a'); p(8, 7, 1, 6, '#d9701a'); p(11, 7, 1, 6, '#d9701a'); p(7, 5, 2, 3, '#3f7f2f'); }
-  }
-  const sprBig = (c, x, y, w = S, h = S) => ctx.drawImage(c, x, y, w, h);
+  let S, world;
+  const ui = { mode: 'farm', tool: 'hoe', seed: null, modal: null, tab: {}, load: {}, truck: 0, sound: true, spinning: false, hold: null, wheelAngle: 0, lastLog: 0, confirm: null, toastAt: {} };
+  window.__game = { get S() { return S; }, ui, L, open: (id, t) => openModal(id, t) };
 
-  // ---------------------------------------------------------------- canvas
-  const cv = $('#cv'); const ctx = cv.getContext('2d');
-  let logW = 0, logH = 0;
-  function resize() {
-    logW = state.w * S; logH = YARD + state.h * S;
-    const stage = $('#stage').getBoundingClientRect();
-    const k = Math.min((stage.width - 14) / logW, (stage.height - 14) / logH);
-    const cssW = Math.max(160, Math.floor(logW * k)), cssH = Math.floor(logH * (cssW / logW));
-    const dpr = window.devicePixelRatio || 1;
-    cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
-    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+  // ---------------------------------------------------------------- звук
+  let actx = null;
+  function beep(f, d, type, vol) {
+    if (!ui.sound) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain(); o.type = type || 'sine'; o.frequency.value = f;
+      g.gain.value = vol || 0.05; g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+      o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + d);
+    } catch (e) { /* без звука */ }
+  }
+  const sfx = {
+    dig: () => beep(140, 0.1, 'triangle'), plant: () => beep(520, 0.08), water: () => beep(700, 0.12, 'sine', 0.03),
+    harvest: () => { beep(660, 0.08); setTimeout(() => beep(880, 0.1), 70); }, coin: () => { beep(988, 0.07, 'square', 0.03); setTimeout(() => beep(1319, 0.14, 'square', 0.03), 70); },
+    bad: () => beep(150, 0.25, 'sawtooth', 0.04), level: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18), i * 110)),
+  };
+
+  // ---------------------------------------------------------------- сохранение
+  function save() { store.set(SAVE, JSON.stringify({ s: S, t: Date.now(), sound: ui.sound })); }
+  function load() {
+    const raw = store.get(SAVE); if (!raw) return null;
+    try { const d = JSON.parse(raw); if (!d.s || d.s.v !== 2) return null; ui.sound = d.sound !== false; return d; } catch (e) { return null; }
+  }
+  const todayKey = () => new Date().toLocaleDateString('sv');
+
+  // ---------------------------------------------------------------- уведомления
+  function toast(msg, kind) {
+    const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('toasts').appendChild(el);
+    while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
+    setTimeout(() => el.remove(), 3700);
+  }
+  function toastOnce(msg, kind) { const n = Date.now(); if (ui.toastAt[msg] && n - ui.toastAt[msg] < 1500) return; ui.toastAt[msg] = n; toast(msg, kind); }
+  function floatAt(x, y, html) { const el = document.createElement('div'); el.className = 'fl'; el.style.left = x + 'px'; el.style.top = y + 'px'; el.innerHTML = html; $('floats').appendChild(el); setTimeout(() => el.remove(), 1200); }
+  const gi = (k) => (L.GOODS[k] ? L.GOODS[k].icon : '❓');
+
+  // ---------------------------------------------------------------- действия на ферме
+  const TOOLS = [
+    { id: 'hoe', icon: '⛏️', name: 'Копать' }, { id: 'seed', icon: '🌱', name: 'Сеять' }, { id: 'water', icon: '💧', name: 'Полив' }, { id: 'harvest', icon: '🧺', name: 'Сбор' },
+    { id: 'fert', icon: '🧪', name: 'Удобр.' }, { id: 'superfert', icon: '⚡', name: 'Супер' }, { id: 'sprinkler', icon: '🚿', name: 'Поливалка' },
+    { id: 'tractor', icon: '🚜', name: 'Трактор' }, { id: 'combine', icon: '🌾', name: 'Комбайн' }, { id: 'remove', icon: '🪓', name: 'Убрать' },
+  ];
+  const needSeed = () => ui.tool === 'seed' || ui.tool === 'tractor';
+  function pickSeed() {
+    if (ui.seed && S.seeds[ui.seed] > 0) return;
+    ui.seed = L.CROP_ORDER.find((k) => S.seeds[k] > 0 && L.CROPS[k].level <= S.level) || null;
+  }
+  function onTile(x, y, first) {
+    if (ui.modal) return;
+    pickSeed();
+    const tool = ui.tool;
+    if (needSeed() && tool === 'seed' && !ui.seed) { toastOnce('Нет семян — купи в магазине 🌱 в городе', 'bad'); return; }
+    const had = S.level;
+    const r = L.act(S, tool, x, y, ui.seed);
+    if (!r.ok) { toastOnce(r.msg, 'bad'); if (first) sfx.bad(); return; }
+    const sp = world.tileScreen(x, y);
+    const kind = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest' }[r.fx] || 'dig';
+    if (tool === 'tractor' || tool === 'combine') {
+      world.drive(tool, y);
+      for (const [cx, cy] of L.areaCells(S, tool, x, y)) world.fx(kind, cx, cy);
+    } else world.fx(kind, x, y, { gold: r.gold });
+    let txt = '';
+    if (r.item) txt += `+${r.n}${gi(r.item)} `;
+    if (tool === 'combine') txt += `+${r.n}📦 `;
+    if (tool === 'tractor' && r.planted) txt += `🌱×${r.planted} `;
+    if (r.xp) txt += `<span style="color:#ffd54f">+${r.xp}⭐</span>`;
+    if (r.gold) txt = `✨ ЗОЛОТОЙ ×3 ${txt}`;
+    if (txt) floatAt(sp.x, sp.y, txt);
+    (sfx[kind] || sfx.dig)(); if (r.gold) sfx.coin();
+    if (S.level > had) onLevelUp();
+    pickSeed(); lastBar = ''; renderBar();
+  }
+  function onHover(t) {
+    if (!t) { world.highlight(null); return; }
+    const big = (ui.tool === 'tractor' || ui.tool === 'combine') && S.up[ui.tool] > 0;
+    world.highlight(big ? L.areaCells(S, ui.tool, t.x, t.y) : [[t.x, t.y]], big ? 0xffc83d : 0xffffff);
+  }
+  function unlocksAt(lv) {
+    const out = [];
+    for (const k of L.CROP_ORDER) if (L.CROPS[k].level === lv) out.push(`${L.CROPS[k].icon} ${L.CROPS[k].name}`);
+    for (const k of L.ANIMAL_ORDER) if (L.ANIMALS[k].level === lv) out.push(`${L.ANIMALS[k].icon} ${L.ANIMALS[k].name}`);
+    for (const k of ['tractor', 'combine']) if (L.TOOL_LEVELS[k].need === lv) out.push(`🚜 ${L.TOOL_LEVELS[k].name}`);
+    for (const f of L.FARM_DEFS) if (f.level === lv && f.cost) out.push(`🗺️ Ферма «${f.name}»`);
+    if (lv === L.SPRINKLER.need) out.push('🚿 Поливалки');
+    L.TRUCK_SLOTS.forEach((t, i) => { if (i && t.level === lv) out.push(`🚚 Машина №${i + 1}`); });
+    return out;
+  }
+  function onLevelUp() {
+    sfx.level(); const u = unlocksAt(S.level);
+    toast(`🎉 Уровень ${S.level}!${u.length ? ' Открылось: ' + u.join(', ') : ''}`, 'good');
+    world.refreshCity(S);
   }
 
-  // ---------------------------------------------------------------- отрисовка
-  function darkness() {
-    const hours = ((state.clock / L.DAY_MS) * 24 + 6) % 24;
-    return Math.max(0, (Math.cos((hours / 24) * Math.PI * 2) - 0.2) / 0.8);
-  }
-  function drawCoop(x, y, w, h, unlocked, count, pending, now) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = '#c98b4a'; ctx.fillRect(4, 22, w - 8, h - 24);
-    ctx.fillStyle = '#a56d33'; for (let i = 0; i < 6; i++) ctx.fillRect(4, 26 + i * 10, w - 8, 2);
-    ctx.fillStyle = '#b23a3a'; ctx.beginPath(); ctx.moveTo(0, 24); ctx.lineTo(w / 2, 2); ctx.lineTo(w, 24); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#8c2a2a'; ctx.fillRect(0, 22, w, 4);
-    ctx.fillStyle = '#5a3414'; ctx.fillRect(w / 2 - 9, h - 26, 18, 24);
-    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(w / 2 - 4, 14, 8, 6);
-    for (let i = 0; i < count; i++) { // курочки гуляют перед домиком
-      const bx = 10 + ((i * 23 + Math.sin(now / 700 + i * 2) * 8 + 40) % (w - 20)), by = h - 8 - (i % 2) * 4;
-      ctx.fillStyle = '#fff'; ctx.fillRect(bx, by - 8, 9, 7); ctx.fillRect(bx + 6, by - 12, 5, 5);
-      ctx.fillStyle = '#e24c4c'; ctx.fillRect(bx + 8, by - 14, 2, 2);
-      ctx.fillStyle = '#f5b932'; ctx.fillRect(bx + 11, by - 10, 2, 2); ctx.fillRect(bx + 2, by - 1, 1, 3); ctx.fillRect(bx + 6, by - 1, 1, 3);
+  // ---------------------------------------------------------------- HUD
+  let lastHud = '', lastBar = '', lastSeed = '';
+  function clockText() { const h = (S.clock / L.DAY_MS) * 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`; }
+  const WEATHER = { sun: ['☀️', 'Ясно'], rain: ['🌧️', 'Дождь'], drought: ['🌵', 'Засуха'], pests: ['🐛', 'Вредители'] };
+  function mmss(ms) { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+  let hudBuilt = false;
+  const setT = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+  const setH = (id, hide) => { const e = $(id); if (e && e.hidden !== hide) e.hidden = hide; };
+  function renderHud() {
+    if (!hudBuilt) {
+      hudBuilt = true;
+      $('hud').innerHTML = `
+      <div class="lvl" data-act="modal" data-id="levels"><div class="b" id="h-lv"></div><div class="t"><b id="h-lvt"></b><small id="h-xpt"></small><div class="xp"><i id="h-xp"></i></div></div></div>
+      <div class="hsp"></div>
+      <div class="pill" data-act="modal" data-id="bank">🪙 <span id="h-c"></span></div>
+      <div class="pill" data-act="modal" data-id="bank">💎 <span id="h-g"></span><span class="plus">+</span></div>
+      <div class="pill" data-act="modal" data-id="casino">🎟️ <span id="h-t"></span></div>
+      <div class="row2">
+        <button class="tab2" id="h-mf" data-act="mode" data-m="farm">🌾 Ферма</button>
+        <button class="tab2" id="h-mc" data-act="mode" data-m="city">🏙️ Город</button>
+        <span class="chip" id="h-w"></span><span class="chip boost" id="h-b"></span><span class="chip" id="h-tr"></span>
+        <div class="hsp"></div>
+        <button class="ibtn glow" id="h-d" data-act="daily">🎁</button>
+        <button class="ibtn" data-act="modal" data-id="orders">📜<span class="bd" id="h-o"></span></button>
+        <button class="ibtn" data-act="modal" data-id="menu">☰</button>
+      </div>`;
     }
-    ctx.restore();
-    if (!unlocked) lockOverlay(x, y, w, h, L.ANIMALS.chicken.level);
-    else if (pending > 0) badge(x + w - 20, y + 16 + Math.sin(now / 250) * 3, '🥚', pending);
+    const v = ui.hold || S, need = L.xpNeeded(S.level), w = WEATHER[S.weather.type];
+    setT('h-lv', S.level); setT('h-lvt', 'Уровень ' + S.level); setT('h-xpt', `${fmt(S.xp)} / ${fmt(need)} ⭐ · репутация ${S.rep}`);
+    $('h-xp').style.width = Math.min(100, S.xp / need * 100) + '%';
+    setT('h-c', fmt(v.coins)); setT('h-g', fmt(v.crystals)); setT('h-t', fmt(v.tickets));
+    $('h-mf').classList.toggle('on', ui.mode === 'farm'); $('h-mc').classList.toggle('on', ui.mode === 'city');
+    setT('h-w', `${w[0]} ${w[1]} · ${clockText()} · день ${S.day}`);
+    setH('h-b', !(S.boost > 0)); setT('h-b', `⚡ рост ×2 · ${mmss(S.boost)}`);
+    setH('h-tr', !S.trips.length); setT('h-tr', `🚚 в пути: ${S.trips.length}`);
+    setH('h-d', S.daily.key === todayKey()); setH('h-o', !S.orders.length); setT('h-o', S.orders.length);
   }
-  function drawBarn(x, y, w, h, unlocked, count, pending, now) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = '#c0392b'; ctx.fillRect(4, 24, w - 8, h - 26);
-    ctx.fillStyle = '#8c2a20'; ctx.beginPath(); ctx.moveTo(0, 28); ctx.lineTo(w * 0.2, 4); ctx.lineTo(w * 0.8, 4); ctx.lineTo(w, 28); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillRect(w / 2 - 14, h - 34, 28, 32);
-    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 3; ctx.strokeRect(w / 2 - 12, h - 32, 24, 28);
-    ctx.beginPath(); ctx.moveTo(w / 2 - 12, h - 32); ctx.lineTo(w / 2 + 12, h - 4); ctx.moveTo(w / 2 + 12, h - 32); ctx.lineTo(w / 2 - 12, h - 4); ctx.stroke();
-    for (let i = 0; i < count; i++) { // коровы у хлева
-      const bx = w - 6 - i * 30 + Math.sin(now / 900 + i) * 3, by = h - 4;
-      ctx.fillStyle = '#fff'; ctx.fillRect(bx - 22, by - 16, 22, 11); ctx.fillRect(bx - 4, by - 20, 10, 9);
-      ctx.fillStyle = '#333'; ctx.fillRect(bx - 17, by - 14, 6, 5); ctx.fillRect(bx - 8, by - 10, 4, 4);
-      ctx.fillStyle = '#f0a8b8'; ctx.fillRect(bx + 2, by - 14, 4, 3);
-      ctx.fillStyle = '#fff'; for (const lx of [-20, -14, -6, -2]) ctx.fillRect(bx + lx, by - 5, 3, 5);
-    }
-    ctx.restore();
-    if (!unlocked) lockOverlay(x, y, w, h, L.ANIMALS.cow.level);
-    else if (pending > 0) badge(x + w - 20, y + 16 + Math.sin(now / 250 + 1) * 3, '🥛', pending);
-  }
-  function lockOverlay(x, y, w, h, lvl) {
-    ctx.fillStyle = 'rgba(40,40,40,.6)'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🔒 Ур. ' + lvl, x + w / 2, y + h / 2 + 5);
-  }
-  function badge(x, y, icon, n) {
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(x - 14, y - 10, 40, 24, 8); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#4a2e12'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(icon + n, x + 6, y + 7);
-  }
-  const buildings = () => ({ coop: [8, 4, 104, 88], barn: [Math.max(130, state.w * S * 0.38), 0, 128, 92] });
-
-  function render(now) {
-    ctx.setTransform(cv.width / logW, 0, 0, cv.height / logH, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
-    // двор
-    ctx.fillStyle = '#8fd47e'; ctx.fillRect(0, 0, logW, YARD);
-    for (let x = 0; x < state.w; x++) for (let y = 0; y < 2; y++) sprBig(SP.grass[(x * 7 + y * 3) % 3], x * S, y * S);
-    ctx.fillStyle = '#c99a5b'; for (let x = 0; x < logW; x += 14) ctx.fillRect(x, YARD - 14, 8, 14);
-    ctx.fillStyle = '#a97b3f'; ctx.fillRect(0, YARD - 9, logW, 3);
-    const b = buildings();
-    drawCoop(b.coop[0], b.coop[1], b.coop[2], b.coop[3], state.level >= L.ANIMALS.chicken.level, state.animals.chicken, state.prod.chicken.pending, now);
-    drawBarn(b.barn[0], b.barn[1], b.barn[2], b.barn[3], state.level >= L.ANIMALS.cow.level, state.animals.cow, state.prod.cow.pending, now);
-    // поле
-    for (let y = 0; y < state.h; y++) for (let x = 0; x < state.w; x++) {
-      const t = state.tiles[y * state.w + x], px = x * S, py = YARD + y * S;
-      if (t.k === 'grass') sprBig(SP.grass[(x * 7 + y * 13) % 5], px, py);
-      else {
-        sprBig(t.k === 'crop' && t.water > 0 ? SP.wet : SP.soil, px, py);
-        if (t.k === 'crop') {
-          const st = L.stage(t), bob = st === 3 ? Math.sin(now / 300 + x + y) * 1.5 : 0;
-          sprBig(SP.crop[t.crop][st], px, py - 2 + bob);
-          if (st === 3) { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(now / 250 + x * 2); sprBig(SP.star, px + S - 18, py + 2, 14, 14); ctx.globalAlpha = 1; }
-          else {
-            ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(px + 8, py + S - 8, S - 16, 5);
-            ctx.fillStyle = '#7ddc5b'; ctx.fillRect(px + 8, py + S - 8, (S - 16) * L.progressOf(t), 5);
-            if (t.water <= 0) sprBig(SP.drop, px + S - 18, py + 2, 16, 16);
-          }
+  function renderBar() {
+    let html = '';
+    if (ui.mode === 'farm') {
+      for (const t of TOOLS) {
+        let extra = '', dis = '';
+        if (t.id === 'fert') extra = `<span class="n">${S.items.fert}</span>`;
+        if (t.id === 'superfert') extra = `<span class="n">${S.items.superfert}</span>`;
+        if (t.id === 'tractor' || t.id === 'combine') {
+          if (!S.up[t.id]) { dis = 'dis'; extra = `<span class="cd">🔒${L.TOOL_LEVELS[t.id].need}</span>`; }
+          else if (S.cool[t.id] > 0) extra = `<span class="cd">${Math.ceil(S.cool[t.id] / 1000)}</span>`;
         }
+        if (t.id === 'sprinkler' && S.level < L.SPRINKLER.need) { dis = 'dis'; extra = `<span class="cd">🔒${L.SPRINKLER.need}</span>`; }
+        html += `<button class="tool ${ui.tool === t.id ? 'on' : ''} ${dis}" data-act="tool" data-t="${t.id}"><b>${t.icon}</b>${t.name}${extra}</button>`;
       }
-    }
-    if (hover && hover.ty >= 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(hover.tx * S + 2, YARD + hover.ty * S + 2, S - 4, S - 4); }
-    // частицы
-    for (const p of particles) { ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, p.s, p.s); }
-    ctx.globalAlpha = 1;
-    for (const f of floats) { ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.5)); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = '#3b2610'; ctx.strokeText(f.t, f.x, f.y); ctx.fillStyle = f.c; ctx.fillText(f.t, f.x, f.y); }
-    ctx.globalAlpha = 1;
-    // ночь
-    const d = darkness();
-    if (d > 0.02) { ctx.fillStyle = `rgba(12,20,70,${d * 0.5})`; ctx.fillRect(0, 0, logW, logH); }
-  }
-
-  // ---------------------------------------------------------------- эффекты
-  function burst(x, y, color, n, spread = 40) {
-    for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random() - 0.5) * spread, vy: -Math.random() * spread, g: 90, life: 0.5 + Math.random() * 0.4, max: 0.9, c: color, s: 3 });
-  }
-  function floatText(x, y, t, c = '#fff') { floats.push({ x, y, t, c, life: 1.1 }); }
-  const tileXY = (tx, ty) => [tx * S + S / 2, YARD + ty * S + S / 2];
-  function stepFx(dt) {
-    for (const p of particles) { p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
-    for (const f of floats) { f.life -= dt; f.y -= 22 * dt; }
-    while (particles.length && particles[0].life <= 0) particles.shift();
-    for (let i = floats.length - 1; i >= 0; i--) if (floats[i].life <= 0) floats.splice(i, 1);
-    if (shake > 0) shake = Math.max(0, shake - dt * 30);
-  }
-
-  // ---------------------------------------------------------------- действия игрока
-  function apply(tx, ty) {
-    const [cx, cy] = tileXY(tx, ty);
-    const hadLevel = state.level;
-    const r = L.act(state, tool, tx, ty, sel);
-    if (!r.ok) { floatText(cx, cy - 8, r.msg, '#ffb3a8'); SFX.no(); return false; }
-    ({
-      dig: () => { SFX.dig(); burst(cx, cy, '#7a4a22', 8, 50); },
-      plant: () => { SFX.plant(); burst(cx, cy, '#7ddc5b', 6, 30); },
-      water: () => { SFX.water(); burst(cx, cy - 10, '#58b8ff', 10, 30); },
-      harvest: () => { SFX.harvest(); burst(cx, cy, '#ffe066', 12, 70); floatText(cx, cy - 6, '+1 ' + L.GOODS[r.item].icon, '#fff'); },
-      remove: () => { SFX.dig(); burst(cx, cy, '#6aa84f', 8, 40); },
-      fert: () => { SFX.plant(); burst(cx, cy, '#d6a3ff', 12, 50); floatText(cx, cy - 8, 'Ускорено! ✨', '#e8c8ff'); },
-    }[r.fx] || (() => {}))();
-    if (r.xp) floatText(cx + 14, cy + 16, '+' + r.xp + ' ⭐', '#ffe066');
-    if (state.level > hadLevel) levelUp();
-    changed();
-    return true;
-  }
-  function yardClick(lx, ly) {
-    const b = buildings();
-    for (const [type, name] of [['chicken', 'coop'], ['cow', 'barn']]) {
-      const [x, y, w, h] = b[name];
-      if (lx >= x && lx <= x + w && ly >= y && ly <= y + h) {
-        const a = L.ANIMALS[type];
-        if (state.level < a.level) { toast(`${a.building} откроется на ${a.level} уровне`); SFX.no(); return; }
-        const r = L.collect(state, type);
-        if (r.ok) { SFX.harvest(); burst(x + w / 2, y + 20, '#fff', 14, 70); floatText(x + w / 2, y + 10, `+${r.n} ${L.GOODS[r.item].icon}`, '#fff'); changed(); }
-        else toast(state.animals[type] ? 'Пока пусто — подожди немного' : `Купи ${a.name === 'Курица' ? 'курочек' : 'коров'} в магазине 🛒 (вкладка «Животные»)`);
-        return;
-      }
-    }
-  }
-  function levelUp() {
-    SFX.level(); shake = 8;
-    const lvl = state.level, news = [];
-    for (const k of L.CROP_ORDER) if (L.CROPS[k].level === lvl) news.push(`${L.CROPS[k].icon} ${L.CROPS[k].name}`);
-    for (const k of Object.keys(L.ANIMALS)) if (L.ANIMALS[k].level === lvl) news.push(`${L.ANIMALS[k].icon} ${L.ANIMALS[k].building}`);
-    openModal(`<div class="card"><h2>🎉 Новый уровень!<button data-x>✕</button></h2><div class="body big"><div style="font-size:3rem">⭐</div><h3>Уровень ${lvl}</h3>
-      <p class="note">${news.length ? 'Открыто: <b>' + news.join(', ') + '</b>' : 'Продолжай в том же духе!'}</p><button class="btn gold" data-x>Ура!</button></div></div>`);
-  }
-
-  // ---------------------------------------------------------------- интерфейс
-  let toastT;
-  function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2400); }
-  function openModal(html) { const m = $('#modal'); m.innerHTML = html; m.hidden = false; }
-  function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; }
-  $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' || e.target.closest('[data-x]')) closeModal(); });
-
-  let lastHud = '';
-  function hud() {
-    const need = L.xpNeeded(state.level), hours = ((state.clock / L.DAY_MS) * 24 + 6) % 24;
-    const hh = String(Math.floor(hours)).padStart(2, '0'), mm = String(Math.floor((hours % 1) * 60)).padStart(2, '0');
-    const night = hours >= 20 || hours < 5;
-    const sig = [state.coins, state.level, state.xp, hh, mm, state.items.fert, tool, sel, Object.values(state.seeds).join()].join('|');
-    if (sig === lastHud) return; lastHud = sig;
-    $('#coins b').textContent = state.coins;
-    $('#lvl').textContent = state.level;
-    $('#xpbar').style.width = (state.xp / need * 100) + '%';
-    $('#xptxt').textContent = `${state.xp}/${need}`;
-    $('#clock').innerHTML = `${night ? '🌙' : '☀️'} <span>День ${state.day}, ${hh}:${mm}</span>`;
-    $('#fertN').textContent = state.items.fert || 0;
-    $('#fertN').style.display = state.items.fert ? '' : 'none';
-    document.querySelectorAll('#tools [data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
-    const sb = $('#seedbar'); sb.hidden = tool !== 'seed';
-    if (!sb.hidden) {
-      sb.innerHTML = L.CROP_ORDER.map((k) => {
-        const c = L.CROPS[k], lock = c.level > state.level;
-        return `<button data-seed="${k}" class="${k === sel ? 'on' : ''} ${lock ? 'lock' : ''}">${lock ? '🔒' : c.icon} ${c.name}<small>${lock ? 'Ур. ' + c.level : 'есть: ' + (state.seeds[k] || 0)}</small></button>`;
-      }).join('');
-    }
-    const resizeNeeded = state.w * S !== logW || YARD + state.h * S !== logH;
-    if (resizeNeeded) resize();
-  }
-  function hintText() {
-    const tiles = state.tiles, crops = tiles.filter((t) => t.k === 'crop'), soil = tiles.filter((t) => t.k === 'soil');
-    const gotGoods = Object.values(state.goods).some((n) => n > 0), seeds = Object.values(state.seeds).some((n) => n > 0);
-    if (state.stats.harvested >= 6) return '';
-    if (crops.some((t) => L.isRipe(t))) return '🧺 Урожай созрел! Выбери «Сбор» и коснись растения (над ним блестит звёздочка)';
-    if (gotGoods) return '🛒 Продай урожай в магазине и купи новые семена — ферма будет расти!';
-    if (crops.some((t) => t.water <= 0)) return '💧 Выбери «Лейку» и полей растения: с водой они растут вдвое быстрее';
-    if (!crops.length && soil.length && seeds) return '🌱 Выбери «Посев», нужные семена — и коснись вскопанной (коричневой) земли';
-    if (!crops.length && !soil.length) return '⛏️ Выбери «Мотыгу» и коснись травы, чтобы вскопать грядку';
-    return crops.length ? '⏳ Растения растут. Пока можно вскопать ещё грядок или заглянуть в магазин 🛒' : '';
-  }
-  document.querySelectorAll('#tools [data-tool]').forEach((b) => b.addEventListener('click', () => { tool = b.dataset.tool; lastHud = ''; hud(); save(); }));
-  $('#seedbar').addEventListener('click', (e) => { const b = e.target.closest('[data-seed]'); if (!b) return; const k = b.dataset.seed; if (L.CROPS[k].level > state.level) { toast(`${L.CROPS[k].name} откроется на ${L.CROPS[k].level} уровне`); SFX.no(); return; } sel = k; lastHud = ''; hud(); save(); });
-  $('#btnSound').addEventListener('click', () => { muted = !muted; $('#btnSound').textContent = muted ? '🔇' : '🔊'; save(); });
-
-  // ---- магазин
-  let shopTab = 'seeds';
-  function shop() {
-    const tabs = [['seeds', '🌱 Семена'], ['sell', '💰 Продать'], ['up', '⬆️ Улучшения'], ['animals', '🐔 Животные']];
-    let body = '';
-    if (shopTab === 'seeds') {
-      body = L.CROP_ORDER.map((k) => {
-        const c = L.CROPS[k], lock = c.level > state.level;
-        return `<div class="row"><div class="ic">${c.icon}</div><div class="tx"><b>${c.name}</b><small>${lock ? '🔒 с ' + c.level + ' уровня' : `растёт ${Math.round(c.growMs / 1000)} с · продажа ${c.sell} 🪙 · есть ${state.seeds[k] || 0}`}</small></div>
-          ${lock ? '' : `<button class="btn" data-buy="${k}" data-n="1" ${state.coins < c.seedCost ? 'disabled' : ''}>1 · ${c.seedCost}🪙</button><button class="btn" data-buy="${k}" data-n="5" ${state.coins < c.seedCost * 5 ? 'disabled' : ''}>5 · ${c.seedCost * 5}🪙</button>`}</div>`;
-      }).join('') + `<div class="row"><div class="ic">🧪</div><div class="tx"><b>Удобрение</b><small>мгновенно ускоряет рост на 50% · есть ${state.items.fert || 0}</small></div>
-        <button class="btn" data-fert="1" ${state.coins < L.FERT_COST ? 'disabled' : ''}>1 · ${L.FERT_COST}🪙</button><button class="btn" data-fert="5" ${state.coins < L.FERT_COST * 5 ? 'disabled' : ''}>5 · ${L.FERT_COST * 5}🪙</button></div>`;
-    } else if (shopTab === 'sell') {
-      const keys = Object.keys(state.goods).filter((k) => state.goods[k] > 0);
-      const total = keys.reduce((s, k) => s + state.goods[k] * L.GOODS[k].sell, 0);
-      body = keys.length ? keys.map((k) => `<div class="row"><div class="ic">${L.GOODS[k].icon}</div><div class="tx"><b>${L.GOODS[k].name} × ${state.goods[k]}</b><small>${L.GOODS[k].sell} 🪙 за штуку</small></div><button class="btn gold" data-sell="${k}">Продать за ${state.goods[k] * L.GOODS[k].sell}🪙</button></div>`).join('') +
-        `<button class="btn gold" data-sellall style="padding:12px;font-size:1.05rem">Продать всё за ${total} 🪙</button>` : '<p class="note big">Пока нечего продавать. Вырасти урожай 🌾 или собери яйца у курочек 🥚</p>';
-    } else if (shopTab === 'up') {
-      const pc = L.upgradeCost(state, 'plot'), cc = L.upgradeCost(state, 'can');
-      body = `<div class="row"><div class="ic">🏞️</div><div class="tx"><b>Расширить участок</b><small>сейчас ${state.w}×${state.h}${pc ? ` → ${L.PLOTS[state.up.plot + 1].join('×')}` : ' · максимум'}</small></div>${pc ? `<button class="btn" data-up="plot" ${state.coins < pc ? 'disabled' : ''}>${pc}🪙</button>` : ''}</div>
-        <div class="row"><div class="ic">🚿</div><div class="tx"><b>Большая лейка</b><small>полив держится ${L.WATER_MS[state.up.can] / 1000} с${cc ? ` → ${L.WATER_MS[state.up.can + 1] / 1000} с` : ' · максимум'}</small></div>${cc ? `<button class="btn" data-up="can" ${state.coins < cc ? 'disabled' : ''}>${cc}🪙</button>` : ''}</div>`;
+      html += `<button class="bigbtn" data-act="modal" data-id="animals">🐄 Загон</button><button class="bigbtn g" data-act="modal" data-id="barn">📦 Склад ${fmt(L.total(S.goods))}/${L.barnCap(S)}</button><button class="bigbtn b" data-act="mode" data-m="city">🏙️ В город</button>`;
     } else {
-      body = Object.keys(L.ANIMALS).map((k) => {
-        const a = L.ANIMALS[k], lock = a.level > state.level, full = state.animals[k] >= a.cap;
-        return `<div class="row"><div class="ic">${a.icon}</div><div class="tx"><b>${a.name}</b><small>${lock ? '🔒 ' + a.building + ' с ' + a.level + ' уровня' : `даёт ${L.GOODS[a.product].icon} ${L.GOODS[a.product].name.toLowerCase()} каждые ${Math.round(a.every / 1000)} с · в ${a.building.toLowerCase()}е ${state.animals[k]}/${a.cap}`}</small></div>
-          ${lock ? '' : `<button class="btn" data-animal="${k}" ${full || state.coins < a.cost ? 'disabled' : ''}>${full ? 'Нет места' : a.cost + '🪙'}</button>`}</div>`;
-      }).join('') + '<p class="note">Продукты копятся в постройке — коснись курятника или хлева наверху поля, чтобы их собрать.</p>';
+      html = `<button class="bigbtn g" data-act="modal" data-id="barn">📦 Склад: отправить на рынок</button><button class="bigbtn" data-act="modal" data-id="market">🏪 Рынок</button><button class="bigbtn" data-act="modal" data-id="orders">📜 Заказы ${S.orders.length}</button><button class="bigbtn b" data-act="mode" data-m="farm">🌾 На ферму</button>`;
     }
-    openModal(`<div class="card"><h2>🛒 Магазин · <span>🪙 ${state.coins}</span><button data-x>✕</button></h2>
-      <div class="tabs">${tabs.map(([id, n]) => `<button data-tab="${id}" class="${id === shopTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="body">${body}</div></div>`);
+    if (html !== lastBar) { lastBar = html; $('bar').innerHTML = html; }
+    // семена
+    let sh = '';
+    if (ui.mode === 'farm' && needSeed()) {
+      const list = L.CROP_ORDER.filter((k) => L.CROPS[k].level <= S.level + 1);
+      sh = list.map((k) => { const c = L.CROPS[k], lock = c.level > S.level, n = S.seeds[k] || 0; return `<div class="seed ${ui.seed === k ? 'on' : ''} ${lock || !n ? 'off' : ''}" data-act="seedpick" data-k="${k}"><b>${c.icon}</b><span>${lock ? '🔒' + c.level : n}</span></div>`; }).join('');
+      sh += '<div class="seed" data-act="modal" data-id="seeds"><b>🛒</b><span>купить</span></div>';
+    }
+    if (sh !== lastSeed) { lastSeed = sh; $('seedbar').innerHTML = sh; }
+    $('seedbar').style.display = sh ? '' : 'none';
   }
-  $('#btnShop').addEventListener('click', shop);
-  $('#modal').addEventListener('click', (e) => {
-    const t = e.target.closest('button'); if (!t || $('#modal').hidden) return;
-    const d = t.dataset; let r;
-    if (d.tab) { shopTab = d.tab; shop(); return; }
-    if (d.buy) r = L.buySeeds(state, d.buy, +d.n);
-    else if (d.fert) r = L.buyFert(state, +d.fert);
-    else if (d.sell) r = L.sell(state, d.sell, 'all');
-    else if ('sellall' in d) r = L.sellAll(state);
-    else if (d.up) r = L.buyUpgrade(state, d.up);
-    else if (d.animal) r = L.buyAnimal(state, d.animal);
-    else return;
-    if (r.ok) { (r.gain ? SFX.coin : SFX.plant)(); changed(); } else { toast(r.msg); SFX.no(); }
-    shop();
-  });
 
-  // ---- меню
-  $('#btnMenu').addEventListener('click', () => openModal(`<div class="card"><h2>⚙️ Меню<button data-x>✕</button></h2><div class="body">
-    <p class="note"><b>Как играть:</b> вскопай землю ⛏️ → посади семена 🌱 → поливай 💧 → собирай урожай 🧺 → продавай в магазине 🛒 и покупай новые семена, расширяй участок, заводи курочек и коров.</p>
-    <p class="note">Игра сохраняется сама. Когда тебя нет, растения продолжают расти (до 8 часов).</p>
-    <p class="note">⭐ Собрано урожая: <b>${state.stats.harvested}</b> · 🪙 Заработано: <b>${state.stats.earned}</b></p>
-    <button class="btn" data-save>💾 Сохранить сейчас</button><button class="btn red" data-reset>🗑️ Начать заново</button></div></div>`));
-  $('#modal').addEventListener('click', (e) => {
-    if (e.target.closest('[data-save]')) { save(); toast('Сохранено 💾'); }
-    const r = e.target.closest('[data-reset]');
-    if (r) { // подтверждение прямо на кнопке: нажми второй раз в течение 4 секунд
-      if (!r.dataset.armed) {
-        r.dataset.armed = '1'; r.textContent = '⚠️ Нажми ещё раз: удалить всё';
-        setTimeout(() => { if (r.isConnected) { delete r.dataset.armed; r.textContent = '🗑️ Начать заново'; } }, 4000);
-        return;
+  // ---------------------------------------------------------------- переключение сцены
+  function goMode(m) {
+    if (m === ui.mode) return;
+    $('fade').classList.add('on');
+    setTimeout(() => {
+      ui.mode = m; world.setMode(m, S); lastBar = ''; renderBar(); renderHud(); world.highlight(null);
+      if (m === 'city') { world.refreshCity(S); if (L.total(S.goods) > 0) toastOnce('📦 На складе есть урожай — отправь машину на рынок!', 'good'); }
+      $('fade').classList.remove('on');
+    }, 230);
+  }
+
+  // ---------------------------------------------------------------- окна
+  const MODALS = {};
+  function openModal(id, tab) {
+    ui.modal = id; if (tab != null) ui.tab[id] = tab; ui.confirm = null;
+    $('modal').hidden = false; renderModal(true);
+  }
+  function closeModal() { if (ui.spinning) return; ui.modal = null; $('modal').hidden = true; world.highlight(null); }
+  function renderModal(reset) {
+    const m = MODALS[ui.modal]; if (!m) return;
+    const tab = ui.tab[ui.modal] != null ? ui.tab[ui.modal] : (m.tabs ? m.tabs[0][0] : null);
+    $('mtitle').textContent = typeof m.title === 'function' ? m.title() : m.title;
+    $('mtabs').innerHTML = m.tabs ? m.tabs.map(([k, n]) => `<button class="mtab ${k === tab ? 'on' : ''}" data-act="tab" data-t="${k}">${n}</button>`).join('') : '';
+    const body = $('mbody'), top = reset ? 0 : body.scrollTop, html = m.render(tab);
+    if (reset || html !== ui.mhtml) { ui.mhtml = html; body.innerHTML = html; body.scrollTop = top; }
+  }
+  const card = (ic, name, sub, btns, cls) => `<div class="card ${cls || ''}"><div class="ic">${ic}</div><div class="in"><b>${name}</b><small>${sub || ''}</small></div><div>${btns || ''}</div></div>`;
+  const btn = (act, data, label, cls, dis) => `<button class="btn ${cls || ''} ${dis ? 'dis' : ''}" data-act="${act}" ${Object.entries(data || {}).map(([k, v]) => `data-${k}="${v}"`).join(' ')}>${label}</button>`;
+  const trend = (k) => { const t = L.trendOf(S, k); return t > 0 ? '<span class="up">▲</span>' : t < 0 ? '<span class="dn">▼</span>' : '<span>▬</span>'; };
+  const ratio = (k) => S.market.m[k];
+  const priceTag = (k) => { const r = ratio(k); return r >= 1.25 ? '<span class="up">выгодно!</span>' : r <= 0.8 ? '<span class="dn">дёшево</span>' : ''; };
+  const canBuy = (c) => S.coins >= c;
+
+  // --- Склад: погрузка и отправка
+  MODALS.barn = {
+    title: '📦 Склад и доставка',
+    render() {
+      const goods = Object.keys(S.goods).filter((k) => S.goods[k] > 0);
+      if (!S.trucks[ui.truck]) ui.truck = 0;
+      const tr = S.trucks[ui.truck], info = L.TRUCKS[tr.lvl], busy = !L.truckFree(S, ui.truck);
+      let loaded = 0; for (const k of Object.keys(ui.load)) { ui.load[k] = Math.min(ui.load[k], S.goods[k] || 0); if (!ui.load[k]) delete ui.load[k]; else loaded += ui.load[k]; }
+      const val = L.loadValue(S, ui.load);
+      let h = `<div class="hint">Урожай нельзя продать на ферме: его надо <b>отвезти на рынок в город</b>. Выбери машину, загрузи товар и отправь. В пути бывают пробки, поломки и разбойники — а на рынке цена каждую минуту меняется!</div>`;
+      h += `<div class="trucks">${S.trucks.map((t, i) => { const I = L.TRUCKS[t.lvl], b = !L.truckFree(S, i), trp = S.trips.find((x) => x.truck === i); return `<div class="tr ${ui.truck === i ? 'on' : ''} ${b ? 'busy' : ''}" data-act="truck" data-i="${i}"><b>${I.icon}</b>${I.name}<br>до ${I.cap} шт.<br>${b ? (trp.phase === 'out' ? '→ ' : '← ') + mmss(trp.left) : 'свободна'}</div>`; }).join('')}</div>`;
+      h += `<div class="hint">Склад: ${L.total(S.goods)} / ${L.barnCap(S)} · Груз: <b>${loaded} / ${info.cap}</b> · примерно <b>${fmt(val)} 🪙</b></div><div class="bar"><i style="width:${Math.min(100, loaded / info.cap * 100)}%"></i></div><div style="height:10px"></div>`;
+      if (!goods.length) h += '<div class="hint center">Склад пуст. Вырасти урожай на ферме 🌾</div>';
+      for (const k of goods) {
+        const n = ui.load[k] || 0;
+        h += `<div class="card"><div class="ic">${gi(k)}</div><div class="in"><b>${L.GOODS[k].name} · ${S.goods[k]} шт.</b><small>на рынке ${L.price(S, k)}🪙 ${trend(k)} ${priceTag(k)}</small></div><div class="step"><button data-act="ld" data-k="${k}" data-d="-5">−</button><span>${n}</span><button data-act="ld" data-k="${k}" data-d="1">+</button><button data-act="ld" data-k="${k}" data-d="max">⏫</button></div></div>`;
       }
-      try { localStorage.removeItem(KEY); } catch { /* ignore */ }
-      state = L.createState(); particles.length = 0; closeModal(); changed(); resize(); toast('Новая ферма! 🌱');
+      h += `<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${btn('ldall', {}, 'Загрузить побольше', 'b')}${btn('ldclr', {}, 'Очистить', 'y')}${btn('send', {}, `🚚 Отправить (${loaded})`, '', busy || !loaded)}</div>`;
+      if (busy) h += '<div class="hint">Эта машина сейчас в рейсе — выбери другую или подожди.</div>';
+      const c = L.upgradeCost(S, 'barn');
+      h += `<div style="height:14px"></div>` + card('🏚️', `Склад: вместимость ${L.barnCap(S)}`, c == null ? 'Максимум' : `Улучшение до ${L.BARN_CAP[S.up.barn + 1]}`, c == null ? '' : btn('upg', { k: 'barn' }, `${fmt(c)} 🪙`, 'y', !canBuy(c)));
+      return h;
+    },
+  };
+
+  // --- Рынок
+  MODALS.market = {
+    title: '🏪 Городской рынок',
+    tabs: [['stall', '📦 Прилавок'], ['prices', '📊 Цены'], ['orders', '📜 Заказы']],
+    render(tab) {
+      if (tab === 'orders') return renderOrders();
+      if (tab === 'prices') {
+        let h = '<div class="hint">Цены каждые 15 секунд меняются сами. Бывает спрос (цена вверх 📈) и перепроизводство (вниз 📉) — продавай, когда выгодно! Репутация даёт надбавку до +30%.</div><table>';
+        for (const k of L.GOOD_KEYS) { const unlocked = L.CROPS[k] ? L.CROPS[k].level <= S.level + 2 : true; if (!unlocked) continue; const base = L.GOODS[k].sell, p = L.price(S, k), pc = Math.round((ratio(k) - 1) * 100); h += `<tr><td>${gi(k)} ${L.GOODS[k].name}</td><td><b>${p}🪙</b></td><td>${trend(k)}</td><td class="${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc}%</td><td>${priceTag(k)}</td></tr>`; }
+        return h + '</table>';
+      }
+      const keys = Object.keys(S.stall);
+      let h = `<div class="hint">Прилавок: ${L.total(S.stall)} / ${L.stallCap(S)}. Привезённый товар лежит здесь, пока ты не продашь. Можно подождать выгодной цены.</div>`;
+      if (!keys.length) h += '<div class="hint center">Прилавок пуст. Отвези товар со склада 🚚</div>';
+      let all = 0;
+      for (const k of keys) { all += L.price(S, k) * S.stall[k]; h += card(gi(k), `${L.GOODS[k].name} · ${S.stall[k]} шт.`, `${L.price(S, k)}🪙 за шт. ${trend(k)} ${priceTag(k)} · всего ${fmt(L.price(S, k) * S.stall[k])}🪙`, btn('sell', { k, n: 1 }, '×1', 'y') + ' ' + btn('sell', { k, n: 'all' }, 'Всё')); }
+      if (keys.length) h += `<div style="text-align:right">${btn('sellall', {}, `Продать всё: +${fmt(all)} 🪙`, 'y')}</div>`;
+      const c = L.upgradeCost(S, 'stall');
+      return h + '<div style="height:14px"></div>' + card('🧺', `Прилавок: ${L.stallCap(S)} мест`, c == null ? 'Максимум' : `Улучшение до ${L.STALL_CAP[S.up.stall + 1]}`, c == null ? '' : btn('upg', { k: 'stall' }, `${fmt(c)} 🪙`, 'y', !canBuy(c)));
+    },
+  };
+  function renderOrders() {
+    let h = '<div class="hint">Заказы городских жителей: заплатят намного больше обычной цены, дадут репутацию и опыт. Товар берётся с <b>прилавка на рынке</b>. Время ограничено!</div>';
+    if (!S.orders.length) h += '<div class="hint center">Новые заказы появляются каждую минуту.</div>';
+    for (const o of S.orders) {
+      const have = S.stall[o.good] || 0;
+      h += card(gi(o.good), `${o.qty} × ${L.GOODS[o.good].name} ${o.big ? '⭐ крупный' : ''}`, `Награда: <b>${fmt(o.reward)}🪙</b> · ${o.xp}⭐ · репутация +${o.rep}${o.gems ? ' · ' + o.gems + '💎' : ''}<br>На прилавке: ${have}/${o.qty} · осталось ${mmss(o.left)}`, btn('order', { id: o.id }, 'Выполнить', have >= o.qty ? '' : 'dis'));
     }
-  });
-
-  // ---------------------------------------------------------------- ввод
-  let dragging = false, visited = new Set();
-  function pos(e) {
-    const r = cv.getBoundingClientRect(), lx = (e.clientX - r.left) * logW / r.width, ly = (e.clientY - r.top) * logH / r.height;
-    return { lx, ly, tx: Math.floor(lx / S), ty: Math.floor((ly - YARD) / S) };
+    return h;
   }
-  cv.addEventListener('pointerdown', (e) => {
-    cv.setPointerCapture(e.pointerId);
-    const p = pos(e);
-    if (p.ly < YARD) { yardClick(p.lx, p.ly); return; }
-    dragging = true; visited = new Set(); hover = p;
-    if (p.tx >= 0 && p.tx < state.w && p.ty >= 0 && p.ty < state.h) { visited.add(p.tx + ',' + p.ty); apply(p.tx, p.ty); }
-  });
-  cv.addEventListener('pointermove', (e) => {
-    const p = pos(e); hover = p.ty >= 0 && p.tx >= 0 && p.tx < state.w && p.ty < state.h ? p : null;
-    if (dragging && hover) { const k = p.tx + ',' + p.ty; if (!visited.has(k)) { visited.add(k); apply(p.tx, p.ty); } } // зажми и води: вскопать/полить сразу несколько клеток
-  });
-  const endDrag = () => { dragging = false; };
-  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
-  cv.addEventListener('pointerleave', () => { hover = null; });
-  addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeModal(); return; }
-    if (!$('#modal').hidden) return;
-    const map = { 1: 'hoe', 2: 'seed', 3: 'water', 4: 'harvest', 5: 'fert', 6: 'remove' };
-    if (map[e.key]) { tool = map[e.key]; lastHud = ''; hud(); }
-    if (e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'ы') shop();
-  });
-  addEventListener('resize', resize);
-  addEventListener('beforeunload', save);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  MODALS.orders = { title: '📜 Заказы', render: renderOrders };
 
-  // ---------------------------------------------------------------- цикл
-  let saveDirty = false;
-  function changed() { saveDirty = true; lastHud = ''; }
-  let last = performance.now(), hintAt = 0, saveAt = 0;
+  // --- Магазин семян
+  MODALS.seeds = {
+    title: '🌱 Семена и корм',
+    tabs: [['seeds', '🌱 Семена'], ['stuff', '🧪 Товары'], ['gems', '💎 За кристаллы']],
+    render(tab) {
+      if (tab === 'stuff') {
+        const fc = L.feedCap(S);
+        return `<div class="hint">Корм нужен всем животным (кроме пчёл). Без корма они не дают продукты.</div>`
+          + card('🌾', `Корм · ${S.feed}/${fc}`, `${L.FEED_COST}🪙 за порцию`, btn('feed', { n: 10 }, '×10', 'y') + ' ' + btn('feed', { n: 50 }, '×50'))
+          + card('🧪', `Удобрение · ${S.items.fert} шт.`, `Ускоряет рост на 50% · ${L.FERT_COST}🪙`, btn('fert', { n: 1 }, '×1', 'y') + ' ' + btn('fert', { n: 5 }, '×5'))
+          + card('🧍', `Пугало · стоит ${L.farm(S).scarecrows}`, `Защита от вредителей на этой ферме · ${L.SCARECROW_COST}🪙`, btn('scare', {}, `${L.SCARECROW_COST} 🪙`, 'y', !canBuy(L.SCARECROW_COST)));
+      }
+      if (tab === 'gems') {
+        return `<div class="hint">Кристаллы 💎 дают за уровни, заказы, колесо и подарки. Можно купить в банке.</div>`
+          + card('⚡', 'Ускорение ×2 на 5 минут', `Всё на ферме растёт вдвое быстрее · ${L.SHOP_CRYSTALS.boost}💎`, btn('gbuy', { w: 'boost' }, `${L.SHOP_CRYSTALS.boost} 💎`, 'b', S.crystals < L.SHOP_CRYSTALS.boost))
+          + card('🌟', `Суперудобрение · ${S.items.superfert} шт.`, `Мгновенно доращивает растение · ${L.SHOP_CRYSTALS.superfert}💎`, btn('gbuy', { w: 'superfert' }, `${L.SHOP_CRYSTALS.superfert} 💎`, 'b', S.crystals < L.SHOP_CRYSTALS.superfert));
+      }
+      let h = '<div class="hint">Новые культуры открываются с уровнем. Дорогие растут дольше, но приносят больше.</div>';
+      for (const k of L.CROP_ORDER) {
+        const c = L.CROPS[k], lock = c.level > S.level;
+        h += card(c.icon, `${c.name} ${S.seeds[k] ? '· у тебя ' + S.seeds[k] : ''}`, lock ? `Откроется на ${c.level} уровне` : `Рост ${c.growMs / 1000 >= 60 ? Math.round(c.growMs / 6000) / 10 + ' мин' : c.growMs / 1000 + ' с'} · продажа ~${c.sell}🪙${c.perennial ? ' · 5 урожаев с одного куста' : ''}`,
+          lock ? '🔒' : btn('seedbuy', { k, n: 1 }, `${c.seedCost}🪙`, 'y', !canBuy(c.seedCost)) + ' ' + btn('seedbuy', { k, n: 10 }, `×10`, '', !canBuy(c.seedCost * 10)), lock ? 'lock' : '');
+      }
+      return h;
+    },
+  };
+
+  // --- Техцентр
+  MODALS.tech = {
+    title: '🚜 Техцентр',
+    tabs: [['tech', '🚜 Техника'], ['trucks', '🚚 Транспорт'], ['farm', '🏡 Ферма']],
+    render(tab) {
+      if (tab === 'trucks') {
+        let h = '<div class="hint">Чем лучше машина, тем больше везёт и быстрее едет. Охрана защищает от разбойников.</div>';
+        S.trucks.forEach((t, i) => {
+          const I = L.TRUCKS[t.lvl], nx = L.TRUCKS[t.lvl + 1];
+          h += card(I.icon, `Машина ${i + 1}: ${I.name}`, `Возит до ${I.cap} шт. · в одну сторону ${I.trip} с${nx ? `<br>Дальше: ${nx.name} (до ${nx.cap}, ${nx.trip} с)` : ''}`, nx ? btn('truckup', { i }, `${fmt(nx.cost)} 🪙`, 'y', !canBuy(nx.cost) || !L.truckFree(S, i)) : '<b>МАКС</b>');
+        });
+        const slot = L.TRUCK_SLOTS[S.trucks.length];
+        if (slot) h += card('➕', 'Ещё одна машина', slot.level > S.level ? `Откроется на ${slot.level} уровне` : 'Две машины возят одновременно', btn('truckbuy', {}, `${fmt(slot.cost)} 🪙`, 'y', slot.level > S.level || !canBuy(slot.cost)), slot.level > S.level ? 'lock' : '');
+        const g = L.upgradeCost(S, 'guard');
+        h += card('💂', `Охрана машин · ур. ${S.up.guard}`, `Шанс отбить разбойников: ${['0%', '50%', '85%'][S.up.guard]}`, g == null ? '<b>МАКС</b>' : btn('upg', { k: 'guard' }, `${fmt(g)} 🪙`, 'y', !canBuy(g)));
+        return h;
+      }
+      if (tab === 'farm') {
+        const f = L.farm(S);
+        const rows = [['plot', '🟫', `Участок фермы ${f.w}×${f.h}`, 'Больше места для грядок'], ['can', '🪣', `Лейка · вода на ${L.WATER_MS[S.up.can] / 1000} с`, 'Полив держится дольше, растения растут быстрее'], ['barn', '🏚️', `Склад ${L.barnCap(S)}`, 'Больше товара'], ['stall', '🧺', `Прилавок ${L.stallCap(S)}`, 'Больше товара на рынке']];
+        return '<div class="hint">Улучшения для текущей фермы и общего хозяйства.</div>' + rows.map(([k, ic, n, d]) => { const c = L.upgradeCost(S, k); return card(ic, n, d, c == null ? '<b>МАКС</b>' : btn('upg', { k }, `${fmt(c)} 🪙`, 'y', !canBuy(c))); }).join('');
+      }
+      let h = '<div class="hint">Трактор пашет и сеет сразу несколько клеток, комбайн собирает урожай площадью. Улучшай — площадь растёт, а перезарядка короче.</div>';
+      for (const k of ['tractor', 'combine']) {
+        const d = L.TOOL_LEVELS[k], lv = S.up[k], c = L.upgradeCost(S, k), lock = S.level < d.need;
+        h += card(k === 'tractor' ? '🚜' : '🌾', `${d.name} · ур. ${lv}`, lock ? `Откроется на ${d.need} уровне` : lv ? `Захват ${d.area[lv - 1].length} клеток · перезарядка ${d.cool[lv - 1]} с` : 'Не куплен', c == null ? '<b>МАКС</b>' : btn('upg', { k }, `${lv ? 'Улучшить' : 'Купить'} ${fmt(c)} 🪙`, 'y', lock || !canBuy(c)), lock ? 'lock' : '');
+      }
+      return h + `<div class="hint">Поливалка 🚿 (с ${L.SPRINKLER.need} уровня) — ставится на ферме, сама поливает 3×3 клетки.</div>`;
+    },
+  };
+
+  // --- Банк
+  MODALS.bank = {
+    title: '🏦 Банк',
+    render() {
+      let h = `<div class="hint">Обмен валют. Монеты 🪙 — основные деньги, кристаллы 💎 — редкие, билеты 🎟️ — для колеса удачи.</div>`;
+      h += card('💎→🪙', 'Продать кристаллы', `1 💎 = ${L.EXCHANGE.gemCoins} 🪙`, btn('ex', { d: 'g2c', n: 1 }, '×1', 'y', S.crystals < 1) + ' ' + btn('ex', { d: 'g2c', n: 10 }, '×10', '', S.crystals < 10));
+      h += card('🪙→💎', 'Купить кристаллы', `1 💎 = ${L.EXCHANGE.coinsForGem} 🪙`, btn('ex', { d: 'c2g', n: 1 }, '×1', 'b', !canBuy(L.EXCHANGE.coinsForGem)) + ' ' + btn('ex', { d: 'c2g', n: 5 }, '×5', 'b', !canBuy(L.EXCHANGE.coinsForGem * 5)));
+      h += `<div class="hint" style="margin-top:12px"><b>Статистика</b><br>Заработано на рынке: ${fmt(S.stats.earned)} 🪙 · Собрано: ${fmt(S.stats.harvested)} · Рейсов: ${S.stats.trips} · Золотых: ${S.stats.golden} · Прокруток: ${S.stats.spins}<br>Репутация ${S.rep} → надбавка к ценам +${Math.round(L.repBonus(S) * 100)}%</div>`;
+      return h;
+    },
+  };
+
+  // --- Колесо удачи
+  function wheelHtml() {
+    const n = L.WHEEL.length, cols = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#f4511e', '#3949ab', '#fdd835', '#546e7a'];
+    const grad = L.WHEEL.map((p, i) => `${cols[i % cols.length]} ${i * 360 / n}deg ${(i + 1) * 360 / n}deg`).join(',');
+    const icons = L.WHEEL.map((p, i) => `<i style="transform:rotate(${i * 360 / n + 180 / n}deg)"><span>${p.icon}</span></i>`).join('');
+    return `<div class="wheelbox"><div class="pointer">▼</div><div class="wheel" id="wheel" style="background:conic-gradient(${grad});transform:rotate(${ui.wheelAngle}deg)">${icons}</div></div>`;
+  }
+  MODALS.casino = {
+    title: '🎰 Колесо удачи',
+    render() {
+      let h = wheelHtml();
+      if (S.pending && !ui.spinning) {
+        h += `<div class="center big">Выигрыш ${fmt(S.pending.coins)} 🪙!</div><div class="hint center">Забрать или рискнуть? 45% — приз ×2, иначе — всё сгорит.</div><div style="display:flex;gap:10px;justify-content:center">${btn('take', {}, `Забрать ${fmt(S.pending.coins)}`, 'y')}${btn('risk', {}, `Рискнуть → ${fmt(S.pending.coins * 2)}`, 'r')}</div>`;
+      } else h += `<div class="center">${btn('spin', {}, `Крутить · 🎟️ ${S.tickets}`, 'y', ui.spinning || S.tickets < 1)}</div><div class="hint center">Билеты дают за уровни, золотые урожаи, заказы, рейсы и ежедневный подарок. Джекпот: 5000 🪙 + 10 💎</div>`;
+      h += `<div class="hint"><b>Призы:</b> ${L.WHEEL.map((p) => p.icon + ' ' + p.text).join(' · ')}</div>`;
+      if (S.daily.key !== todayKey()) h += `<div class="center">${btn('daily', {}, '🎁 Забрать ежедневный подарок', 'b')}</div>`;
+      return h;
+    },
+  };
+
+  // --- Животные
+  MODALS.animals = {
+    title: '🐄 Загон и животные',
+    render() {
+      const fc = L.feedCap(S);
+      let h = `<div class="hint">Животные дают продукты каждые 1–4 минуты. Нужен корм: <b>${S.feed}/${fc}</b> ${btn('feed', { n: 10 }, 'Корм ×10 · ' + L.FEED_COST * 10 + '🪙', 'y', !canBuy(L.FEED_COST * 10))}</div>`;
+      for (const k of L.ANIMAL_ORDER) {
+        const a = L.ANIMALS[k], n = S.animals[k] || 0, p = S.prod[k] || { acc: 0, pending: 0 }, lock = a.level > S.level;
+        const prod = L.GOODS[a.product];
+        h += card(a.icon, `${a.name} · ${n}/${a.cap}`, lock ? `Откроется на ${a.level} уровне` : `${prod.icon} ${prod.name} каждые ${Math.round(a.every / 1000)} с · на рынке ~${prod.sell}🪙${n ? `<br>Готово: ${p.pending} шт.` : ''}`,
+          lock ? '🔒' : `${p.pending ? btn('collect', { k }, `Собрать ${p.pending}`, '') + ' ' : ''}${btn('abuy', { k }, `${fmt(a.cost)}🪙`, 'y', n >= a.cap || !canBuy(a.cost))}`, lock ? 'lock' : '');
+      }
+      return h;
+    },
+  };
+
+  // --- Уровни
+  MODALS.levels = {
+    title: '⭐ Уровни и награды',
+    render() {
+      let h = `<div class="hint">Опыт даёт всё: посадка, сбор, заказы. За каждый уровень — 💎 кристаллы и 🎟️ билет.</div>`;
+      for (let lv = 2; lv <= 24; lv++) { const u = unlocksAt(lv); h += card(String(lv), `Уровень ${lv}${lv <= S.level ? ' ✅' : ''}`, `${u.length ? u.join(', ') : 'Больше поливалок и бонусов'} · награда ${L.levelGems(lv)}💎`, '', lv <= S.level ? '' : lv === S.level + 1 ? '' : 'lock'); }
+      return h;
+    },
+  };
+
+  // --- Покупка фермы
+  MODALS.buyfarm = {
+    title: '🗺️ Новая ферма',
+    render() {
+      const d = L.FARM_DEFS.find((x) => x.id === ui.buyId); if (!d) return '';
+      return `<div class="center" style="font-size:60px">${d.id === 'valley' ? '🌄' : '⛰️'}</div><div class="center big">${d.name}</div><div class="hint center">Отдельная ферма на карте города. Растения здесь растут на ${Math.round((d.bonus - 1) * 100)}% быстрее!<br>Нужен ${d.level} уровень · цена ${fmt(d.cost)} 🪙</div><div class="center">${btn('farmbuy', { id: d.id }, `Купить за ${fmt(d.cost)} 🪙`, 'y', S.level < d.level || !canBuy(d.cost))}</div>`;
+    },
+  };
+
+  // --- Меню
+  MODALS.menu = {
+    title: '☰ Меню',
+    render() {
+      let h = card('🔊', 'Звук', ui.sound ? 'Включён' : 'Выключен', btn('snd', {}, ui.sound ? 'Выключить' : 'Включить', 'y'));
+      h += card('❓', 'Как играть', 'Правила и подсказки', btn('modal', { id: 'help' }, 'Открыть', 'b'));
+      h += card('🌍', 'Мои фермы', S.farms.map((f, i) => (i === S.cur ? '▶ ' : '') + L.FARM_DEFS.find((d) => d.id === f.id).name).join(' · '), '');
+      h += card('🗑️', 'Начать заново', 'Весь прогресс будет удалён', btn('reset', {}, ui.confirm === 'reset' ? 'Точно? Нажми ещё раз' : 'Сбросить', 'r'));
+      return h;
+    },
+  };
+  MODALS.help = {
+    title: '❓ Как играть',
+    render() {
+      return `<div class="hint" style="font-size:15px">
+        <b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
+        <b>2.</b> Когда созреет — 🧺 собери. Урожай попадает на <b>склад</b>.<br>
+        <b>3.</b> Продать урожай можно <b>только на рынке в городе</b>: открой «📦 Склад», выбери машину, загрузи и отправь 🚚. В пути бывают пробки, поломки и разбойники.<br>
+        <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
+        <b>5.</b> Копи монеты 🪙 → покупай животных, 🚜 трактор и 🌾 комбайн, машины побольше, новые фермы.<br>
+        <b>6.</b> Билеты 🎟️ крутят 🎰 колесо: можно рискнуть и удвоить приз! 💎 кристаллы дают ускорение ×2.<br>
+        Нажми на здание в городе — откроется магазин.</div>${btn('close', {}, 'Поехали!', 'y')}`;
+    },
+  };
+
+  // ---------------------------------------------------------------- обработчики
+  const A = {
+    close: closeModal,
+    modal: (d) => openModal(d.id),
+    tab: (d) => { ui.tab[ui.modal] = d.t; ui.confirm = null; renderModal(true); },
+    mode: (d) => goMode(d.m),
+    tool: (d) => { ui.tool = d.t; lastBar = ''; if (d.t === 'sprinkler' && S.level < L.SPRINKLER.need) toast(`Поливалки с ${L.SPRINKLER.need} уровня`, 'bad'); if ((d.t === 'tractor' || d.t === 'combine') && !S.up[d.t]) { toast(`${L.TOOL_LEVELS[d.t].name} покупается в Техцентре 🏙️ (с ${L.TOOL_LEVELS[d.t].need} уровня)`, 'bad'); } pickSeed(); renderBar(); },
+    seedpick: (d) => { if (!S.seeds[d.k]) { if (L.CROPS[d.k].level > S.level) return toast(`С ${L.CROPS[d.k].level} уровня`, 'bad'); toast('Семян нет — купи в магазине', 'bad'); return openModal('seeds', 'seeds'); } ui.seed = d.k; lastSeed = ''; renderBar(); },
+    daily: () => { const r = L.claimDaily(S, todayKey()); if (r.ok) { sfx.coin(); toast(`🎁 Подарок: ${r.coins}🪙 ${r.gems}💎 ${r.tickets}🎟️`, 'good'); } else toast(r.msg, 'bad'); },
+    ld: (d) => {
+      const tr = L.TRUCKS[S.trucks[ui.truck].lvl], have = S.goods[d.k] || 0; let cur = ui.load[d.k] || 0;
+      const used = Object.values(ui.load).reduce((a, b) => a + b, 0) - cur, room = Math.max(0, tr.cap - used);
+      cur = d.d === 'max' ? Math.min(have, room) : Math.max(0, Math.min(have, room, cur + (+d.d)));
+      if (cur > 0) ui.load[d.k] = cur; else delete ui.load[d.k]; renderModal();
+    },
+    ldall: () => { const tr = L.TRUCKS[S.trucks[ui.truck].lvl]; let room = tr.cap; ui.load = {}; const ks = Object.keys(S.goods).sort((a, b) => L.price(S, b) - L.price(S, a)); for (const k of ks) { const n = Math.min(S.goods[k], room); if (n > 0) { ui.load[k] = n; room -= n; } } renderModal(); },
+    ldclr: () => { ui.load = {}; renderModal(); },
+    truck: (d) => { ui.truck = +d.i; ui.load = {}; renderModal(); },
+    send: () => {
+      const r = L.startTrip(S, ui.truck, ui.load);
+      if (!r.ok) return toast(r.msg, 'bad');
+      ui.load = {}; sfx.coin(); toast(`${L.TRUCKS[S.trucks[ui.truck].lvl].icon} Машина выехала на рынок!${r.trip.ev ? ' ' + r.trip.ev.text : ''}`, 'good'); closeModal(); goMode('city');
+    },
+    sell: (d) => { const r = L.sellStall(S, d.k, d.n === 'all' ? 'all' : +d.n); if (r.ok) { sfx.coin(); toast(`+${fmt(r.gain)} 🪙`, 'good'); } else toast(r.msg, 'bad'); },
+    sellall: () => { const r = L.sellAllStall(S); if (r.ok) { sfx.coin(); toast(`Продано на ${fmt(r.gain)} 🪙`, 'good'); } else toast(r.msg, 'bad'); },
+    order: (d) => { const r = L.fulfillOrder(S, +d.id); if (r.ok) { sfx.coin(); toast(`Заказ выполнен! +${fmt(r.reward)}🪙 +${r.xp}⭐${r.gems ? ' +' + r.gems + '💎' : ''}`, 'good'); if (r.levelUp) onLevelUp(); } else toast(r.msg, 'bad'); },
+    seedbuy: (d) => { const r = L.buySeeds(S, d.k, +d.n); r.ok ? sfx.plant() : toast(r.msg, 'bad'); pickSeed(); },
+    feed: (d) => { const r = L.buyFeed(S, +d.n); r.ok ? sfx.plant() : toast(r.msg, 'bad'); },
+    fert: (d) => { const r = L.buyFert(S, +d.n); r.ok ? sfx.plant() : toast(r.msg, 'bad'); },
+    scare: () => { const r = L.buyScarecrow(S); r.ok ? sfx.plant() : toast(r.msg, 'bad'); },
+    gbuy: (d) => { const r = L.buyGems(S, d.w, 1); if (r.ok) { sfx.level(); toast(d.w === 'boost' ? '⚡ Рост ×2 на 5 минут!' : '🌟 Суперудобрение добавлено', 'good'); } else toast(r.msg, 'bad'); },
+    upg: (d) => { const r = L.buyUpgrade(S, d.k); if (r.ok) { sfx.level(); toast('Улучшено!', 'good'); lastBar = ''; } else toast(r.msg, 'bad'); },
+    truckup: (d) => { const r = L.upgradeTruck(S, +d.i); r.ok ? (sfx.level(), toast('Машина улучшена!', 'good')) : toast(r.msg, 'bad'); },
+    truckbuy: () => { const r = L.buyTruckSlot(S); r.ok ? (sfx.level(), toast('Новая машина в гараже!', 'good')) : toast(r.msg, 'bad'); },
+    abuy: (d) => { const r = L.buyAnimal(S, d.k); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
+    collect: (d) => { const r = L.collect(S, d.k); if (r.ok) { sfx.harvest(); toast(`+${r.n} ${gi(r.item)}`, 'good'); } else toast(r.msg, 'bad'); },
+    ex: (d) => { const r = L.exchange(S, d.d, +d.n); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
+    farmbuy: (d) => { const r = L.unlockFarm(S, d.id); if (r.ok) { sfx.level(); toast('Новая ферма твоя! 🎉', 'good'); closeModal(); world.refreshCity(S); goMode('farm'); } else toast(r.msg, 'bad'); },
+    snd: () => { ui.sound = !ui.sound; renderModal(); },
+    reset: () => { if (ui.confirm !== 'reset') { ui.confirm = 'reset'; renderModal(); return; } store.del(SAVE); location.reload(); },
+    spin: () => {
+      if (ui.spinning) return;
+      ui.hold = { coins: S.coins, crystals: S.crystals, tickets: S.tickets - 1 };
+      const r = L.spin(S); if (!r.ok) { ui.hold = null; return toast(r.msg, 'bad'); }
+      const idx = L.WHEEL.findIndex((p) => p.id === r.prize.id), step = 360 / L.WHEEL.length;
+      ui.wheelAngle = Math.ceil(ui.wheelAngle / 360) * 360 + 360 * 5 + (360 - (idx * step + step / 2));
+      ui.spinning = true; renderModal(); const w = $('wheel'); if (w) { w.style.transition = 'none'; w.getBoundingClientRect(); w.style.transition = ''; }
+      requestAnimationFrame(() => { const w2 = $('wheel'); if (w2) w2.style.transform = `rotate(${ui.wheelAngle}deg)`; });
+      let n = 0; const tk = setInterval(() => { beep(500 + (n++ % 6) * 40, 0.04, 'square', 0.02); }, 140);
+      setTimeout(() => {
+        clearInterval(tk); ui.spinning = false; ui.hold = null; sfx[r.prize.none ? 'bad' : 'level']();
+        toast(r.prize.none ? '💨 Пусто... повезёт в следующий раз' : `${r.prize.icon} Выпало: ${r.prize.text}!`, r.prize.none ? 'bad' : 'good'); if (ui.modal === 'casino') renderModal();
+      }, 4200);
+    },
+    take: () => { const r = L.resolvePrize(S, false); if (r.ok) { sfx.coin(); toast(`+${fmt(r.won)} 🪙`, 'good'); } renderModal(); },
+    risk: () => { const r = L.resolvePrize(S, true); if (r.ok) { r.doubled ? (sfx.level(), toast(`🔥 УДВОИЛ! +${fmt(r.won)} 🪙`, 'good')) : (sfx.bad(), toast('💥 Не повезло — приз сгорел', 'bad')); } renderModal(); },
+  };
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]'); if (!el || el.classList.contains('dis')) return;
+    const f = A[el.dataset.act]; if (!f) return;
+    f(el.dataset); lastBar = ''; lastSeed = ''; renderHud(); renderBar(); if (ui.modal) renderModal();
+  });
+  $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
+
+  function onBuilding(id) {
+    if (ui.modal) return;
+    const fd = L.FARM_DEFS.find((d) => d.id === id);
+    if (fd) {
+      const i = S.farms.findIndex((f) => f.id === id);
+      if (i >= 0) { L.setFarm(S, i); goMode('farm'); }
+      else { ui.buyId = id; openModal('buyfarm'); }
+      return;
+    }
+    openModal(id);
+  }
+
+  // ---------------------------------------------------------------- главный цикл
+  let last = performance.now(), acc = 0, uiAcc = 0, modalAcc = 0, saveAcc = 0;
   function frame(now) {
-    const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    L.tick(state, dt * 1000); stepFx(dt); hud(); render(now);
-    if (now - hintAt > 700) { hintAt = now; $('#hint').textContent = hintText(); }
-    if ((saveDirty || now - saveAt > 10000) && now - saveAt > 3000) { saveAt = now; saveDirty = false; save(); }
+    const dt = Math.min(0.2, (now - last) / 1000); last = now;
+    acc += dt * 1000; uiAcc += dt; modalAcc += dt; saveAcc += dt;
+    if (acc >= 100) { L.tick(S, acc); acc = 0; }
+    if (uiAcc >= 0.25) {
+      uiAcc = 0; renderHud(); renderBar();
+      for (const l of S.log) if (l.n > ui.lastLog) { ui.lastLog = l.n; toast(l.msg, l.kind === 'good' ? 'good' : l.kind === 'bad' ? 'bad' : ''); if (l.kind === 'good') sfx.coin(); else if (l.kind === 'bad') sfx.bad(); }
+    }
+    if (modalAcc >= 1 && ui.modal && !ui.spinning) { modalAcc = 0; renderModal(); }
+    if (saveAcc >= 8) { saveAcc = 0; save(); }
+    world.update(dt, S);
     requestAnimationFrame(frame);
   }
 
-  load(); buildSprites();
-  $('#btnSound').textContent = muted ? '🔇' : '🔊';
-  resize(); hud();
-  requestAnimationFrame(frame);
-  window.__farm = { get state() { return state; }, L, advance: (ms) => { L.tick(state, ms); changed(); }, setTool: (t) => { tool = t; lastHud = ''; hud(); }, setSeed: (k) => { sel = k; lastHud = ''; hud(); }, save, resize };
+  function start() {
+    const d = load();
+    S = d ? d.s : L.createState();
+    if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(`С возвращением! Тебя не было ${Math.round(away / 60000)} мин — работа не стояла 🌾`, 'good'); } }
+    ui.lastLog = S.logN || 0;
+    try {
+      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onPen: () => { if (!ui.modal) openModal('animals'); } });
+    } catch (err) { console.error(err); $('nogl').hidden = false; return; }
+    world.setMode('farm', S); world.refreshCity(S);
+    pickSeed();
+    window.__world = world;
+    renderHud(); renderBar();
+    if (!store.get(HELP)) { store.set(HELP, '1'); openModal('help'); }
+    window.addEventListener('pagehide', save); document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+    requestAnimationFrame(frame);
+  }
+  // смена фермы из города должна пересобрать сцену
+  window.addEventListener('load', start);
 })();

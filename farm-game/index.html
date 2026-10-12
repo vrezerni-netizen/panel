@@ -2,37 +2,24 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Весёлая ферма</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ферма и Город</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-  <header id="hud">
-    <div class="pill" id="coins">🪙 <b>0</b></div>
-    <div class="pill lvlpill">⭐ Ур. <b id="lvl">1</b>
-      <div class="xp"><i id="xpbar"></i></div><small id="xptxt"></small></div>
-    <div class="pill" id="clock">☀️ <span>День 1</span></div>
-    <div class="spacer"></div>
-    <button class="ib" id="btnSound" title="Звук">🔊</button>
-    <button class="ib" id="btnMenu" title="Меню">⚙️</button>
-  </header>
-  <div id="hint"></div>
-  <main id="stage"><canvas id="cv"></canvas></main>
-  <section id="seedbar" hidden></section>
-  <nav id="tools">
-    <button data-tool="hoe"><span>⛏️</span>Мотыга<kbd>1</kbd></button>
-    <button data-tool="seed"><span>🌱</span>Посев<kbd>2</kbd></button>
-    <button data-tool="water"><span>💧</span>Лейка<kbd>3</kbd></button>
-    <button data-tool="harvest"><span>🧺</span>Сбор<kbd>4</kbd></button>
-    <button data-tool="fert"><span>🧪</span>Удобр.<em id="fertN">1</em><kbd>5</kbd></button>
-    <button data-tool="remove"><span>🪓</span>Убрать<kbd>6</kbd></button>
-    <button id="btnShop" class="shop"><span>🛒</span>Магазин<kbd>S</kbd></button>
-  </nav>
+  <div id="stage"><canvas id="gl"></canvas><div id="labels"></div><div id="floats"></div></div>
+  <header id="hud"></header>
+  <div id="toasts"></div>
+  <div id="seedbar"></div>
+  <nav id="bar"></nav>
+  <div id="modal" hidden><div class="mwrap"><div class="mhead"><b id="mtitle"></b><button class="x" data-act="close">✕</button></div><div class="mtabs" id="mtabs"></div><div class="mbody" id="mbody"></div></div></div>
+  <div id="fade"></div>
+  <div id="nogl" hidden>Для 3D нужен браузер с WebGL. Обнови браузер или включи аппаратное ускорение.</div>
 </div>
-<div id="toast"></div>
-<div id="modal" hidden></div>
+<script src="vendor/three.min.js"></script>
 <script src="logic.js"></script>
+<script src="world3d.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
