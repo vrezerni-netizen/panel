@@ -104,7 +104,7 @@
     const g = new T.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - 2 * bev), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelOffset: 0, bevelSegments: 1, curveSegments: 2 });
     g.translate(0, 0, -(d - 2 * bev) / 2); return g;
   }
-  const rb = (w, h, d, r) => { const k = [w, h, d, r].map((v) => v == null ? '' : +(+v).toFixed(4)).join('_'); return RBC[k] || (RBC[k] = Math.min(w, h, d) < 0.075 ? new T.BoxGeometry(w, h, d) : crease(rbox2(w, h, d, r == null ? 0.03 : r), 52)); };
+  const rb = (w, h, d, r) => { const k = [w, h, d, r].map((v) => v == null ? '' : +(+v).toFixed(4)).join('_'); return RBC[k] || (RBC[k] = Math.min(w, h, d) < 0.105 ? new T.BoxGeometry(w, h, d) : crease(rbox2(w, h, d, r == null ? 0.03 : r), 52)); };
   const cyg = (r1, r2, h, s) => { const k = [r1, r2, h, s].join('_'); return CYC[k] || (CYC[k] = new T.CylinderGeometry(r1, r2, h, s || 14)); };
   const BALL = {}; const ball = (r) => BALL[r] || (BALL[r] = new T.SphereGeometry(r, 8, 6));
   /** Профиль в плоскости (z,y), выдавленный на ширину w по оси X (центр по X=0): крылья, борта, рамы. */
@@ -128,7 +128,7 @@
     const A = new V3(a[0], a[1], a[2]), B = new V3(b[0], b[1], b[2]), D = B.clone().sub(A), L = D.length(), u = D.clone().normalize(), mid = A.clone().add(u.clone().multiplyScalar(L * 0.5));
     rod(g, mb, a, [mid.x, mid.y, mid.z], r, 12); rod(g, mc, [mid.x, mid.y, mid.z], b, r * 0.5, 10);
     const e = A.clone().add(u.clone().multiplyScalar(L * 0.5)); void e;
-    put(g, ball(r * 0.9), mb, a[0], a[1], a[2]); put(g, ball(r * 0.6), mc, b[0], b[1], b[2]);
+    put(g, cyg(r * 0.9, r * 0.9, r * 1.6, 8), mb, a[0], a[1], a[2], 0, 0, PI / 2); put(g, cyg(r * 0.6, r * 0.6, r * 1.6, 8), mc, b[0], b[1], b[2], 0, 0, PI / 2);
   }
   /** Гибкий шланг/кабель по точкам (Catmull-Rom). */
   function hose(g, m, pts, r, segs, rs) {
@@ -171,11 +171,11 @@
   function wheelParts(R, W, o) {
     const key = [R, W, o.rimK, o.lugs, o.seg, o.lugH, o.road ? 1 : 0].join('|'); if (WC[key]) return WC[key];
     const hw = W / 2, lugH = R * (o.lugH == null ? 0.05 : o.lugH), Rc = R - lugH * 0.85, rimR = R * (o.rimK || 0.56), H = Rc - rimR, seg = o.seg || 32, P = (r, y) => new T.Vector2(r, y);
-    const prof = [P(rimR + 0.012, -hw * 0.82), P(rimR + H * 0.12, -hw * 0.97), P(rimR + H * 0.42, -hw), P(rimR + H * 0.72, -hw * 0.93), P(Rc - H * 0.10, -hw * 0.74), P(Rc, -hw * 0.52), P(Rc, hw * 0.52), P(Rc - H * 0.10, hw * 0.74), P(rimR + H * 0.72, hw * 0.93), P(rimR + H * 0.42, hw), P(rimR + H * 0.12, hw * 0.97), P(rimR + 0.012, hw * 0.82)];
+    const prof = [P(rimR + 0.012, -hw * 0.82), P(rimR + H * 0.25, -hw), P(rimR + H * 0.62, -hw * 0.96), P(Rc - H * 0.08, -hw * 0.72), P(Rc, -hw * 0.5), P(Rc, hw * 0.5), P(Rc - H * 0.08, hw * 0.72), P(rimR + H * 0.62, hw * 0.96), P(rimR + H * 0.25, hw), P(rimR + 0.012, hw * 0.82)];
     const carcass = new T.LatheGeometry(prof, seg);
     const lugs = new Acc(), nl = o.lugs == null ? 20 : o.lugs;
     if (nl > 0) {
-      const lug = cyg(0.7071 * 0.8, 0.7071, 1, 4).clone(); lug.rotateY(PI / 4); lug.translate(0, 0.5, 0); const ya = rad(34), pitch = PI * 2 * Rc / nl, mx = new M4(), xa = new V3(), ya_ = new V3(), za = new V3();
+      const lug = cyg(0.7071 * 0.8, 0.7071, 1, 4).clone(); lug.rotateY(PI / 4); lug.translate(0, 0.5, 0); { const ix = lug.index.array, g2 = lug.groups[2]; lug.setIndex(Array.from(ix).slice(0, g2.start)); lug.clearGroups(); } const ya = rad(34), pitch = PI * 2 * Rc / nl, mx = new M4(), xa = new V3(), ya_ = new V3(), za = new V3();
       for (let s = -1; s <= 1; s += 2) for (let k = 0; k < nl; k++) {
         const th = (k + (s > 0 ? 0 : 0.5)) * PI * 2 / nl, rh = new V3(Math.cos(th), 0, Math.sin(th)), tg = new V3(-Math.sin(th), 0, Math.cos(th));
         xa.set(0, s * Math.cos(ya), 0).addScaledVector(tg, Math.sin(ya)); ya_.copy(rh); za.crossVectors(xa, ya_);
@@ -199,6 +199,10 @@
   const glassBox = (w, h, d, x, y, z, rx, ry, rz) => GLA.at(new T.BoxGeometry(w, h, d), x, y, z, rx, ry, rz);
   function begin() { GLA = new Acc(); return new T.Group(); }
   function finish(g, tint, gscale) {
+    if (window.__MM_DEBUG) { // отладка: самые тяжёлые детали до склейки
+      const L = []; g.traverse((o) => { if (o.isMesh) { const n = (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; L.push([n, o.geometry.type, o.material.color ? o.material.color.getHexString() : '', o.position.x.toFixed(1), o.position.y.toFixed(1), o.position.z.toFixed(1)]); } });
+      L.sort((a, b) => b[0] - a[0]); console.log('MMDBG ' + L.slice(0, 28).map((r) => r.join(' ')).join(' | ') + ' | total meshes ' + L.length + ' glass ' + GLA.p.length / 9);
+    }
     const out = C.bakeTex(g);
     if (!GLA.empty) { const gm = GLA.mesh(glassM(tint || 0x86aebd)); gm.castShadow = false; gm.receiveShadow = false; if (gscale && gscale !== 1) gm.scale.setScalar(gscale); out.add(gm); }
     // центрируем опору по оси Z, опускаем на землю
@@ -408,7 +412,7 @@
     const ry = 0.29, rz = -4.45;
     for (const h of [-1, 1]) {
       const x0 = h * 0.06, x1 = h * (W * 0.47); cylX(g, mt.dark, ry - 0.03, Math.abs(x1 - x0), (x0 + x1) / 2, ry, rz, 14);
-      const nr = Math.floor(Math.abs(x1 - x0) / 0.36); for (let i = 0; i < nr; i++) AX.at(cyg(ry + 0.02, ry + 0.02, 0.07, 14), x0 + h * (i + 0.5) * Math.abs(x1 - x0) / nr, ry, rz, 0, 0, PI / 2);
+      const nr = Math.floor(Math.abs(x1 - x0) / 0.5); for (let i = 0; i < nr; i++) AX.at(cyg(ry + 0.02, ry + 0.02, 0.07, 10), x0 + h * (i + 0.5) * Math.abs(x1 - x0) / nr, ry, rz, 0, 0, PI / 2);
     }
     g.add(AX.mesh(mt.steel));
     for (const x of [-W * 0.4, -W * 0.15, W * 0.15, W * 0.4]) { beam(g, mt.body, [x, yb, zr], [x, ry + 0.1, rz + 0.05], 0.09, 0.1, 0.03); beam(g, mt.dark, [x, ry, rz + 0.05], [x, ry, rz], 0.07, 0.07, 0.02); }
@@ -429,7 +433,226 @@
     const ig = new T.Group(); ig.position.set(0, 0, (w.hz + 0.18) * k); buildDisc(ig, w.mt, 5.4 + 0.6 * (lv - 1), w.hy * k); root.add(ig);
     return finish(root, 0x86aebd, k);
   }
-  reg('vehicle', 'tractor', (lv) => tractorTier0(lv));
+
+
+
+  // ------------------------------------------------------------------ гусеничный трактор (L7-10)
+  const DT = { zf: 2.1, zr: -2.0, xt: 1.17, Wt: 0.76,
+    hood: { z0: 0.78, z1: 4.05, yb: 1.30, yt0: 2.66, yt1: 2.16, wb0: 1.62, wb1: 1.52, wt0: 1.3, wt1: 1.18, curve: 1.1 },
+    cab: { zc: -0.55, L: 2.2, W: 1.64, yf: 1.66, yr: 3.66, rake: 0.42 }, hitchZ: -4.55, hitchY: 0.88 };
+  function hull2(pts) {
+    const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+    for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+    up.pop(); lo.pop(); return lo.concat(up);
+  }
+  /** Резиновая гусеница: лента-кольцо по выпуклой оболочке катков, грунтозацепы, ведущее колесо, направляющие и опорные катки. */
+  function buildTrack(g, mt, x, zc, W) {
+    const tb = 0.1, wh = [{ z: 0.84, y: 0.54, r: 0.44 }, { z: -0.84, y: 0.54, r: 0.44 }, { z: 0, y: 1.16, r: 0.36 }];
+    const cp = (r) => { const a = []; for (const w of wh) for (let i = 0; i < 14; i++) { const t = i / 14 * PI * 2; a.push([w.z + (w.r + r) * Math.cos(t), w.y + (w.r + r) * Math.sin(t)]); } return hull2(a); };
+    const outer = cp(tb), inner = cp(0.0);
+    const sh = new T.Shape(outer.map((p) => new T.Vector2(p[0], p[1]))); sh.holes.push(new T.Path(inner.map((p) => new T.Vector2(p[0], p[1])).reverse()));
+    const bg = new T.ExtrudeGeometry(sh, { depth: W, bevelEnabled: false, curveSegments: 1 }); bg.translate(0, 0, -W / 2); bg.rotateY(-PI / 2);
+    put(g, crease(bg, 35), mt.rubber, x, 0, zc);
+    // грунтозацепы вдоль внешнего контура
+    const cl = new Acc(), box = new T.BoxGeometry(1, 1, 1); let per = 0; const seg = []; for (let i = 0; i < outer.length; i++) { const a = outer[i], b = outer[(i + 1) % outer.length], l = Math.hypot(b[0] - a[0], b[1] - a[1]); seg.push(l); per += l; }
+    const nc = Math.round(per / 0.19), step = per / nc; let acc = 0, si = 0;
+    for (let k = 0; k < nc; k++) {
+      const d = k * step; while (si < seg.length - 1 && acc + seg[si] < d) { acc += seg[si]; si++; }
+      const a = outer[si], b = outer[(si + 1) % outer.length], t = (d - acc) / (seg[si] || 1), px = lerp(a[0], b[0], t), py = lerp(a[1], b[1], t), dz = (b[0] - a[0]) / seg[si], dy = (b[1] - a[1]) / seg[si], al = Math.atan2(-dy, dz);
+      cl.at(box, x, py + dz * 0.045, zc + px - dy * 0.045, al, 0, 0, W * 0.97, 0.075, 0.1);
+    }
+    g.add(cl.mesh(mt.rubber));
+    // колёса внутри ленты
+    const hw = W * 0.5 - 0.06;
+    for (const w of wh) { const y = w.y, z = zc + w.z; cylX(g, mt.steel, w.r, hw * 2, x, y, z, 18); }
+    for (const s of [-1, 1]) {
+      const ox = x + s * (W / 2 - 0.02);
+      for (const w of wh) { const sp = w === wh[2]; cylX(g, sp ? mt.dark : mt.steel, w.r * 0.97 + 0.02, 0.06, ox - s * 0.04, w.y, zc + w.z, 18); cylX(g, mt.body, w.r * 0.34, 0.07, ox - s * 0.02, w.y, zc + w.z, 12); }
+      for (const dz of [-0.52, -0.18, 0.18, 0.52]) { cylX(g, mt.steel, 0.235, hw * 2, x, 0.345, zc + dz, 12); cylX(g, mt.dark, 0.17, 0.06, ox - s * 0.04, 0.345, zc + dz, 10); }
+    }
+    // зубья ведущей звёздочки
+    const tt = new Acc(), tb2 = new T.BoxGeometry(0.1, 0.1, 0.16); for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; tt.at(tb2, x, wh[2].y + Math.sin(a) * 0.37, zc + Math.cos(a) * 0.37, -a + PI / 2, 0, 0, W * 0.8 / 0.1, 1, 1); }
+    g.add(tt.mesh(mt.dark));
+    // рама катков (внутренняя стенка)
+    put(g, rb(0.08, 0.5, 1.9, 0.03), mt.dark, x - (W / 2 - 0.1) * Math.sign(x), 0.8, zc);
+  }
+  function exhaustStack(g, mt, x, z, by, top, chromeTop) {
+    cylY(g, mt.chrome, 0.055, top - by, x, (top + by) / 2, z, 12); put(g, cyg(0.05, 0.085, 0.13, 12), mt.chrome, x, top + 0.05, z);
+    put(g, rb(0.15, 0.012, 0.13, 0.004), mt.dark, x, top + 0.14, z, 0.5);
+    for (const k of [0.3, 0.75]) put(g, rb(0.13, 0.05, 0.1, 0.015), mt.dark, x - 0.03, by + (top - by) * k, z - 0.05);
+  }
+  function hoodLoft(H, N) {
+    const secs = [];
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1), z = lerp(H.z0, H.z1, t), yt = lerp(H.yt0, H.yt1, Math.pow(t, H.curve)) - (i === N - 1 ? 0.04 : 0), wb = lerp(H.wb0, H.wb1, t), wt = lerp(H.wt0, H.wt1, t) - (i === N - 1 ? 0.03 : 0);
+      secs.push(sec(z, H.yb + (i === N - 1 ? 0.03 : 0), yt, wb, wt, [0.05, 0.05, 0.14, 0.14]));
+    }
+    return loft(secs);
+  }
+
+  function buildTracked(o) {
+    const g = begin(), D = DT, lv = o.lv, H = D.hood, c = D.cab, W = D.Wt;
+    const mt = { body: paint(o.col.body), trim: paint(o.col.trim), roof: paint(o.col.roof), dark: pmat(0x1b1d20, { metalness: 0.25, roughness: 0.5, envMapIntensity: 0.5 }), steel: metal(0x5f656c, { roughness: 0.45 }), chrome: chromeM(), rubber: rubberM(), lamp: lightM(0xfff3cf), amber: lightM(0xffa51f) };
+    for (const s of [-1, 1]) { buildTrack(g, mt, s * D.xt, D.zf, W); buildTrack(g, mt, s * D.xt, D.zr, W); }
+    // рамы и оси
+    put(g, rb(1.4, 0.56, 3.3, 0.1), mt.dark, 0, 1.1, 2.3); put(g, rb(1.4, 0.56, 3.0, 0.1), mt.dark, 0, 1.1, -2.25);
+    cylX(g, mt.steel, 0.16, 2 * D.xt - W + 0.1, 0, 1.16, D.zf, 14); cylX(g, mt.steel, 0.16, 2 * D.xt - W + 0.1, 0, 1.16, D.zr, 14);
+    // шарнир сочленения: гофрированная «гармошка» и два цилиндра поворота
+    cylZ(g, mt.rubber, 0.5, 1.5, 0, 1.18, -0.02, 16); for (let i = 0; i < 6; i++) put(g, new T.TorusGeometry(0.5, 0.05, 6, 16), mt.rubber, 0, 1.18, -0.7 + i * 0.28);
+    for (const s of [-1, 1]) hyd(g, mt.dark, mt.chrome, [s * 0.72, 1.05, 0.95], [s * 0.88, 1.05, -0.8], 0.07);
+    // капот
+    put(g, hoodLoft(H, 8), mt.body, 0, 0, 0);
+    const hw_at = (z, y) => { const t = clamp((z - H.z0) / (H.z1 - H.z0), 0, 1), yt = lerp(H.yt0, H.yt1, Math.pow(t, H.curve)), f = clamp((y - H.yb) / (yt - H.yb), 0, 1); return lerp(lerp(H.wb0, H.wb1, t), lerp(H.wt0, H.wt1, t), f) / 2; };
+    const slope = Math.atan(((H.wb0 - H.wt0) / 2) / (H.yt0 - H.yb));
+    decal(g, grilleMat(true, o.accent), H.wt1 * 0.86, (H.yt1 - H.yb) * 0.78, 0, lerp(H.yb, H.yt1, 0.5), H.z1 + 0.006, 0, 0);
+    for (const s of [-1, 1]) {
+      const lx = s * (H.wt1 / 2 - 0.04), ly = H.yt1 - 0.14, lz = H.z1 - 0.14;
+      put(g, rb(0.42, 0.24, 0.24, 0.06), mt.dark, lx, ly, lz); put(g, rb(0.36, 0.08, 0.04, 0.02), mt.lamp, lx, ly + 0.05, lz + 0.12); put(g, rb(0.36, 0.03, 0.04, 0.01), mt.lamp, lx, ly - 0.06, lz + 0.12);
+      for (let k = -1; k <= 1; k++) put(g, cyg(0.03, 0.03, 0.03, 10), mt.lamp, lx + k * 0.12, ly - 0.015, lz + 0.13, PI / 2);
+      const zc = 2.0, yy = H.yb + 0.78, hwid = hw_at(zc, yy) + 0.006;
+      decal(g, hoodDecal(o.label, '#' + new T.Color(o.col.body).getHexString(), o.stripe, '#ffffff'), 1.7, 0.31, s * hwid, yy, zc, s * PI / 2, s * slope);
+    }
+    // бампер с предупреждающими полосами, передние грузы
+    put(g, rb(2.4, 0.46, 0.36, 0.09), mt.dark, 0, 1.0, H.z1 + 0.12); decal(g, hazardRW(1.2, 0.8), 0.62, 0.4, -0.88, 1.0, H.z1 + 0.305, 0, 0); decal(g, hazardRW(1.2, 0.8), 0.62, 0.4, 0.88, 1.0, H.z1 + 0.305, 0, 0);
+    put(g, rb(1.1, 0.12, 0.22, 0.03), mt.steel, 0, 0.72, H.z1 + 0.18); if (lv >= 9) for (let i = 0; i < 3; i++) put(g, rb(0.9, 0.14, 0.3, 0.03), mt.steel, 0, 0.55 + i * 0.0, H.z1 + 0.34 + i * 0.0 - i * 0.0);
+    // крылья над гусеницами
+    for (const s of [-1, 1]) for (const zc of [D.zf, D.zr]) {
+      put(g, sx([[-1.42, 1.34], [-1.2, 1.62], [-0.6, 1.76], [0.6, 1.76], [1.2, 1.62], [1.42, 1.34], [1.3, 1.34], [1.1, 1.54], [0.55, 1.66], [-0.55, 1.66], [-1.1, 1.54], [-1.3, 1.34]], 0.95), mt.body, s * (D.xt + 0.03), 0, zc);
+    }
+    // кабина (большая, с остеклением), выхлоп вдоль стойки
+    put(g, rb(1.62, 0.55, 2.4, 0.1), mt.body, 0, 1.38, c.zc);
+    const cb = buildCab(g, mt, c, true, o.lights);
+    exhaustStack(g, mt, c.W / 2 + 0.07, c.zc + c.L / 2 - 0.12, 2.0, c.yr - 0.15);
+    // задняя часть: капот-крышка бака, ящики
+    put(g, loft([sec(-1.8, 1.32, 1.98, 1.5, 1.4, [0.05, 0.05, 0.12, 0.12]), sec(-2.5, 1.32, 1.94, 1.5, 1.38, [0.05, 0.05, 0.12, 0.12]), sec(-3.2, 1.32, 1.78, 1.42, 1.3, [0.05, 0.05, 0.12, 0.12]), sec(-3.62, 1.36, 1.66, 1.3, 1.16, [0.05, 0.05, 0.12, 0.12])]), mt.body, 0, 0, 0);
+    cylY(g, mt.chrome, 0.09, 0.09, 0.5, 2.0, -2.3, 14); cylY(g, mt.dark, 0.09, 0.07, -0.5, 2.0, -2.3, 14);
+    // лестница слева
+    for (let i = 0; i < 3; i++) put(g, rb(0.5, 0.05, 0.36, 0.02), mt.dark, -(c.W / 2 + 0.2), 0.72 + i * 0.32, c.zc + 0.5); put(g, rb(0.05, 0.95, 0.3, 0.02), mt.dark, -(c.W / 2 - 0.02), 1.1, c.zc + 0.5);
+    // задняя тяга: сцепное устройство
+    const hz = D.hitchZ, hy = D.hitchY;
+    put(g, rb(0.5, 0.15, 1.15, 0.04), mt.steel, 0, hy - 0.02, hz + 0.4); for (const s of [-1, 1]) beam(g, mt.dark, [s * 0.5, 1.15, -3.3], [s * 0.22, hy, hz + 0.7], 0.13, 0.12, 0.03);
+    cylY(g, mt.chrome, 0.045, 0.3, 0, hy + 0.04, hz + 0.18, 12); cylZ(g, mt.chrome, 0.04, 0.24, 0, 1.18, -3.74, 12);
+    return { g, mt, hz, hy };
+  }
+
+
+  // ------------------------------------------------------------------ широкие орудия: сеялка-культиватор (L4-6) и сеялка с крыльями (L7-10)
+  const DISCF = (() => { let c; return () => c || (c = new T.CylinderGeometry(0.14, 1, 0.13, 12, 1, true)); })();
+  const COULT = (() => { let c; return () => c || (c = new T.CylinderGeometry(1, 1, 0.1, 10)); })();
+  const BOX1 = new T.BoxGeometry(1, 1, 1);
+  /** Простое колесо орудия: покрышка + диск + колпак. */
+  const WSC = {};
+  function wheelS(g, mt, side, x, z, R, W, rimMat) {
+    const key = R + '|' + W; let G = WSC[key];
+    if (!G) { const hw = W / 2, r0 = R * 0.5, P = (r, y) => new T.Vector2(r, y); G = WSC[key] = { c: new T.LatheGeometry([P(r0, -hw * 0.8), P(R * 0.78, -hw), P(R * 0.96, -hw * 0.72), P(R, -hw * 0.4), P(R, hw * 0.4), P(R * 0.96, hw * 0.72), P(R * 0.78, hw), P(r0, hw * 0.8)], 18), r: cyg(R * 0.52, R * 0.52, W * 0.9, 14), h: cyg(R * 0.17, R * 0.2, W * 1.04, 8) }; }
+    const wg = new T.Group(); wg.position.set(x, R, z); wg.rotation.set(0, 0, side > 0 ? -PI / 2 : PI / 2);
+    wg.add(mesh(G.c, mt.rubber)); wg.add(mesh(G.r, rimMat)); wg.add(mesh(G.h, mt.steel)); g.add(wg); return wg;
+  }
+  function buildBar(root, mt, P) {
+    const { W, Wc, L1, hy, big, lv } = P, wl = (W - Wc) / 2, yb = big ? 1.1 : 1.0, ang = big ? 0.12 : 0.05, bw = big ? 0.3 : 0.2;
+    const zA = -L1, zD = zA - (big ? 0.7 : 0.55), zM = zA - (big ? 1.7 : 1.4), zC = zM - 0.12, zB = zA - (big ? 2.9 : 2.4), zR = zA - (big ? 3.7 : 3.1), ry = big ? 0.34 : 0.29;
+    const dm = pmat(0xa7adb3, { metalness: 0.85, roughness: 0.38, envMapIntensity: 0.9, side: T.DoubleSide });
+    const wheelsX = big ? [Wc / 2 - 0.55, Wc / 2 - 1.25, -(Wc / 2 - 0.55), -(Wc / 2 - 1.25)] : [Wc / 2 - 0.45, -(Wc / 2 - 0.45)];
+    const wheelZs = big ? [zM + 0.35, zM - 0.35] : [zM];
+    const skip = (x) => { for (const wx of wheelsX) if (Math.abs(x - wx) < 0.42) return true; return false; };
+    // дышло (А-образная рама)
+    const hb = big ? 0.55 : 0.5;
+    for (const s of [-1, 1]) beam(root, mt.dark, [s * 0.05, hy + 0.05, -0.05], [s * hb, yb, zA], big ? 0.2 : 0.14, big ? 0.18 : 0.14, 0.03);
+    beam(root, mt.dark, [-hb, yb, zA], [hb, yb, zA], big ? 0.3 : 0.2, big ? 0.28 : 0.2, 0.05);
+    put(root, new T.TorusGeometry(0.11, 0.04, 8, 16), mt.chrome, 0, hy + 0.06, -0.06, PI / 2); put(root, rb(0.34, 0.08, 0.4, 0.02), mt.steel, 0, hy + 0.02, -0.18);
+    rod(root, mt.steel, [0, hy, -0.5], [0, 0.0, -0.9], 0.05, 8); put(root, cyg(0.12, 0.12, 0.04, 10), mt.steel, 0, 0.02, -0.9);   // опорная стойка
+    // секция рамы со всеми рабочими органами между x0 и x1 (в координатах орудия)
+    function section(gx, x0, x1, skipWheels) {
+      const len = Math.abs(x1 - x0), sg = Math.sign(x1 - x0), xm = (x0 + x1) / 2;
+      for (const z of [zA, zM, zB]) beam(gx, mt.dark, [x0, yb, z], [x1, yb, z], bw, bw, 0.04);
+      for (const f of [0.1, 0.5, 0.9]) beam(gx, mt.dark, [lerp(x0, x1, f), yb, zA], [lerp(x0, x1, f), yb, zB], 0.14, 0.14, 0.03);
+      // передние диски на оси
+      const D1 = new Acc(), U1 = new Acc(), dp = big ? 0.36 : 0.32, nd = Math.floor(len / dp);
+      for (let i = 0; i < nd; i++) { const x = x0 + sg * (i + 0.5) * len / nd; if (skipWheels && skip(x)) continue; D1.at(DISCF(), x, 0.26, zD, 0, 0, PI / 2, 0.25, 1, 0.25); }
+      gx.add(D1.mesh(dm)); rod(gx, mt.steel, [x0, 0.26, zD], [x1, 0.26, zD], 0.035, 8);
+      for (const f of [0.15, 0.5, 0.85]) beam(gx, mt.dark, [lerp(x0, x1, f), yb, zA], [lerp(x0, x1, f), 0.3, zD], 0.07, 0.1, 0.02);
+      // сошники-диски на стойках
+      const cp = big ? 0.34 : 0.3, nc = Math.floor(len / cp);
+      for (let i = 0; i < nc; i++) {
+        const x = x0 + sg * (i + 0.5) * len / nc; if (skipWheels && skip(x)) continue;
+        U1.at(COULT(), x, 0.2, zC, 0, 0, PI / 2, 0.17, 1, 0.17);
+        const dy = yb - 0.1 - 0.25, dz = zM - zC, l = Math.hypot(dy, dz) + 0.05; U1.at(BOX1, x, (yb - 0.1 + 0.25) / 2, (zM + zC) / 2, Math.atan2(dz, dy), 0, 0, 0.045, l, 0.07);
+      }
+      gx.add(U1.mesh(mt.steel));
+      // каток-прикатыватель из колец
+      const AX = new Acc(), nr = Math.floor(len / 0.5); cylX(gx, mt.dark, ry - 0.03, len, xm, ry, zR, 12);
+      for (let i = 0; i < nr; i++) AX.at(cyg(ry + 0.03, ry + 0.03, 0.08, 10), x0 + sg * (i + 0.5) * len / nr, ry, zR, 0, 0, PI / 2);
+      gx.add(AX.mesh(mt.steel));
+      for (const f of [0.12, 0.5, 0.88]) { const x = lerp(x0, x1, f); beam(gx, mt.dark, [x, yb, zB], [x, ry + 0.12, zR + 0.05], 0.08, 0.1, 0.02); }
+    }
+    section(root, -Wc / 2, Wc / 2, true);
+    for (const x of wheelsX) for (const z of wheelZs) { wheelS(root, mt, x > 0 ? 1 : -1, x, z, big ? 0.58 : 0.5, big ? 0.46 : 0.4, mt.trim); beam(root, mt.dark, [x, yb, z], [x, 0.5, z], 0.1, 0.1, 0.03); }
+    // крылья на шарнирах с цилиндрами складывания
+    for (const s of [-1, 1]) {
+      const pv = new T.Group(); pv.position.set(s * Wc / 2, yb, 0); pv.rotation.z = s * ang; const inner = new T.Group(); inner.position.set(-s * Wc / 2, -yb, 0); pv.add(inner); root.add(pv);
+      section(inner, s * Wc / 2, s * W / 2, false);
+      for (const z of [zA, zM, zB]) put(inner, rb(0.2, 0.34, 0.34, 0.04), mt.steel, s * Wc / 2 + s * 0.05, yb, z);
+      wheelS(inner, mt, s > 0 ? 1 : -1, s * (Wc / 2 + wl * 0.6), zM, big ? 0.4 : 0.34, 0.3, mt.trim); beam(inner, mt.dark, [s * (Wc / 2 + wl * 0.6), yb, zM], [s * (Wc / 2 + wl * 0.6), 0.4, zM], 0.08, 0.09, 0.02);
+      if (big) { wheelS(inner, mt, s > 0 ? 1 : -1, s * (Wc / 2 + wl * 0.9), zM, 0.34, 0.26, mt.trim); beam(inner, mt.dark, [s * (Wc / 2 + wl * 0.9), yb, zM], [s * (Wc / 2 + wl * 0.9), 0.34, zM], 0.07, 0.08, 0.02); }
+      put(inner, rb(0.2, 0.2, 0.2, 0.03), mt.steel, s * (Wc / 2 + 1.1), yb + 0.2, zM);
+      hyd(root, mt.dark, mt.chrome, [s * (Wc / 2 - 0.55), yb + 0.55, zM], [s * (Wc / 2 + 1.1 * Math.cos(ang)), yb + 0.2 * Math.cos(ang) + 1.1 * Math.sin(ang), zM], big ? 0.07 : 0.055);
+      beam(root, mt.dark, [s * (Wc / 2 - 0.55), yb, zM], [s * (Wc / 2 - 0.55), yb + 0.55, zM], 0.1, 0.1, 0.02);
+      // маркёрные щитки и габаритные огни на концах
+      const ex = s * (W / 2 - 0.15);
+      put(inner, rb(0.9, 0.5, 0.05, 0.01), mt.dark, ex, yb + 0.35, zB - 0.25); decal(inner, hazardRW(3, 1.4), 0.84, 0.44, ex, yb + 0.35, zB - 0.28, PI);
+      beam(inner, mt.dark, [ex, yb, zB], [ex, yb + 0.35, zB - 0.25], 0.06, 0.06, 0.02);
+    }
+    // бункер: профиль-лофт со скошенной передней стенкой, люки, лестница и площадка
+    const hl = big ? 1.75 : 1.2, hwT = big ? 4.9 : 2.5, hwB = big ? 1.5 : 1.0, zh = zA - (big ? 1.5 : 1.15), y0 = yb + (big ? 0.3 : 0.3), y1 = yb + (big ? 2.0 : 1.5);
+    const R1 = [0.05, 0.05, 0.14, 0.14];
+    put(root, loft([sec(zh - hl, y0 + 0.28, y1 - 0.2, hwB * 0.7, hwT * 0.86, R1), sec(zh - hl + 0.14, y0, y1, hwB, hwT, R1), sec(zh + hl - 0.4, y0, y1 - 0.05, hwB, hwT, R1), sec(zh + hl, y0 + 0.2, y1 - 0.5, hwB * 0.8, hwT * 0.9, R1)]), mt.body, 0, 0, 0);
+    // питающие блоки под бункером и распределительная головка
+    const nm = big ? 6 : 4; for (let i = 0; i < nm; i++) { const x = (i - (nm - 1) / 2) * (hwB / (nm - 1 || 1)) * 0.8; put(root, cyg(0.13, 0.1, 0.34, 12), mt.dark, x, y0 - 0.16, zh); }
+    // крышки люков
+    const hatches = big ? [-1.5, -0.5, 0.5, 1.5] : [-0.6, 0.6];
+    for (const hx of hatches) { put(root, cyg(0.32, 0.34, 0.07, 16), mt.dark, hx, y1 + 0.04, zh - 0.3); put(root, cyg(0.12, 0.12, 0.06, 10), mt.chrome, hx, y1 + 0.1, zh - 0.3); }
+    put(root, rb(hwT * 0.6, 0.08, 0.12, 0.03), mt.trim, 0, y1 + 0.02, zh + 0.6);
+    // лестница сзади, поручни
+    const lx = big ? 1.3 : 0.9, lz = zh - hl - 0.05;
+    for (const dx of [-0.22, 0.22]) beam(root, mt.dark, [lx + dx, 0.55, lz - 0.28], [lx + dx, y1 - 0.15, lz - 0.02], 0.05, 0.05, 0.02);
+    const nr2 = big ? 9 : 6; for (let i = 0; i < nr2; i++) { const f = (i + 0.5) / nr2; put(root, rb(0.42, 0.04, 0.06, 0.01), mt.steel, lx, lerp(0.7, y1 - 0.3, f), lerp(lz - 0.26, lz - 0.05, f)); }
+    // шланги от бункера к рядам
+    const nh = big ? 12 : 8; for (let i = 0; i < nh; i++) {
+      const f = (i + 0.5) / nh, xo = (f - 0.5) * hwB * 0.8, xt = (f - 0.5) * (W * 0.82), sg = Math.sign(xt) || 1, ax = (f - 0.5) * Wc * 0.9;
+      hose(root, hoseM(), [[xo, y0 - 0.3, zh + 0.02], [xo * 1.3, y0 - 0.5, zh + 0.5], [ax * 1.0, yb + 0.45, zM + 0.4 + (i % 2) * 0.12], [Math.abs(xt) < Wc / 2 ? xt : sg * (Wc / 2 - 0.05), yb + 0.18, zM + 0.05]], big ? 0.032 : 0.026, 10, 5);
+    }
+    // гидрошланги к тягачу
+    for (const s of [-1, 1]) hose(root, hoseM(), [[s * 0.16, hy - 0.04, 0.9], [s * 0.2, hy + 0.1, 0.2], [s * 0.2, yb - 0.05, zA + 0.7], [s * 0.3, yb + 0.2, zA - 0.2]], big ? 0.026 : 0.02, 14, 5);
+    // огни и номерная панель сзади по центру
+    put(root, rb(1.0, 0.3, 0.05, 0.01), mt.dark, 0, ry + 0.4, zR - 0.4); decal(root, hazardRW(3, 1), 0.92, 0.24, 0, ry + 0.4, zR - 0.43, PI);
+    return { zA, zh, y1, hl, hwT, yb };
+  }
+
+  const barDecal = (txt, bg, fg) => decalMat('bar|' + txt + bg, 512, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.font = '900 78px "Arial Black",Impact,Arial,sans-serif'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(0,0,0,.5)'; g.fillText(txt, 14, 70); g.fillStyle = fg; g.fillText(txt, 10, 66); g.fillStyle = fg; g.fillRect(8, 108, w - 16, 8); }, { alphaTest: 0.45 });
+
+  /** Сборка L4-6: современный колёсный трактор + сеялка-культиватор ~9 м. */
+  function tractorTier1(lv) {
+    const root = begin(), t = tOf(lv), k = lerp(0.96, 1.06, t);
+    const w = buildWheeled({ modern: true, lv, lights: lv >= 5 ? 2 : 1, label: 'M' + (200 + lv * 15), col: { body: 0x7cb518, trim: 0xc8201a, roof: 0x22262a }, accent: '#c8201a', stripe: '#c8201a' });
+    w.g.scale.setScalar(k); root.add(w.g);
+    const ig = new T.Group(); ig.position.set(0, 0, (w.hz + 0.18) * k); root.add(ig);
+    const info = buildBar(ig, w.mt, { W: 8.4 + 0.6 * (lv - 4), Wc: 3.2, L1: 3.0, hy: w.hy * k, big: false, lv });
+    for (const s of [-1, 1]) decal(ig, barDecal('SD ' + (80 + lv * 5), '', '#ffffff'), 1.6, 0.4, s * (info.hwT * 0.5 * 0.82 + 0.02), info.yb + 0.95, info.zh, s * PI / 2, s * Math.atan((info.hwT * 0.86 - 1.0) / 2 / 1.2));
+    return finish(root, 0x5e7d8a, k);
+  }
+  /** Сборка L7-10: красный гусеничный трактор + широкая сеялка с крыльями 12-16 м. */
+  function tractorTier2(lv) {
+    const root = begin(), t = tOf(lv);
+    const w = buildTracked({ lv, lights: lv >= 8 ? 2 : 1, label: 'T' + (520 + (lv - 7) * 60), col: { body: 0xa31616, trim: 0xe8e8e8, roof: 0xe9e9e6 }, accent: '#e8e8e8', stripe: '#ffffff' });
+    root.add(w.g);
+    const ig = new T.Group(); ig.position.set(0, 0, w.hz + 0.18); root.add(ig);
+    const W = [12, 13.4, 14.7, 16][lv - 7];
+    const info = buildBar(ig, w.mt, { W, Wc: 6.2, L1: 3.6, hy: w.hy, big: true, lv });
+    void t;
+    return finish(root, 0x5e7d8a, 1);
+  }
+  reg('vehicle', 'tractor', (lv) => tierOf(lv) === 0 ? tractorTier0(lv) : tierOf(lv) === 1 ? tractorTier1(lv) : tractorTier2(lv));
 
   // @@MORE@@
 })();

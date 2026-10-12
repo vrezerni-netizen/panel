@@ -335,19 +335,19 @@
 
   // ---------------------------------------------------------------- мир: одна большая карта
   const TS = 3; // размер одной клетки поля в единицах мира (1 единица ≈ 1 метр)
-  const SLOT = { wild: [-150, -150], forest: [40, -150], home: [-144, -30], meadow: [-48, -30], grove: [48, -30], valley: [144, -30], lake: [-144, 30], hills: [-48, 30], orchard: [48, 30] };
+  const SLOT = { wild: [-150, -150], forest: [40, -150], home: [-200, -30], meadow: [-70, -30], grove: [60, -30], valley: [190, -30], lake: [-200, 30], hills: [-70, 30], orchard: [60, 30] };
   const FIELD_LEFT = 8; // левый край поля от центра участка: поле растёт вправо
-  const TOWN = { market: [-68, 82], seeds: [-34, 82], tech: [0, 82], bank: [34, 82], casino: [68, 82] };
+  const TOWN = { market: [-112, 82], seeds: [-76, 82], tech: [-40, 82], bank: [28, 82], casino: [64, 82] };
   const TOWN_MODEL = { market: 'market', seeds: 'seedshop', tech: 'techcenter', bank: 'bank', casino: 'casino' };
-  const ROAD_Z = [0.2, 66, 100], ROAD_X = [-192, -96, 0, 96, 192], RW = 8;
+  const ROAD_Z = [0.2, 66, 100], ROAD_X = [-266, -141, -11, 119, 249], RW = 8;
   const CITY = {
-    names: { market: '🏪 Рынок', seeds: '🌱 Семена и корм', tech: '🚜 Техцентр', bank: '🏦 Банк', casino: '🎰 Колесо удачи', warehouse: '📦 Склад' },
-    route: [[-134, -14], [-134, 0.2], [-96, 0.2], [-96, 100], [-68, 100], [-68, 93]],
+    names: { sawmill: '🪚 Лесопилка', market: '🏪 Рынок', seeds: '🌱 Семена и корм', tech: '🚜 Техцентр', bank: '🏦 Банк', casino: '🎰 Колесо удачи', warehouse: '📦 Склад' },
+    route: [[-178, -16], [-178, 0.2], [-141, 0.2], [-141, 100], [-108, 100], [-108, 93]],
     center: [0, 30],
   };
   const VEH_KEYS = ['tractor', 'combine', 'waterer', 'spreader', 'logger', 'grinder'];
-  const VEH_START = { tractor: [-147, -8], combine: [-139, -8], waterer: [-130, -8], spreader: [-121, -8], logger: [-170, -116], grinder: [-188, -116] };
-  const VEH_VER = 4;
+  const VEH_START = { tractor: [-203, -8], combine: [-195, -8], waterer: [-186, -8], spreader: [-177, -8], logger: [-170, -116], grinder: [-188, -116] };
+  const VEH_VER = 5;
   const ROAD_N = -100; // северная дорога вдоль леса и целины
   const SITE_POS = [[165, -135], [198, -135], [231, -135]]; // три стройплощадки
   const SAWMILL_POS = [-28, -128];
@@ -381,7 +381,7 @@
 
     const world = new T.Group(); scene.add(world);
     const W = { mode: 'map', cb, renderer, scene, camera, time: 0, S: null, inputOn: true, lite: !!(root.matchMedia && root.matchMedia('(hover:none) and (pointer:coarse)').matches) };
-    if (W.lite) { sun.shadow.mapSize.set(2048, 2048); }
+    if (W.lite) { sun.shadow.mapSize.set(1024, 1024); }
 
     // --- DOM-метки
     const labels = [];
@@ -421,8 +421,8 @@
       // стройплощадки (по уровню): бетонные площадки у северной дороги
       for (const [x, z] of SITE_POS) { const pad = part('box', 0xb9b6ac, x, 0.05, z, 28, 0.1, 22); pad.material = texMat('concrete', 5, 4, 0xbdb9ad); pad.castShadow = false; world.add(pad); const pth = part('box', 0xb08d57, x, 0.04, (z + ROAD_N) / 2 + 6, 5, 0.06, z - ROAD_N - 22 + 12); pth.material = texMat('dirt_path', 1, 3, 0xb08d57); pth.castShadow = false; world.add(pth); }
       // пруд с пирсом на свободном участке
-      const pond = part('cyl', 0x3f9fd6, 144, 0.07, 30, 54, 0.1, 42); pond.castShadow = false; world.add(pond);
-      { const d = MODEL('prop', 'dock', {}, () => new T.Group()); d.position.set(144, 0, 12); d.rotation.y = Math.PI; world.add(d); }
+      const pond = part('cyl', 0x3f9fd6, 214, 0.07, 30, 54, 0.1, 42); pond.castShadow = false; world.add(pond);
+      { const d = MODEL('prop', 'dock', {}, () => new T.Group()); d.position.set(214, 0, 12); d.rotation.y = Math.PI; world.add(d); }
       // дома, деревни и деревья
       const rng = (() => { let q = 5; return () => (q = (q * 16807) % 2147483647) / 2147483647; })();
       const decor = new T.Group();
@@ -471,10 +471,10 @@
       }
       // лес по краям карты (instancing)
       const treeSpots = [];
-      const deco = [[-300, -30, 110, 60], [-300, 60, 110, 60], [300, -30, 110, 60], [300, 60, 110, 60], [-110, -270, 130, 50], [110, -270, 130, 50], [-60, 190, 120, 34], [210, 195, 100, 34]];
+      const deco = [[-345, -30, 110, 60], [-345, 60, 110, 60], [345, -30, 110, 60], [345, 60, 110, 60], [-110, -270, 130, 50], [110, -270, 130, 50], [-60, 190, 120, 34], [210, 195, 100, 34]];
       for (let i = 0; i < 16000 && treeSpots.length < 6500; i++) {
         const x = (rng() - 0.5) * 1100, z = -420 + rng() * 900;
-        const inCore = x > -250 && x < 275 && z > -192 && z < 190; if (inCore) continue;
+        const inCore = x > -300 && x < 290 && z > -192 && z < 190; if (inCore) continue;
         if (deco.some(([cx, cz, w, d]) => Math.abs(x - cx) < w / 2 + 4 && Math.abs(z - cz) < d / 2 + 4)) continue;
         if (VILLAGES.some(([vx, vz]) => Math.abs(x - vx) < 60 && Math.abs(z - vz) < 28)) continue;
         treeSpots.push([x, z, 1.8 + rng() * 1.8, rng()]);
@@ -593,7 +593,7 @@
       // белый забор вокруг дома
       rails(g, [[-17, Z(3)], [3, Z(3)], [3, Z(16)], [-17, Z(16)], [-17, Z(3)]], 0xf2eee4, 1.0, 2);
       if (fv.id === 'home') { // стоянка техники и загон
-        { const bay = MODEL('prop', 'parkingBay', {}, () => { const b = part('box', 0xb9b9b4, 0, 0.04, 0, 15, 0.08, 10); b.material = texMat('concrete', 3, 2, 0xb9b9b4); return b; }); bay.position.set(-138, 0, -8); g.add(bay); bay.position.set(-138 - fv.sx, 0, -8 - fv.sz); }
+        { const bay = MODEL('prop', 'parkingBay', {}, () => { const b = part('box', 0xb9b9b4, 0, 0.04, 0, 15, 0.08, 10); b.material = texMat('concrete', 3, 2, 0xb9b9b4); return b; }); bay.position.set(6, 0, Z(22)); g.add(bay); }
         const pen = { x: -36, z: Z(21), w: 28, d: 11 }; fv.pen = pen;
         { const pf = part('box', 0x93c46d, pen.x, 0.04, pen.z, pen.w, 0.08, pen.d); pf.material = texMat('dirt_path', 6, 2.5, 0x93c46d); pf.castShadow = false; g.add(pf); }
         rails(g, [[pen.x - pen.w / 2, pen.z - pen.d / 2], [pen.x + pen.w / 2, pen.z - pen.d / 2], [pen.x + pen.w / 2, pen.z + pen.d / 2], [pen.x - pen.w / 2, pen.z + pen.d / 2], [pen.x - pen.w / 2, pen.z - pen.d / 2]], 0x5e432a, 1.3, 2.5);
@@ -738,7 +738,7 @@
     }
 
     // --- камера: вращение, перемещение, масштаб
-    const cam = { tx: -150, tz: -20, yaw: 0, pitch: 0.95, dist: 90, gx: -150, gz: -20, gd: 90 };
+    const cam = { tx: -194, tz: -20, yaw: 0, pitch: 0.95, dist: 90, gx: -194, gz: -20, gd: 90 };
     const keys = {};
     function applyCamera() {
       const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), dd = cam.dist * (camera.aspect < 1 ? 1 + (1 - camera.aspect) * 1.4 : 1);
@@ -884,7 +884,7 @@
     })();
     const skyDay = rgb(0xa4c4d8), skyNight = rgb(0x0b1330), skyDusk = rgb(0xf0a070), skyRain = rgb(0x7a8794), skyDry = rgb(0xe8c58a);
     function lighting(tod, weather) {
-      const ang = tod * Math.PI * 2, day = Math.max(0, Math.min(1, 0.5 + Math.sin(ang - Math.PI / 2) * -0.5 * 1.4 + 0.15)), light = Math.max(0.06, day);
+      const ang = tod * Math.PI * 2, day = Math.max(0, Math.min(1, 0.5 + Math.sin(ang - Math.PI / 2) * -0.5 * 1.4 + 0.15)), light = Math.max(0.3, day);
       const skyC = skyNight.clone().lerp(skyDay, light), dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 5) * 0.45; skyC.lerp(skyDusk, dusk);
       if (weather === 'rain') skyC.lerp(skyRain, 0.6); else if (weather === 'drought') skyC.lerp(skyDry, 0.45);
       scene.background.copy(skyC); scene.fog.color.copy(skyC);
@@ -929,6 +929,7 @@
       for (const [id, o] of Object.entries(townLabels)) { const extra = id === 'market' && Object.keys(S.stall).length ? ' 📦' : id === 'casino' && S.tickets > 0 ? ` 🎟️${S.tickets}` : ''; const txt = CITY.names[id] + extra; if (o.el.textContent !== txt) o.el.textContent = txt; }
       for (const fv of views) for (const l of fv.labels || []) if (l.dyn) { const lock = !(S.level >= fv.def.level); const txt = `${fv.def.icon} ${fv.def.name}\n${lock ? '🔒 с ' + fv.def.level + ' уровня' : '🛒 купить за ' + fv.def.cost + ' 🪙'}`; l.el.classList.toggle('locked', lock); }
       for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.vy -= 9 * dt; p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt; p.m.scale.multiplyScalar(0.97); if (p.life <= 0) { scene.remove(p.m); parts.splice(i, 1); } }
+      sun.castShadow = cam.dist < 230 && !(W.lite && cam.dist > 150);
       skyDome.position.copy(camera.position);
       applyCamera();
       renderer.render(scene, camera);
@@ -944,12 +945,12 @@
     function focusForest() { focus(75, -140, 100); }
     function focusSites() { focus(198, -135, 95); }
     function focusSawmill() { focus(-28, -125, 80); }
-    function focusHome() { focus(-138, -24, 92); }
-    function focusTown() { focus(0, 84, 150); }
+    function focusHome() { focus(-194, -24, 92); }
+    function focusTown() { focus(-22, 84, 170); }
     function focusFarm(id) { const s = SLOT[id]; if (s) focus(s[0] - 6, s[1] + (s[1] < 0 ? 8 : -8), 92); }
-    function focusAll() { focus(0, 30, 620); }
+    function focusAll() { focus(-10, 30, 640); }
     window.addEventListener('resize', resize);
-    resize(); cam.gx = cam.tx = -138; cam.gz = cam.tz = -24; cam.gd = cam.dist = 92;
+    resize(); cam.gx = cam.tx = -194; cam.gz = cam.tz = -24; cam.gd = cam.dist = 92;
     Object.assign(W, { update, fx, highlight, resize, tileScreen, vehScreen, workAnim, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
     return W;
   }

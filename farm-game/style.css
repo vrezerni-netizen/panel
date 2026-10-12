@@ -144,3 +144,8 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 8px;t
 .rbtn.on{background:var(--green);color:#fff;border-color:#fff}
 html,body,#app,#stage{touch-action:none;-webkit-touch-callout:none}
 #mbody,.mbody,.tools,#seedbar,.mtabs{touch-action:pan-x pan-y}
+
+/* телефон: сверху находится шапка приложения (закрыть / поделиться), HUD опускаем */
+@media (hover:none) and (pointer:coarse){
+  .topbar{top:96px}.avatar{top:126px}.lcol{top:104px}.topr{top:100px}#toasts{top:192px}
+}

@@ -210,28 +210,38 @@
 
   // ====================================================================== шины и колёса
   const _tg = new Map();
-  /** Шина с профилем и протектором (ось X, центр в нуле). lugs — число зубьев протектора (ёлочка), lugH — их высота. */
+  /** Склейка геометрий (позиции+нормали) в одну неиндексированную. */
+  function mergeGeos(list) {
+    const gs = list.map((g) => (g.index ? g.toNonIndexed() : g)); let n = 0; for (const g of gs) n += g.attributes.position.count;
+    const p = new Float32Array(n * 3), nn = new Float32Array(n * 3); let o = 0;
+    for (const g of gs) { p.set(g.attributes.position.array, o * 3); nn.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
+    const out = new T.BufferGeometry(); out.setAttribute('position', new T.BufferAttribute(p, 3)); out.setAttribute('normal', new T.BufferAttribute(nn, 3)); return out;
+  }
+  /** Шина (ось X, центр в нуле): гладкая покрышка с настоящим профилем + отдельные грунтозацепы «ёлочкой» (lugs шт., высота lugH). */
   function tyreGeo(o) {
-    const key = [o.R, o.W, o.rimR, o.lugs, o.lugH, o.flip ? 1 : 0, o.per, o.slant, o.duty, o.N].join('|'); if (_tg.has(key)) return _tg.get(key);
-    const R = o.R, W = o.W, rr = o.rimR, H = R - rr, lugs = o.lugs || 0, lh = o.lugH || 0, per = o.per || 5, N = lugs ? lugs * per : (o.N || 48), fl = o.flip ? -1 : 1;
-    const slant = o.slant == null ? 0.8 : o.slant, duty = o.duty == null ? 0.5 : o.duty;
-    const half = [[0, 0.43, 0], [0.3, 0.5, 0], [0.7, 0.485, 0], [0.92, 0.435, 0.3], [0.985, 0.375, 0.85], [1, 0.3, 1], [1, 0.12, 1], [1, 0, 1]];
-    const prof = []; for (const p of half) prof.push([p[0], -p[1], p[2]]); for (let i = half.length - 2; i >= 0; i--) prof.push([half[i][0], half[i][1], half[i][2]]);
+    const key = [o.R, o.W, o.rimR, o.lugs, o.lugH, o.N, o.chev, o.thick].join('|'); if (_tg.has(key)) return _tg.get(key);
+    const R = o.R, W = o.W, rr = o.rimR, lugs = o.lugs || 0, lh = lugs ? (o.lugH || 0) : 0, Rb = R - lh, H = Rb - rr, N = o.N || 40;
+    const half = [[0, 0.43], [0.3, 0.5], [0.72, 0.485], [0.93, 0.435], [0.99, 0.375], [1, 0.3], [1, 0]];
+    const prof = []; for (const p of half) prof.push([p[0], -p[1]]); for (let i = half.length - 2; i >= 0; i--) prof.push([half[i][0], half[i][1]]);
     const pos = [], nr = prof.length;
     for (let i = 0; i < N; i++) {
       const th = i / N * TAU, c = Math.cos(th), s = Math.sin(th);
-      for (let j = 0; j < nr; j++) {
-        const rF = prof[j][0], aF = prof[j][1], lw = prof[j][2]; let rho = rr + H * rF;
-        if (rF >= 1) rho -= R * 0.015 * (aF / 0.3) * (aF / 0.3);
-        if (lugs && lw > 0) { const ph = th / TAU * lugs + Math.abs(aF) / 0.3 * slant, fr = ph - Math.floor(ph); rho += lh * lw * smoothstep(0, 0.16, fr) * (1 - smoothstep(duty, duty + 0.16, fr)); }
-        pos.push(aF * W * fl, rho * c, rho * s);
-      }
+      for (let j = 0; j < nr; j++) { const rF = prof[j][0], aF = prof[j][1]; let rho = rr + H * rF; if (rF >= 1) rho -= Rb * 0.012 * (aF / 0.3) * (aF / 0.3); pos.push(aF * W, rho * c, rho * s); }
     }
     const idx = [];
     for (let i = 0; i < N; i++) { const i2 = (i + 1) % N; for (let j = 0; j < nr - 1; j++) { const a = i * nr + j, b = i2 * nr + j; idx.push(a, b, a + 1, b, b + 1, a + 1); } }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-    const jm = (nr - 1) >> 1, nn = g.attributes.normal, vi = jm; if (nn.getY(vi) < 0) { for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; } g.setIndex(idx); g.computeVertexNormals(); }
-    _tg.set(key, g); return g;
+    let g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    if (g.attributes.normal.getY(((nr - 1) >> 1)) < 0) { for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; } g.setIndex(idx); g.computeVertexNormals(); }
+    const parts = [g.toNonIndexed()];
+    if (lugs) {
+      const psi = (o.chev == null ? 32 : o.chev) * PI / 180, thick = o.thick || (TAU * Rb / lugs * 0.34), lenA = W * 0.42 / Math.cos(psi), la = W * 0.21, bg = new T.BoxGeometry(lenA, lh + 0.012, thick), q = new T.Quaternion(), m4 = new T.Matrix4(), mb = new T.Matrix4(), one = V3(1, 1, 1);
+      for (let i = 0; i < lugs; i++) for (const sd of [-1, 1]) {
+        const tt = (i + 0.5) / lugs * TAU - la * Math.tan(psi) / Rb, c = Math.cos(tt), s = Math.sin(tt), rho = Rb - 0.006 + (lh + 0.012) / 2;
+        mb.makeBasis(V3(1, 0, 0), V3(0, c, s), V3(0, -s, c)); q.setFromRotationMatrix(mb); q.multiply(new T.Quaternion().setFromAxisAngle(V3(0, 1, 0), sd * psi));
+        m4.compose(V3(sd * la, rho * c, rho * s), q, one); parts.push(bg.clone().applyMatrix4(m4));
+      }
+    }
+    const out = parts.length > 1 ? mergeGeos(parts) : parts[0]; _tg.set(key, out); return out;
   }
   const _rg = new Map();
   /** Диск колеса (обод, ступица): ось Y, наружу +Y; потом поворачивается на X. */
@@ -243,7 +253,7 @@
   /** Колесо: шина + обод + ступица с болтами. side: +1 наружу к +X, -1 к -X. o: R, W, rimR, lugs, lugH, rimMat. */
   function wheel(g, P, x, y, z, side, o) {
     const rimMat = o.rimMat || P.body;
-    put(g, tyreGeo(Object.assign({}, o, { flip: side < 0 })), P.rubber, x, y, z);
+    put(g, tyreGeo(o), P.rubber, x, y, z);
     put(g, rimGeo(o.rimR, o.W, side > 0 ? 'x' : 'nx'), rimMat, x, y, z);
     const hx = x + side * o.W * 0.5 * 0.9, nb = o.bolts || 6, br = o.rimR * 0.2;
     put(g, lathe([[0, 0], [o.rimR * 0.17, 0], [o.rimR * 0.14, 0.05 * o.rimR], [0, 0.07 * o.rimR]], 12, side > 0 ? 'x' : 'nx'), P.steel, hx, y, z);
@@ -519,8 +529,8 @@
     tag('колёса или гус');
     for (const s of [-1, 1]) {
       if (tracks) trackUnit(g, P, s * fx, s, [[fz - 1.05, 0.46, 0.46], [fz + 1.2, 0.5, 0.5], [fz - 0.38, 1.36, 0.6]], 0.78);
-      else wheel(g, P, s * fx, fR, fz, s, { R: fR, W: fW, rimR: fR * 0.62, lugs: [14, 15, 16][t], lugH: fR * 0.085, per: 4, rimMat: P.body });
-      wheel(g, P, s * rx, rR, rzA, s, { R: rR, W: rW, rimR: rR * 0.58, lugs: 10, lugH: rR * 0.05, per: 4, rimMat: P.dark, bolts: 5 });
+      else wheel(g, P, s * fx, fR, fz, s, { R: fR, W: fW, rimR: fR * 0.62, lugs: [22, 24, 26][t], lugH: fR * 0.055, N: 44, rimMat: P.body });
+      wheel(g, P, s * rx, rR, rzA, s, { R: rR, W: rW, rimR: rR * 0.58, lugs: 16, lugH: rR * 0.04, N: 32, chev: 18, rimMat: P.dark, bolts: 5 });
       arcPlate(g, P.body, s * rx, rR, rzA, rR + 0.04, rR + 0.09, 0.12, PI * 0.88, rW + 0.1, 12);
     }
     // --- кабина
