@@ -426,7 +426,7 @@
       // дома, деревни и деревья
       const rng = (() => { let q = 5; return () => (q = (q * 16807) % 2147483647) / 2147483647; })();
       const decor = new T.Group();
-      const VILLAGES = [[-330, 10], [330, 10], [-300, 150], [320, 140], [0, -170], [-230, -150], [240, -150]]; // центры деревень (улица идёт по оси X)
+      const VILLAGES = [[-330, 10], [330, 10], [-300, 150], [320, 140], [-40, -250], [-290, -170], [330, -170]]; // центры деревень (улица идёт по оси X)
       const hcol = [0xf4d6a0, 0xe8c0c0, 0xc9e0f0, 0xe0e8b0], rcol = [0xb23a2a, 0xa5402d, 0x7a2f23];
       const cottage = (i) => { i = Math.abs(Math.round(i)); const m = MODEL('building', 'cottage', { variant: i % 4, seed: i % 3 }, () => { const h = house(3 + rng() * 1.4, 3 + rng() * 1.2, 2 + rng(), hcol[i % 4], rcol[i % 3]); h.scale.setScalar(2.2); return h; }); return m; };
       const treeM = (i, big) => { i = Math.abs(Math.round(i)); return MODEL('tree', big ? ['oak', 'pine', 'birch', 'fruit'][i % 4] : ['oakLow', 'pineLow', 'oakLow', 'oakLow'][i % 4], { seed: i % 3 }, () => tree((big ? 2.4 : 1.8) + rng() * 0.8, i % 3 === 0 ? 'pine' : 'oak')); };
@@ -471,10 +471,10 @@
       }
       // лес по краям карты (instancing)
       const treeSpots = [];
-      const deco = [[-300, -30, 110, 60], [-300, 60, 110, 60], [300, -30, 110, 60], [300, 60, 110, 60], [-100, -150, 130, 50], [100, -150, 130, 50], [-60, 190, 120, 34], [210, 195, 100, 34]];
+      const deco = [[-300, -30, 110, 60], [-300, 60, 110, 60], [300, -30, 110, 60], [300, 60, 110, 60], [-110, -270, 130, 50], [110, -270, 130, 50], [-60, 190, 120, 34], [210, 195, 100, 34]];
       for (let i = 0; i < 16000 && treeSpots.length < 6500; i++) {
         const x = (rng() - 0.5) * 1100, z = -420 + rng() * 900;
-        const inCore = x > -240 && x < 240 && z > -112 && z < 190; if (inCore) continue;
+        const inCore = x > -250 && x < 275 && z > -192 && z < 190; if (inCore) continue;
         if (deco.some(([cx, cz, w, d]) => Math.abs(x - cx) < w / 2 + 4 && Math.abs(z - cz) < d / 2 + 4)) continue;
         if (VILLAGES.some(([vx, vz]) => Math.abs(x - vx) < 60 && Math.abs(z - vz) < 28)) continue;
         treeSpots.push([x, z, 1.8 + rng() * 1.8, rng()]);
