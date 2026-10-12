@@ -5,6 +5,13 @@ const rd = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 const js = (f) => rd(f).replace(/<\/script/gi, '<\\/script');
 const out = process.argv[2] || path.join(dir, 'dist', 'farm.html'), fragment = process.argv.includes('--fragment');
 const html = rd('index.html');
+// текстуры из папки textures/*.jpg -> textures.js (window.FARM_TEXTURES)
+const texDir = path.join(dir, 'textures');
+if (fs.existsSync(texDir)) {
+  const o = {}; for (const f of fs.readdirSync(texDir).filter((x) => /\.(jpe?g|png)$/i.test(x)).sort()) o[f.replace(/\.[^.]+$/, '')] = `data:image/${/png$/i.test(f) ? 'png' : 'jpeg'};base64,` + fs.readFileSync(path.join(texDir, f)).toString('base64');
+  fs.writeFileSync(path.join(dir, 'textures.js'), 'window.FARM_TEXTURES=' + JSON.stringify(o) + ';\n');
+}
+const texJs = fs.existsSync(path.join(dir, 'textures.js')) ? `<script>${js('textures.js')}</script>\n` : '';
 const body = html.match(/<div id="app">[\s\S]*?<\/div>\s*(?=<script)/)[0];
 const page = `<title>Ферма и Город</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -12,7 +19,7 @@ const page = `<title>Ферма и Город</title>
 ${body}
 <script>${js('vendor/three.min.js')}</script>
 <script>${js('logic.js')}</script>
-<script>${js('world3d.js')}</script>
+${texJs}<script>${js('world3d.js')}</script>
 <script>${js('game.js')}</script>
 `;
 fs.mkdirSync(path.dirname(out), { recursive: true });

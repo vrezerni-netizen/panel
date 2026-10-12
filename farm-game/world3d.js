@@ -7,13 +7,60 @@
 
   const matCache = {};
   const mat = (c, o) => { const k = c + (o ? JSON.stringify(o) : ''); return matCache[k] || (matCache[k] = new T.MeshLambertMaterial(Object.assign({ color: c, flatShading: true }, o || {}))); };
+  // ---- реалистичные текстуры (необязательные: если textures.js нет, рисуются цвета)
+  const TEX = root.FARM_TEXTURES || {};
+  const imgs = {};
+  function imgOf(name) {
+    if (!TEX[name]) return null;
+    if (!imgs[name]) { const im = new Image(); im.src = TEX[name]; imgs[name] = { im, subs: [] }; im.onload = () => imgs[name].subs.forEach((t) => { t.needsUpdate = true; }); }
+    return imgs[name];
+  }
+  const texMats = {};
+  /** Материал с текстурой name; rx, ry — повторы; ox, oy — сдвиг (разные участки одной текстуры); rot — поворот. Без текстуры вернёт цветной материал. */
+  function texMat(name, rx, ry, color, ox, oy, rot) {
+    const k = [name, rx, ry, color, ox, oy, rot].join('|');
+    if (texMats[k]) return texMats[k];
+    const I = imgOf(name); if (!I) return (texMats[k] = mat(color || 0x888888));
+    const t = new T.Texture(I.im); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rx, ry); t.offset.set(ox || 0, oy || 0);
+    if (rot) { t.center.set(0.5, 0.5); t.rotation = rot; }
+    t.anisotropy = 8; I.subs.push(t); if (I.im.complete && I.im.naturalWidth) t.needsUpdate = true;
+    return (texMats[k] = new T.MeshLambertMaterial({ map: t, color: 0xffffff }));
+  }
+  const hasTex = (n) => !!TEX[n];
+  const bakedMat = new T.MeshLambertMaterial({ vertexColors: true });
+  /** Склеивает все части группы в один объект (быстро рисуется), цвета берёт из материалов с лёгким разбросом. */
+  function bake(group, jitter) {
+    group.updateMatrixWorld(true);
+    const pos = [], nor = [], col = [], v = new T.Vector3(), n = new T.Vector3(), nm = new T.Matrix3(), c = new T.Color();
+    group.traverse((o) => {
+      if (!o.isMesh || o.material.transparent || !o.material.color) return;
+      let g = o.geometry; if (g.index) g = g.toNonIndexed();
+      const pa = g.attributes.position, na = g.attributes.normal; nm.getNormalMatrix(o.matrixWorld);
+      c.copy(o.material.color).multiplyScalar(1 + (Math.random() - 0.5) * (jitter == null ? 0.14 : jitter));
+      for (let i = 0; i < pa.count; i++) {
+        v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld); pos.push(v.x, v.y, v.z);
+        n.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); nor.push(n.x, n.y, n.z); col.push(c.r, c.g, c.b);
+      }
+    });
+    const geom = new T.BufferGeometry();
+    geom.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geom.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); geom.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    const m = new T.Mesh(geom, bakedMat); m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  /** Двускатная крыша: основание w×d, конёк высотой h вдоль оси z. */
+  function gable(w, d, h, color, x, y, z, material) {
+    const a = [-w / 2, 0, -d / 2], b = [w / 2, 0, -d / 2], c = [w / 2, 0, d / 2], dd = [-w / 2, 0, d / 2], r1 = [0, h, -d / 2], r2 = [0, h, d / 2];
+    const tri = [a, b, r1, dd, r2, c, a, dd, r1, dd, r2, r1, b, r1, c, c, r1, r2, a, r1, b, dd, c, r2].flat();
+    const uvs = []; for (let i = 0; i < tri.length / 3; i++) uvs.push((i % 3) * 0.5, (i % 2));
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(tri, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals();
+    const m = new T.Mesh(g, material || mat(color, { side: T.DoubleSide })); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; return m;
+  }
   const geoCache = {};
   const geo = (k, f) => geoCache[k] || (geoCache[k] = f());
   const G = {
     box: () => geo('box', () => new T.BoxGeometry(1, 1, 1)),
     cyl: () => geo('cyl', () => new T.CylinderGeometry(0.5, 0.5, 1, 10)),
     cone: () => geo('cone', () => new T.ConeGeometry(0.5, 1, 7)),
-    sph: () => geo('sph', () => new T.SphereGeometry(0.5, 10, 8)),
+    sph: () => geo('sph', () => new T.SphereGeometry(0.5, 9, 7)),
   };
   function part(g, color, x, y, z, sx, sy, sz, o) {
     const m = new T.Mesh(G[g](), mat(color, o));
@@ -108,26 +155,33 @@
     return g;
   }
 
-  function tree(h) {
-    const g = new T.Group(); h = h || 1;
-    g.add(part('cyl', 0x6d4c2f, 0, 0.3 * h, 0, 0.22, 0.6 * h, 0.22));
-    g.add(part('cone', 0x2e7d32, 0, 1.0 * h, 0, 1.0 * h, 1.1 * h, 1.0 * h)); g.add(part('cone', 0x388e3c, 0, 1.5 * h, 0, 0.75 * h, 0.9 * h, 0.75 * h));
+  function tree(h, kind) {
+    const g = new T.Group(); h = h || 1; const r = Math.random;
+    const greens = [0x2f7d32, 0x3b8e3b, 0x4a9a3a, 0x58a845, 0x2a6f3a];
+    if (kind === 'pine' || (kind == null && r() < 0.4)) {
+      g.add(part('cyl', 0x5d4037, 0, 0.35 * h, 0, 0.18, 0.7 * h, 0.18));
+      for (let i = 0; i < 4; i++) g.add(part('cone', greens[(i + 4) % 5], 0, (0.8 + i * 0.5) * h, 0, (1.3 - i * 0.28) * h, 0.9 * h, (1.3 - i * 0.28) * h));
+    } else {
+      g.add(part('cyl', 0x6d4c2f, 0, 0.45 * h, 0, 0.22, 0.9 * h, 0.22));
+      for (let i = 0; i < 5; i++) { const a = r() * 6.28, d = r() * 0.5 * h; g.add(part('sph', greens[Math.floor(r() * 5)], Math.cos(a) * d, (1.25 + r() * 0.7) * h, Math.sin(a) * d, (0.9 + r() * 0.5) * h, (0.8 + r() * 0.4) * h, (0.9 + r() * 0.5) * h)); }
+    }
     return g;
   }
   function house(w, d, h, wall, roof) {
     const g = new T.Group();
     g.add(part('box', wall, 0, h / 2, 0, w, h, d));
-    const r = part('cone', roof, 0, h + 0.4, 0, Math.max(w, d) * 0.85, 0.9, Math.max(w, d) * 0.85); r.rotation.y = Math.PI / 4; g.add(r);
+    g.add(gable(w * 1.18, d * 1.12, h * 0.55, roof, 0, h, 0, hasTex('roof_metal') ? texMat('roof_metal', 2, 1, roof) : null));
     g.add(part('box', 0x5d4037, 0, 0.35, d / 2 + 0.01, 0.4, 0.7, 0.05));
     g.add(part('box', 0xffe082, w * 0.28, h * 0.62, d / 2 + 0.01, 0.3, 0.3, 0.05));
     g.add(part('box', 0xffe082, -w * 0.28, h * 0.62, d / 2 + 0.01, 0.3, 0.3, 0.05));
+    g.add(part('box', 0x8d6e63, w * 0.3, h + h * 0.55, -d * 0.1, 0.22, 0.6, 0.22));
     return g;
   }
 
   // ---------------------------------------------------------------- здания города
   function buildingModel(id) {
     const g = new T.Group();
-    g.add(part('box', 0xcfd3d8, 0, 0.05, 0, 7, 0.1, 6)); // площадка
+    { const pl = part('box', 0xcfd3d8, 0, 0.05, 0, 7, 0.1, 6); pl.material = texMat('concrete', 2, 2, 0xcfd3d8); g.add(pl); } // площадка
     switch (id) {
       case 'market': {
         g.add(part('box', 0xf5e6c8, 0, 0.9, -1.2, 5.4, 1.8, 1.2));
@@ -171,10 +225,12 @@
       }
       default: {
         const colors = { home: 0xc62828, meadow: 0xd81b60, grove: 0x2e7d32, valley: 0x1565c0, lake: 0x00838f, hills: 0x6a1b9a, orchard: 0xf9a825 };
-        const barn = new T.Group(); barn.add(part('box', colors[id] || 0x2e7d32, 0, 1.2, 0, 2.6, 2.4, 3)); barn.add(part('box', 0xffffff, 0, 1.0, 1.52, 1.0, 1.6, 0.05));
-        const roof = part('cone', 0x5d4037, 0, 3.1, 0, 3.3, 1.5, 3.3); roof.rotation.y = Math.PI / 4; roof.scale.z = 2.6; barn.add(roof);
+        const barn = new T.Group(); const wall = part('box', colors[id] || 0x2e7d32, 0, 1.2, 0, 2.6, 2.4, 3.4);
+        if (id === 'home') wall.material = texMat('wood_barn', 1, 1, 0xc62828); barn.add(wall);
+        barn.add(part('box', 0xffffff, 0, 1.0, 1.72, 1.1, 1.7, 0.06)); barn.add(part('box', 0x8d1b1b, 0, 1.0, 1.75, 1.0, 0.1, 0.04).rotateZ(0.8)); barn.add(part('box', 0xffffff, 0, 2.0, 1.74, 0.5, 0.4, 0.05));
+        barn.add(gable(3.1, 3.8, 1.4, 0x3d3d44, 0, 2.4, 0, hasTex('roof_metal') ? texMat('roof_metal', 2, 2, 0x555a60) : mat(0x3d3d44, { side: T.DoubleSide })));
         barn.position.set(-1.6, 0, -1); g.add(barn);
-        g.add(part('cyl', 0xb0bec5, 1.6, 1.8, -1.4, 1.1, 3.6, 1.1)); g.add(part('sph', 0x90a4ae, 1.6, 3.7, -1.4, 1.1, 0.8, 1.1));
+        g.add(part('cyl', 0xcfd8dc, 1.6, 1.8, -1.4, 1.1, 3.6, 1.1)); for (let i = 1; i < 6; i++) g.add(part('cyl', 0x90a4ae, 1.6, i * 0.6, -1.4, 1.14, 0.05, 1.14)); g.add(part('sph', 0x90a4ae, 1.6, 3.7, -1.4, 1.1, 0.8, 1.1));
         for (let i = 0; i < 3; i++) g.add(part('box', i % 2 ? 0x8bc34a : 0x558b2f, -0.8 + i * 1.5, 0.16, 2.0, 1.2, 0.12, 1.4));
         if (id === 'hills') g.add(part('cone', 0x78909c, 2.2, 1.6, 0.6, 2.2, 3.2, 2.2));
         if (id === 'lake') g.add(part('cyl', 0x4fc3f7, 1.6, 0.14, 1.6, 2.6, 0.08, 1.8));
@@ -203,14 +259,16 @@
   function create(canvas, labelBox, cb) {
     const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    const sky = new T.Mesh(new T.SphereGeometry(180, 24, 12), new T.ShaderMaterial({ side: T.BackSide, depthWrite: false, fog: false, uniforms: { top: { value: new T.Color(0x3a8fd8) }, bot: { value: new T.Color(0xcfe8f7) } }, vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }', fragmentShader: 'uniform vec3 top; uniform vec3 bot; varying float h; void main(){ gl_FragColor = vec4(mix(bot, top, pow(clamp(h,0.0,1.0), 0.6)), 1.0); }' }));
+    sky.renderOrder = -1; sky.frustumCulled = false;
     const scene = new T.Scene(); scene.background = new T.Color(0x8ecbf0); scene.fog = new T.Fog(0x8ecbf0, 60, 140);
     const camera = new T.PerspectiveCamera(42, 1, 0.5, 300);
     const hemi = new T.HemisphereLight(0xdff2ff, 0x55623a, 0.7); scene.add(hemi);
     const sun = new T.DirectionalLight(0xfff1d0, 0.9); sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024); const sc = sun.shadow.camera; sc.left = -28; sc.right = 28; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 120;
-    scene.add(sun); scene.add(sun.target);
+    sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; const sc = sun.shadow.camera; sc.left = -28; sc.right = 28; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 120;
+    scene.add(sun); scene.add(sun.target); scene.add(sky);
 
-    const ground = new T.Mesh(new T.PlaneGeometry(400, 400), mat(0x6fae4f)); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+    const ground = new T.Mesh(new T.PlaneGeometry(400, 400), texMat('grass', 100, 100, 0x6fae4f)); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
     const city = new T.Group(), farm = new T.Group(); scene.add(city); scene.add(farm);
     const W = { mode: 'city', zoom: 1, cb, renderer, scene, camera, time: 0, weather: 'sun', tod: 0.25 };
@@ -228,7 +286,7 @@
     const bMeshes = {}, truckMeshes = {}, cars = [], clouds = [];
     (function buildCity() {
       const [cw, cd] = CITY.size;
-      const road = (x, z, w, d) => { const m = part('box', 0x4a4f57, x, 0.04, z, w, 0.08, d); m.castShadow = false; city.add(m); };
+      const road = (x, z, w, d) => { const m = part('box', 0x4a4f57, x, 0.04, z, w, 0.08, d); m.material = texMat('asphalt', w / 4, d / 4, 0x4a4f57); m.castShadow = false; city.add(m); };
       road(0, 0.4, cw, 3); road(0, -12.5, cw, 3); road(-12.5, -1, 3, cd - 2); road(12.5, -1, 3, cd - 2); road(0, -1, 3, cd - 2);
       for (let x = -cw / 2 + 1; x < cw / 2; x += 3) { const m = part('box', 0xf5f5f5, x, 0.09, 0.4, 1.3, 0.02, 0.14); m.castShadow = false; city.add(m); }
       for (const [id, p] of Object.entries(CITY.buildings)) {
@@ -236,14 +294,15 @@
         b.traverse((o) => { o.userData.bid = id; });
       }
       const rng = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
-      const spots = Object.values(CITY.buildings);
+      const spots = Object.values(CITY.buildings); const decor = new T.Group();
       for (let i = 0; i < 90; i++) {
         const x = (rng() - 0.5) * (cw + 14), z = (rng() - 0.5) * (cd + 10);
         if (Math.abs(z - 0.4) < 3.2 || Math.abs(z + 12.5) < 3.2 || Math.abs(Math.abs(x) - 12.5) < 2.6 || Math.abs(x) < 2.6 && Math.abs(z) < cd / 2) continue;
         if (spots.some((p) => Math.abs(p.x - x) < 5 && Math.abs(p.z - z) < 4.6)) continue;
-        if (rng() < 0.78) { const t = tree(0.8 + rng() * 0.7); t.position.set(x, 0, z); city.add(t); }
-        else { const h = house(1.6 + rng(), 1.6 + rng(), 1.3 + rng(), [0xf4d6a0, 0xe8c0c0, 0xc9e0f0, 0xe0e8b0][i % 4], [0xb23a2a, 0x37618a][i % 2]); h.position.set(x, 0, z); h.rotation.y = rng() * 6; city.add(h); }
+        if (rng() < 0.78) { const t = tree(0.8 + rng() * 0.7); t.position.set(x, 0, z); decor.add(t); }
+        else { const h = house(1.6 + rng(), 1.6 + rng(), 1.3 + rng(), [0xf4d6a0, 0xe8c0c0, 0xc9e0f0, 0xe0e8b0][i % 4], [0xb23a2a, 0x37618a][i % 2]); h.position.set(x, 0, z); h.rotation.y = rng() * 6; decor.add(h); }
       }
+      city.add(bake(decor, 0.18));
       // лампы
       for (let x = -18; x <= 18; x += 6) { for (const z of [-1.6, 2.4]) { const l = part('cyl', 0x37474f, x, 0.9, z, 0.08, 1.8, 0.08); city.add(l); city.add(part('sph', 0xfff59d, x, 1.85, z, 0.25, 0.25, 0.25, { emissive: 0x887722 })); } }
       for (let i = 0; i < 3; i++) { const c = truckModel(1 + i % 2); c.userData = { dir: i % 2 ? -1 : 1, off: i }; cars.push(c); city.add(c); }
@@ -282,8 +341,9 @@
       F.w = w; F.h = h; F.key = farmKey(s);
       for (const g of [F.tileGroup, F.crops, F.props]) while (g.children.length) g.remove(g.children[0]);
       F.tiles = []; clearLabels('farm'); F.animals = []; F.animalSig = ''; F.vehicles = []; F.sprSig = ''; F.extra = null; F.drone = null;
+      ground.material = texMat(f.id === 'hills' ? 'grass_dry' : 'grass', 100, 100, 0x6fae4f);
       const groundCol = { hills: 0x8aa65a, valley: 0x5fb66a, meadow: 0x7cc25a, grove: 0x4e9a4a, lake: 0x62b87a, orchard: 0x8cc152 }[f.id] || 0x6fae4f;
-      ground.material = mat(groundCol);
+      if (!hasTex('grass')) ground.material = mat(groundCol);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const m = part('box', tileCol.grass[(x + y) & 1], x - w / 2 + 0.5, 0.05, y - h / 2 + 0.5, 0.97, 0.1, 0.97);
         m.castShadow = false; F.tileGroup.add(m); F.tiles.push({ mesh: m, sig: '', model: null });
@@ -305,9 +365,26 @@
       F.penLabel = addLabel('farm', '', new T.Vector3(px, 2.2, pz), 'penlbl', () => cb.onPen());
       // деревья вокруг
       const rng = (() => { let q = 11; return () => (q = (q * 16807) % 2147483647) / 2147483647; })();
-      for (let i = 0; i < 26; i++) { const a = rng() * 6.28, r = Math.max(w, h) / 2 + 5 + rng() * 9; const t = tree(0.8 + rng() * 0.9); t.position.set(Math.cos(a) * r * 1.3, 0, Math.sin(a) * r * 0.9 + 3); if (Math.abs(t.position.x) < w / 2 + 3 && Math.abs(t.position.z) < h / 2 + 3 || t.position.z < -h / 2 - 1.5 && t.position.z > -h / 2 - 7 && t.position.x > -w / 2 && t.position.x < w / 2 + 1) continue; F.props.add(t); }
+      const tg = new T.Group();
+      for (let i = 0; i < 40; i++) { const a = rng() * 6.28, r = Math.max(w, h) / 2 + 5 + rng() * 9; const t = tree(0.8 + rng() * 0.9); t.position.set(Math.cos(a) * r * 1.3, 0, Math.sin(a) * r * 0.9 + 3); if (Math.abs(t.position.x) < w / 2 + 3 && Math.abs(t.position.z) < h / 2 + 3 || t.position.z < -h / 2 - 1.5 && t.position.z > -h / 2 - 7 && t.position.x > -w / 2 && t.position.x < w / 2 + 1) continue; tg.add(t); }
+      F.props.add(bake(tg, 0.18));
       if (f.id === 'hills') for (let i = 0; i < 6; i++) F.props.add(part('cone', 0x78909c, -w / 2 - 6 + i * 3.2, 1.6, -h / 2 - 11, 4, 4, 4));
       layoutCamera();
+    }
+    const BIGPLANT = { pumpkin: 1, watermelon: 1, cabbage: 1, pineapple: 1, eggplant: 1 };
+    function fieldPlants(key, stage, i) {
+      const g = new T.Group(), dens = BIGPLANT[key] ? 2 : 3, sc = dens === 3 ? 0.46 : 0.6;
+      for (let a = 0; a < dens; a++) for (let b = 0; b < dens; b++) {
+        const m = cropModel(key, stage); m.scale.setScalar(sc * (0.9 + ((i * 7 + a * 3 + b) % 5) * 0.05));
+        m.position.set(((a + 0.5) / dens - 0.5) * 0.86 + (((i + a) % 3) - 1) * 0.02, 0, ((b + 0.5) / dens - 0.5) * 0.86); m.rotation.y = (i + a * 2 + b * 5) % 6.28; g.add(m);
+      }
+      return g;
+    }
+    function bakeAt(g) { const m = bake(g, 0.1); return m; }
+    function tileMaterial(kind, wet, i, y, x) {
+      const v = (x * 7 + y * 13) % 4, ox = (v & 1) * 0.5, oy = (v >> 1) * 0.5;
+      if (kind === 'grass') return hasTex('grass') ? texMat('grass', 0.5, 0.5, 0x74b84f, ox, oy, ((x + y) % 2) * Math.PI / 2) : mat(tileCol.grass[(x + y) & 1]);
+      return wet ? texMat('soil_wet', 0.5, 0.5, tileCol.wet, ox, oy) : texMat('soil_plowed', 0.5, 0.5, tileCol.soil, ox, oy);
     }
     function tileSig(t, wet) { return t.k === 'crop' ? 'c' + t.crop + L.stage(t) + (wet ? 'w' : '') : t.k + (t.wet ? 'w' : ''); }
     function syncFarm(s) {
@@ -317,13 +394,12 @@
         const t = f.tiles[i], c = F.tiles[i], wet = t.k === 'crop' && t.water > 0;
         const sig = tileSig(t, wet);
         if (sig === c.sig) continue; c.sig = sig;
-        if (c.model) { F.crops.remove(c.model); c.model = null; }
-        c.mesh.material = mat(t.k === 'grass' ? tileCol.grass[(i + ((i / f.w) | 0)) & 1] : wet ? tileCol.wet : tileCol.soil);
+        if (c.model) { F.crops.remove(c.model); c.model.geometry.dispose(); c.model = null; }
+        c.mesh.material = tileMaterial(t.k, wet, i, (i / f.w) | 0, i % f.w);
         c.mesh.scale.y = t.k === 'grass' ? 0.1 : 0.16; c.mesh.position.y = t.k === 'grass' ? 0.05 : 0.08;
         if (t.k === 'crop') {
-          const m = cropModel(t.crop, L.stage(t)); m.position.set(c.mesh.position.x, 0.16, c.mesh.position.z); m.rotation.y = (i * 1.7) % 6.28;
-          if (L.CROPS[t.crop].perennial === true && L.stage(t) < 3) m.scale.setScalar(0.95);
-          F.crops.add(m); c.model = m;
+          const m = fieldPlants(t.crop, L.stage(t), i); m.position.set(c.mesh.position.x, 0.16, c.mesh.position.z);
+          F.crops.add(bakeAt(m)); c.model = F.crops.children[F.crops.children.length - 1];
         }
       }
       // поливалки и пугала
@@ -485,15 +561,17 @@
       const p = new T.Points(g, new T.PointsMaterial({ color: 0xaad4ff, size: 0.18, transparent: true, opacity: 0.8 })); p.visible = false; p.frustumCulled = false; scene.add(p); return p;
     })();
     const skyDay = rgb(0x8ecbf0), skyNight = rgb(0x0b1330), skyDusk = rgb(0xf0a070), skyRain = rgb(0x7a8794), skyDry = rgb(0xe8c58a);
+    const skyDome = sky;
     function lighting(tod, weather) {
       const ang = tod * Math.PI * 2; // 0.25 = полдень
       const h = Math.sin((tod - 0.0) * Math.PI * 2 - Math.PI / 2 + Math.PI / 2); // -1..1
       const day = Math.max(0, Math.min(1, 0.5 + Math.sin(ang - Math.PI / 2) * -0.5 * 1.4 + 0.15));
       const light = Math.max(0.06, day);
-      const sky = skyNight.clone().lerp(skyDay, light);
-      const dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 5) * 0.45; sky.lerp(skyDusk, dusk);
-      if (weather === 'rain') sky.lerp(skyRain, 0.6); else if (weather === 'drought') sky.lerp(skyDry, 0.45);
-      scene.background.copy(sky); scene.fog.color.copy(sky);
+      const skyC = skyNight.clone().lerp(skyDay, light);
+      const dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 5) * 0.45; skyC.lerp(skyDusk, dusk);
+      if (weather === 'rain') skyC.lerp(skyRain, 0.6); else if (weather === 'drought') skyC.lerp(skyDry, 0.45);
+      scene.background.copy(skyC); scene.fog.color.copy(skyC);
+      skyDome.material.uniforms.bot.value.copy(skyC); skyDome.material.uniforms.top.value.copy(skyC).multiplyScalar(0.62).lerp(skyNight, 1 - light).offsetHSL(0, 0.12, -0.02);
       hemi.intensity = 0.25 + light * 0.55; sun.intensity = 0.05 + light * 0.95 * (weather === 'rain' ? 0.5 : 1);
       sun.color.set(dusk > 0.1 ? 0xffb070 : 0xfff1d0);
       sun.position.set(Math.cos(ang) * 28, 14 + Math.max(0, Math.sin(ang)) * 22, 14); sun.target.position.set(0, 0, 0);
@@ -527,10 +605,9 @@
         if (F.drone) { const a = W.time * 0.5; F.drone.position.set(Math.cos(a) * F.w * 0.35, 3.2 + Math.sin(W.time * 2) * 0.15, Math.sin(a) * F.h * 0.3); F.drone.rotation.y = -a; }
         for (const v of F.vehicles) { v.t += dt; const k = Math.min(1, v.t / v.dur); v.m.position.set(lerp(v.x0, v.x1, k), 0.12, v.z); }
         for (let i = F.vehicles.length - 1; i >= 0; i--) if (F.vehicles[i].t >= F.vehicles[i].dur) { farm.remove(F.vehicles[i].m); F.vehicles.splice(i, 1); }
-        // колышем растения
-        F.crops.children.forEach((c, i) => { c.rotation.z = Math.sin(W.time * 1.5 + i) * 0.03; });
       }
       for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.vy -= 9 * dt; p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt; p.m.scale.multiplyScalar(0.97); if (p.life <= 0) { scene.remove(p.m); parts.splice(i, 1); } }
+      sky.position.copy(camera.position);
       applyCamera();
       renderer.render(scene, camera);
       const r = canvas.getBoundingClientRect(); const v = new T.Vector3();
