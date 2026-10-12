@@ -135,9 +135,13 @@
     world.workAnim(key); afterAction(r, sfi, x, y, key, kind);
     if (S.level > had) onLevelUp();
   }
-  function onVehicleClick(key) {
-    const lv = S.up[key] || 0, c = S.cool[key] || 0;
-    toastOnce(`${L.MACHINES[key].icon} ${L.MACHINES[key].name}, ур. ${lv}: ${c > 0 ? 'остывает ' + Math.ceil(c / 1000) + ' с' : 'готов. Перетащи мышью на грядку, чтобы поработать'}`);
+  function onVehicleClick(key) { if (ui.modal) return; ui.vehKey = key; openModal('veh'); }
+  /** Машина сама закончила выезд: показываем работу так же, как при ручном перетаскивании. */
+  function runFx(ev) {
+    const key = ev.key, kind = FXK[ev.r.fx] || 'dig';
+    for (const [cx, cy, k0, sp0] of ev.cells) world.fx(key === 'logger' ? (k0 === 'tree' ? 'fell' : 'dig') : kind, ev.sfi, cx, cy, { sp: k0 === 'tree' ? sp0 : undefined });
+    world.arrive(key, ev.sfi, ev.x, ev.y); world.workAnim(key); afterAction(ev.r, ev.sfi, ev.x, ev.y, key, kind);
+    if (S.level > ui.lvl) onLevelUp();
   }
   function onHover(t) {
     if (!t) { world.highlight(null); return; }
@@ -160,7 +164,7 @@
     return out;
   }
   function onLevelUp() {
-    sfx.level(); const u = unlocksAt(S.level);
+    ui.lvl = S.level; sfx.level(); const u = unlocksAt(S.level);
     toast(`🎉 Уровень ${S.level}!${u.length ? ' Открылось: ' + u.join(', ') : ''}`, 'good');
   }
 
@@ -379,6 +383,15 @@
     if (k === 'feeder') return `корма −${Math.round((1 - L.feedUseOf(lv)) * 100)}%`;
     return `скорость +${Math.round((L.speedOf(lv) - 1) * 100)}%, двойной урожай ${Math.round(L.doubleOf(lv) * 100)}%`;
   }
+  const farmName = (id) => { const d = L.FARM_DEFS.find((x) => x.id === id); return d ? d.name : id; };
+  /** Строка состояния: стоит ли машина, едет ли, чего ждёт. */
+  function runLine(k) {
+    const st = L.runStatus(S, k), d = L.MACHINES[k];
+    if (!st.on) return '<b style="color:var(--ink2)">⏹ Выключена: стоит, пока сам не включишь</b>';
+    if (d.kind !== 'field') return `<b style="color:var(--green2)">▶ Работает (топливо тратит само)</b>`;
+    const w = { move: 'едет к грядке…', cool: `остывает ${Math.ceil((S.cool[k] || 0) / 1000)} с`, idle: st.why ? 'ждёт: ' + st.why : 'ищет работу' }[st.state];
+    return `<b style="color:var(--green2)">▶ Включена · ${farmName(st.farm)} · ${w}</b>`;
+  }
   function machCard(k) {
     const d = L.MACHINES[k], lv = S.up[k] || 0, c = L.machineCost(S, k);
     const lock = c && S.level < c.need, lack = c && (S.coins < c.coins || S.crystals < c.gems);
@@ -387,15 +400,35 @@
     let extra = '';
     if (k === 'seeder') extra = `<br>Сеет: ${S.autoSeed ? L.CROPS[S.autoSeed].icon + ' ' + L.CROPS[S.autoSeed].name : '— выбери семена'} ${btn('autoseed', {}, 'Выбрать текущие семена', 'b sm')}`;
     if (d.animals) extra = `<br><small>Для: ${d.animals.map((a) => L.ANIMALS[a].icon).join(' ')}</small>`;
+    if (lv && d.kind === 'auto') extra += `<br>${runLine(k)} ${btn('run', { k }, L.isRun(S, k) ? '⏸ Выключить' : '▶ Включить', L.isRun(S, k) ? 'r sm' : 'sm')}`;
+    if (lv && d.kind === 'field') extra += `<br>${runLine(k)} ${btn('vehopen', { k }, '🔁 Работать самой…', 'b sm')}`;
     return card(d.icon, d.name, sub + extra, c ? btn('upg', { k }, `${lv ? 'Улучшить' : 'Купить'}<br>${fmt(c.coins)} 🪙${c.gems ? ' + ' + c.gems + '💎' : ''}`, 'y', lock || lack) : '<b>МАКС</b>', lock ? 'lock' : '');
   }
+  MODALS.veh = {
+    title() { const d = L.MACHINES[ui.vehKey]; return d ? `${d.icon} ${d.name}` : 'Техника'; },
+    render() {
+      const k = ui.vehKey, d = L.MACHINES[k]; if (!d) return '';
+      const lv = S.up[k] || 0, on = L.isRun(S, k), cool = S.cool[k] || 0;
+      let h = `<div class="hint">${d.desc}.<br><span style="letter-spacing:1px;color:var(--gold)">${pips(lv)}</span> ур. ${lv}/${L.MACH_MAX} · ${machEffect(k, lv)}<br>${cool > 0 ? `Остывает: ещё ${Math.ceil(cool / 1000)} с` : 'Готова к работе'}</div>`;
+      h += card('🖐️', 'Вручную', 'Перетащи машину пальцем на любую грядку: она поработает один раз. Это ты решаешь сам.', '');
+      const fid = on ? S.run[k] : (ui.runFarm && S.farms.some((f) => f.id === ui.runFarm) ? ui.runFarm : L.farm(S).id);
+      let auto = `${runLine(k)}<br>Топливо: ${L.FUEL[k]}🪙 за выезд. Выключена — стоит на месте и ничего не меняет в игре.`;
+      auto += `<div style="margin-top:8px"><small>На какой ферме работать:</small><div class="chips">${S.farms.map((f) => `<button class="btn sm ${f.id === fid ? '' : 'b'}" data-act="runfarm" data-id="${f.id}">${farmName(f.id)}</button>`).join('')}</div></div>`;
+      if (k === 'tractor') {
+        const list = L.CROP_ORDER.filter((c) => L.CROPS[c].level <= S.level);
+        auto += `<div style="margin-top:8px"><small>Что сеять после вспашки:</small><div class="chips"><button class="btn sm ${S.runSeed ? 'b' : ''}" data-act="runseed" data-k="">только пахать</button>${list.map((c) => `<button class="btn sm ${S.runSeed === c ? '' : 'b'}" data-act="runseed" data-k="${c}">${L.CROPS[c].icon} ${S.seeds[c] || 0}</button>`).join('')}</div></div>`;
+      }
+      h += card('🔁', 'Работать самой', auto, btn('run', { k }, on ? '⏸ Выключить' : '▶ Включить', on ? 'r' : 'y', !lv));
+      return h;
+    },
+  };
   MODALS.tech = {
     title: '🚜 Техцентр',
     tabs: [['tech', '🚜 Полевая'], ['animals', '🐄 Для животных'], ['auto', '🤖 Автоматика'], ['trucks', '🚚 Транспорт'], ['farm', '🏡 Ферма']],
     render(tab) {
-      if (tab === 'tech') return '<div class="hint">Купленная техника стоит на карте у твоей фермы: <b>перетащи её мышью на любую грядку</b> и она вспашет, соберёт, польёт или удобрит целую площадь. Каждый уровень сильнее, но улучшение дорожает вдвое, с 5-го уровня нужны кристаллы, а требуемый уровень игрока растёт.</div>' + L.FIELD_TOOLS.map(machCard).join('');
+      if (tab === 'tech') return '<div class="hint">Купленная техника стоит на карте у твоей фермы. <b>Вручную:</b> перетащи её на любую грядку — она поработает один раз. <b>Сама:</b> нажми «🔁 Работать самой» (или нажми на машину на карте): она будет ездить по выбранной ферме, пока ты не выключишь. Выключена — стоит и ничего не меняет. Каждый уровень сильнее, но улучшение дорожает вдвое, с 5-го уровня нужны кристаллы.</div>' + L.FIELD_TOOLS.map(machCard).join('');
       if (tab === 'animals') return '<div class="hint">Оборудование для животных. Для каждой группы своё: яйца, молоко, шерсть, мёд и трюфели. Сарай для каждого вида строится в загоне 🐄.</div>' + L.MACH_KEYS.filter((k) => L.MACHINES[k].kind === 'animal').map(machCard).join('');
-      if (tab === 'auto') return '<div class="hint">Автоматика работает сама, пока ты в игре или ушёл. Каждый вид тратит монеты на топливо: если монет нет, он стоит. Сильнее с каждым уровнем.</div>' + L.AUTO_KEYS.map(machCard).join('');
+      if (tab === 'auto') return '<div class="hint">Автоматика работает <b>только когда ты её включил</b> кнопкой «▶ Включить» (после покупки она выключена). Выключил — ничего не меняется. Каждый вид тратит монеты на топливо: если монет нет, он стоит. Сильнее с каждым уровнем.</div>' + L.AUTO_KEYS.map(machCard).join('');
       if (tab === 'trucks') {
         let h = '<div class="hint">Чем лучше машина, тем больше везёт и быстрее едет. Охрана защищает от разбойников.</div>';
         S.trucks.forEach((t, i) => {
@@ -559,7 +592,7 @@
     title: '❓ Как играть',
     render() {
       return `<div class="hint" style="font-size:15px">
-        <span class="to"><b>Управление пальцами:</b> один палец, тащишь по карте — двигаешь её; короткое касание — действие выбранным инструментом; два пальца — приближать и вращать. Технику (🚜🌾🚒🧂) перетащи пальцем на любую грядку — она поработает там. Кнопка 🖌 слева включает «кисть»: тащишь палец по грядкам — копаешь, сеешь или собираешь сразу много.<br></span><span class="dto"><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br></span><b>Лес:</b> на «Целине с лесом» (север карты, с 2 уровня) сначала нужно расчистить землю: 🪓 топором руби деревья (брёвна идут на склад), пни и камни убирай инструментом «Убрать», потом копай и сей. Харвестер 🌲 и корчеватель 🪓 делают это на большой площади. Брёвна пили на 🪚 лесопилке в доски и строй из них 🏗 дома и сараи на продажу.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
+        <span class="to"><b>Управление пальцами:</b> один палец, тащишь по карте — двигаешь её; короткое касание — действие выбранным инструментом; два пальца — приближать и вращать. Технику (🚜🌾🚒🧂) перетащи пальцем на любую грядку — она поработает там. Кнопка 🖌 слева включает «кисть»: тащишь палец по грядкам — копаешь, сеешь или собираешь сразу много.<br></span><span class="dto"><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br></span><b>Лес:</b> на «Целине с лесом» (север карты, с 2 уровня) сначала нужно расчистить землю: 🪓 топором руби деревья (брёвна идут на склад), пни и камни убирай инструментом «Убрать», потом копай и сей. Харвестер 🌲 и корчеватель 🪓 делают это на большой площади. Брёвна пили на 🪚 лесопилке в доски и строй из них 🏗 дома и сараи на продажу.<br><b>Техника:</b> тащи машину на грядку — она поработает один раз. Нажми на саму машину → <b>«Работать самой»</b>: она будет ездить по выбранной ферме и пахать, собирать, поливать, пока ты не выключишь. Пока не включил, техника и автоматика стоят и ничего не меняют.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
         <b>2.</b> Когда созреет — 🧺 собери. Урожай попадает на <b>склад</b>.<br>
         <b>3.</b> Продать урожай можно <b>только на рынке в городе</b>: открой «📦 Склад», выбери машину, загрузи и отправь 🚚. В пути бывают пробки, поломки и разбойники.<br>
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
@@ -572,6 +605,15 @@
   // ---------------------------------------------------------------- обработчики
   const A = {
     close: closeModal,
+    run: (d) => {
+      const k = d.k, m = L.MACHINES[k], on = !L.isRun(S, k);
+      const r = L.setRun(S, k, on, on && m.kind === 'field' ? (ui.runFarm && S.farms.some((f) => f.id === ui.runFarm) ? ui.runFarm : L.farm(S).id) : undefined);
+      if (!r.ok) return toast(r.msg, 'bad');
+      toast(on ? `${m.icon} ${m.name}: включена${m.kind === 'field' ? ' · ' + farmName(S.run[k]) : ''}. Выключить можно здесь же` : `${m.icon} ${m.name}: выключена, стоит на месте`, on ? 'good' : ''); lastBar = ''; renderModal();
+    },
+    runfarm: (d) => { ui.runFarm = d.id; if (L.isRun(S, ui.vehKey)) L.setRun(S, ui.vehKey, true, d.id); renderModal(); },
+    runseed: (d) => { S.runSeed = d.k || null; renderModal(); },
+    vehopen: (d) => { ui.vehKey = d.k; openModal('veh'); },
     modal: (d) => openModal(d.id),
     tab: (d) => { ui.tab[ui.modal] = d.t; ui.confirm = null; renderModal(true); },
     cam: (d) => goCam(d.v),
@@ -603,7 +645,10 @@
     fert: (d) => { const r = L.buyFert(S, +d.n); r.ok ? sfx.plant() : toast(r.msg, 'bad'); },
     scare: () => { const r = L.buyScarecrow(S); r.ok ? sfx.plant() : toast(r.msg, 'bad'); },
     gbuy: (d) => { const r = L.buyGems(S, d.w, 1); if (r.ok) { sfx.level(); toast(d.w === 'boost' ? '⚡ Рост ×2 на 5 минут!' : '🌟 Суперудобрение добавлено', 'good'); } else toast(r.msg, 'bad'); },
-    upg: (d) => { const r = L.buyUpgrade(S, d.k); if (r.ok) { sfx.level(); toast('Улучшено!', 'good'); lastBar = ''; } else toast(r.msg, 'bad'); },
+    upg: (d) => {
+      const r = L.buyUpgrade(S, d.k), m = L.MACHINES[d.k];
+      if (r.ok) { sfx.level(); toast(m && S.up[d.k] === 1 && m.kind !== 'animal' ? `${m.icon} ${m.name} куплена и пока стоит. Сама работать начнёт, только когда ты нажмёшь «${m.kind === 'field' ? '🔁 Работать самой' : '▶ Включить'}»` : 'Улучшено!', 'good'); lastBar = ''; } else toast(r.msg, 'bad');
+    },
     truckup: (d) => { const r = L.upgradeTruck(S, +d.i); r.ok ? (sfx.level(), toast('Машина улучшена!', 'good')) : toast(r.msg, 'bad'); },
     truckbuy: () => { const r = L.buyTruckSlot(S); r.ok ? (sfx.level(), toast('Новая машина в гараже!', 'good')) : toast(r.msg, 'bad'); },
     barn: (d) => { const r = L.buyBarn(S, d.k); r.ok ? (sfx.level(), toast('Сарай готов!', 'good')) : toast(r.msg, 'bad'); },
@@ -663,7 +708,7 @@
   function frame(now) {
     const dt = Math.min(0.2, (now - last) / 1000); last = now;
     acc += dt * 1000 * ui.speed; uiAcc += dt; modalAcc += dt; saveAcc += dt;
-    if (acc >= 100) { L.tick(S, acc); acc = 0; } if (ui.speed === 0) acc = 0;
+    if (acc >= 100) { L.tick(S, acc); acc = 0; for (const ev of L.drainFx()) runFx(ev); } if (ui.speed === 0) acc = 0;
     if (uiAcc >= 0.25) {
       uiAcc = 0; renderHud(); renderBar();
       for (const l of S.log) if (l.n > ui.lastLog) { ui.lastLog = l.n; toast(l.msg, l.kind === 'good' ? 'good' : l.kind === 'bad' ? 'bad' : ''); if (l.kind === 'good') sfx.coin(); else if (l.kind === 'bad') sfx.bad(); }
@@ -682,7 +727,7 @@
     const d = load();
     S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(`С возвращением! Тебя не было ${Math.round(away / 60000)} мин — работа не стояла 🌾`, 'good'); } }
-    ui.lastLog = S.logN || 0;
+    ui.lastLog = S.logN || 0; ui.lvl = S.level; L.drainFx();
     try {
       world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onPen: () => { if (!ui.modal) openModal('animals'); } });
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }

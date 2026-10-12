@@ -154,7 +154,7 @@
       farms: [f], cur: 0, seeds: { wheat: 6, carrot: 2 }, goods: {}, stall: {}, feed: 6,
       items: { fert: 2, superfert: 0 }, animals: {}, prod: {},
       up: { barn: 0, stall: 0, can: 0, guard: 0 }, trucks: [{ lvl: 0 }],
-      cool: {}, barns: {}, auto: {}, autoSeed: null, feedDebt: 0, trips: [], orders: [], nextTripId: 1, nextOrderId: 1, orderAt: 0,
+      cool: {}, barns: {}, auto: {}, autoSeed: null, run: {}, job: {}, runIdle: {}, runWhy: {}, runSeed: null, jobN: 0, feedDebt: 0, trips: [], orders: [], nextTripId: 1, nextOrderId: 1, orderAt: 0,
       market: { m, tr: {}, t: 0, ev: [], evAt: 60000, prop: 1 }, weather: { type: 'sun', left: 150000 }, boost: 0,
       clock: DAY_MS * 0.25, day: 1, sprAt: 0, log: [], pending: null,
       daily: { key: '' }, stats: { harvested: 0, earned: 0, trips: 0, golden: 0, spins: 0, logs: 0, built: 0 }, sites: [], nextSiteId: 1,
@@ -166,6 +166,9 @@
     for (const k of MACH_KEYS) if (s.up[k] == null) s.up[k] = 0;
     for (const k of FIELD_TOOLS) if (s.cool[k] == null) s.cool[k] = 0;
     for (const k of Object.keys(s.animals)) if (s.animals[k] > 0 && !s.barns[k]) s.barns[k] = 1;
+    // работа техники: только по команде игрока. Старые сохранения: уже купленная автоматика продолжает работать, как раньше.
+    if (!s.run) { s.run = {}; for (const k of AUTO_KEYS) if (s.up[k] > 0) s.run[k] = true; }
+    s.job = s.job || {}; s.runIdle = s.runIdle || {}; s.runWhy = s.runWhy || {}; s.jobN = s.jobN || 0; if (s.runSeed === undefined) s.runSeed = null;
     s.sites = s.sites || []; s.nextSiteId = s.nextSiteId || 1; s.stats.logs = s.stats.logs || 0; s.stats.built = s.stats.built || 0; if (s.market && s.market.prop == null) s.market.prop = 1;
     return s;
   }
@@ -285,7 +288,7 @@
         if (p.pending >= max) { p.acc = 0; break; }
       }
     }
-    tickAutos(s, dt);
+    tickAutos(s, dt); tickRuns(s, dt);
     // перезарядка техники
     for (const k of Object.keys(s.cool)) s.cool[k] = Math.max(0, s.cool[k] - dt);
     // доставки
@@ -320,7 +323,7 @@
   const pay = (s, c) => { if (s.coins < c) return false; s.coins -= c; return true; };
   function tickAutos(s, dt) {
     for (const k of AUTO_KEYS) {
-      const lv = s.up[k] || 0; if (!lv) continue;
+      const lv = s.up[k] || 0; if (!lv || !s.run[k]) continue; // без команды игрока автоматика стоит
       s.auto[k] = (s.auto[k] || 0) + dt; const every = autoEvery(k, lv) * 1000; let guard = 0;
       while (s.auto[k] >= every && guard++ < 40) { s.auto[k] -= every; runAuto(s, k, lv); }
     }
@@ -363,6 +366,85 @@
         note(s, '📦 Автокурьер отправил машину на рынок', 'info'); return;
       }
     }
+  }
+
+  // ---------------------------------------------------------------- работа техники по команде игрока
+  // Без команды ничего не меняется: машина стоит, пока игрок сам не включит «Работать самой» (или не перетащит её на грядку).
+  const RUN_TRAVEL_MS = 3500, RUN_IDLE_MS = 4000;
+  const FUEL = { tractor: 3, combine: 4, waterer: 2, spreader: 3, logger: 5, grinder: 4 };   // монет за один выезд
+  const FXQ = [];                                      // события для картинки: что машина только что сделала
+  const drainFx = () => FXQ.splice(0, FXQ.length);
+  const isRun = (s, k) => !!(s.run && s.run[k]);
+  /** Включить или выключить автоработу. Для полевой техники on = true, farmId — на какой ферме она работает. */
+  function setRun(s, k, on, farmId) {
+    const d = MACHINES[k]; if (!d || d.kind === 'animal') return fail('Это оборудование работает само по себе');
+    if (!(s.up[k] > 0)) return fail(`${d.name}: сначала купи в Техцентре`);
+    if (!on) { delete s.run[k]; delete s.job[k]; delete s.runWhy[k]; return { ok: true, on: false }; }
+    if (d.kind === 'field') {
+      const id = farmId || farm(s).id; if (!s.farms.some((f) => f.id === id)) return fail('Нет такой фермы');
+      s.run[k] = id; delete s.job[k]; s.runIdle[k] = 0; delete s.runWhy[k];
+    } else s.run[k] = true;
+    return { ok: true, on: true };
+  }
+  const runSeedOf = (s) => (s.runSeed && CROPS[s.runSeed] && CROPS[s.runSeed].level <= s.level && s.seeds[s.runSeed] > 0 ? s.runSeed : null);
+  function runCan(s, k, d, t, seed) {
+    switch (k) {
+      case 'tractor': return !d.forestry && (t.k === 'grass' || (t.k === 'soil' && !!seed));
+      case 'combine': return isRipe(t);
+      case 'waterer': return t.k === 'crop' && !isRipe(t) && !(t.water > 0);
+      case 'spreader': return t.k === 'crop' && !isRipe(t) && s.items.fert > 0;
+      case 'logger': return t.k === 'tree';
+      case 'grinder': return t.k === 'stump' || (t.k === 'rock' && s.up.grinder >= 2);
+    }
+    return false;
+  }
+  /** Куда машине ехать: первая по порядку грядка с работой, а центр выбираем так, чтобы площадь захватила как можно больше нужных клеток. */
+  function pickRunTarget(s, k, fi) {
+    const f = s.farms[fi], d = FARM_DEFS.find((x) => x.id === f.id), seed = runSeedOf(s);
+    if ((k === 'combine' || k === 'logger') && barnCap(s) - total(s.goods) < 1) return { why: 'Склад полон: отправь товар на рынок' };
+    if (k === 'spreader' && !(s.items.fert > 0)) return { why: 'Нет удобрения: купи в магазине' };
+    if (s.coins < FUEL[k]) return { why: `Нет монет на топливо (${FUEL[k]}🪙)` };
+    const can = (x, y) => x >= 0 && y >= 0 && x < f.w && y < f.h && runCan(s, k, d, f.tiles[y * f.w + x], seed), cells = areaOf(s.up[k]);
+    let first = -1; for (let i = 0; i < f.tiles.length; i++) if (can(i % f.w, (i / f.w) | 0)) { first = i; break; }
+    if (first < 0) return { why: { tractor: 'Всё вспахано', combine: 'Пока нечего собирать', waterer: 'Всё полито', spreader: 'Нечего удобрять', logger: 'Деревьев нет', grinder: 'Пней и камней нет' }[k] };
+    const fx = first % f.w, fy = (first / f.w) | 0; let best = [fx, fy], bs = -1;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+      const cx = fx + dx, cy = fy + dy; if (cx < 0 || cy < 0 || cx >= f.w || cy >= f.h) continue;
+      let sc = 0, covers = false; for (const [ax, ay] of cells) if (can(cx + ax, cy + ay)) { sc++; if (cx + ax === fx && cy + ay === fy) covers = true; }
+      if (covers && sc > bs) { bs = sc; best = [cx, cy]; }
+    }
+    return { x: best[0], y: best[1] };
+  }
+  function tickRuns(s, dt) {
+    for (const k of FIELD_TOOLS) {
+      const id = s.run[k]; if (!id) { delete s.job[k]; continue; }
+      const fi = s.farms.findIndex((f) => f.id === id);
+      if (fi < 0 || !(s.up[k] > 0)) { delete s.run[k]; delete s.job[k]; continue; }
+      let job = s.job[k];
+      if (!job) {
+        if (s.cool[k] > 0) continue;
+        s.runIdle[k] = Math.max(0, (s.runIdle[k] || 0) - dt); if (s.runIdle[k] > 0) continue;
+        const tg = pickRunTarget(s, k, fi);
+        if (tg.why) { s.runWhy[k] = tg.why; s.runIdle[k] = RUN_IDLE_MS; continue; }
+        delete s.runWhy[k]; s.job[k] = { id: ++s.jobN, farm: id, x: tg.x, y: tg.y, t: RUN_TRAVEL_MS, total: RUN_TRAVEL_MS };
+        continue;
+      }
+      job.t -= dt; if (job.t > 0) continue;
+      delete s.job[k];
+      const prev = s.cur; s.cur = fi;
+      const cells = areaCells(s, k, job.x, job.y).map(([cx, cy]) => { const t = f_tile(s, cx, cy); return [cx, cy, t && t.k, t && t.sp]; });
+      const r = act(s, k, job.x, job.y, runSeedOf(s));
+      s.cur = prev;
+      if (r.ok) { s.coins = Math.max(0, s.coins - FUEL[k]); FXQ.push({ key: k, sfi: fi, x: job.x, y: job.y, cells, r }); if (FXQ.length > 200) FXQ.shift(); }
+      else { s.runWhy[k] = r.msg; s.runIdle[k] = RUN_IDLE_MS; }
+    }
+  }
+  const f_tile = (s, x, y) => { const f = farm(s); return inRange(f, x, y) ? f.tiles[y * f.w + x] : null; };
+  /** Что сейчас делает машина (для кнопок и подписи): off | move | cool | idle */
+  function runStatus(s, k) {
+    if (!isRun(s, k)) return { on: false, state: 'off' };
+    if (MACHINES[k].kind !== 'field') return { on: true, state: 'work' };
+    return { on: true, state: s.job[k] ? 'move' : s.cool[k] > 0 ? 'cool' : 'idle', why: s.runWhy[k] || '', farm: s.run[k] };
   }
 
   // ---------------------------------------------------------------- лес и стройка
@@ -511,6 +593,7 @@
         const def = MACHINES[tool], lv = s.up[tool] || 0;
         if (lv < 1) return fail(`${def.name}: купи в Техцентре`);
         if (s.cool[tool] > 0) return fail(`${def.name} остывает: ещё ${Math.ceil(s.cool[tool] / 1000)} с`);
+        if (tool === 'tractor' && farmDef(s).forestry) return fail('В лесу не пашут: тут работает харвестер');
         let did = 0, got = 0, xp = 0, planted = 0;
         for (const [cx, cy] of areaCells(s, tool, x, y)) {
           const i = cy * f.w + cx, tt = f.tiles[i];
@@ -761,6 +844,7 @@
     DAY_MS, OFFLINE_CAP, WHEEL, EXCHANGE, PERENNIAL_HARVESTS,
     makeFarm, WOOD, SITE_TYPES, SITE_SLOTS, siteSlots, siteStage, sitePrice, startBuild, sellSite, rushSite, sawLogs, fellTree, YOUNG_MS,
     machineCost, buyMachine, barnCost, buyBarn, animalCap, animalMachine, areaOf, coolOf, autoEvery, autoN, speedOf, doubleOf, feedUseOf, migrate,
+    setRun, isRun, runStatus, drainFx, pickRunTarget, FUEL, RUN_TRAVEL_MS, RUN_IDLE_MS, runSeedOf,
     setRandom, xpNeeded, levelGems, createState, farm, farmDef, tileAt, isRipe, stage, progressOf, tick, catchUp, act, areaCells,
     buySeeds, buyFeed, buyFert, buyScarecrow, buyGems, upgradeCost, buyUpgrade, buyAnimal, collect, unlockFarm, setFarm,
     truckInfo, upgradeTruck, buyTruckSlot, truckFree, loadValue, startTrip, sellStall, sellAllStall, rushTrip,

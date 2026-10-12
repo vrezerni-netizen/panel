@@ -153,20 +153,20 @@ test('миграция старого сохранения: сараи для к
   const s = fresh(); s.animals.chicken = 2; delete s.barns; delete s.auto; const m = L.migrate(s); assert.equal(m.barns.chicken, 1);
 });
 test('дрон собирает урожай сам и тратит топливо', () => {
-  const s = fresh(); s.up.drone = 1; s.coins = 10; L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 40000);
+  const s = fresh(); s.up.drone = 1; s.coins = 10; L.setRun(s, 'drone', true); L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 40000);
   L.tick(s, 61000); assert.equal(s.goods.wheat, 1); assert.equal(s.coins, 8);
   s.coins = 0; L.act(s, 'seed', 3, 2, 'wheat'); L.tick(s, 40000); L.tick(s, 61000); assert.equal(s.goods.wheat, 1);
 });
 test('робот-сборщик забирает продукты животных', () => {
-  const s = fresh(); s.up.collector = 1; s.coins = 50; s.animals.chicken = 1; s.prod.chicken = { acc: 0, pending: 3 }; s.barns.chicken = 1;
+  const s = fresh(); s.up.collector = 1; L.setRun(s, 'collector', true); s.coins = 50; s.animals.chicken = 1; s.prod.chicken = { acc: 0, pending: 3 }; s.barns.chicken = 1;
   L.tick(s, 46000); assert.equal(s.goods.egg, 2); assert.equal(s.prod.chicken.pending, 1);
 });
 test('автосеялка сеет выбранное на пустую землю', () => {
-  const s = fresh(); s.up.seeder = 1; s.coins = 50; s.autoSeed = 'wheat'; s.seeds.wheat = 5; L.tick(s, 51000);
+  const s = fresh(); s.up.seeder = 1; L.setRun(s, 'seeder', true); s.coins = 50; s.autoSeed = 'wheat'; s.seeds.wheat = 5; L.tick(s, 51000);
   assert.equal(s.seeds.wheat, 4); assert.equal(s.farms[0].tiles.filter((t) => t.k === 'crop').length, 1);
 });
 test('автокурьер отправляет машину при полном грузе', () => {
-  const s = fresh(); s.up.courier = 1; s.coins = 50; s.goods.wheat = 40; L.setRandom(() => 0.99); L.tick(s, 91000);
+  const s = fresh(); s.up.courier = 1; L.setRun(s, 'courier', true); s.coins = 50; s.goods.wheat = 40; L.setRandom(() => 0.99); L.tick(s, 91000);
   assert.ok(s.stats.trips >= 1); assert.ok(s.coins < 50);
 });
 test('автомашины становятся быстрее с уровнем', () => {
@@ -220,7 +220,7 @@ test('харвестер и корчеватель работают по пло�
 test('лесопилка: ручная распиловка и автомат', () => {
   const s = fresh(); s.coins = 500; s.goods.log = 11; const r = L.sawLogs(s, 99); assert.ok(r.ok); assert.equal(r.planks, 5); assert.equal(s.goods.log, 1); assert.equal(s.goods.plank, 5); assert.equal(s.coins, 485);
   assert.equal(L.sawLogs(s, 1).ok, false);
-  const t = fresh(); t.level = 12; t.coins = 1e5; t.goods.log = 20; assert.ok(L.buyMachine(t, 'sawmill').ok); L.tick(t, 41000); assert.equal(t.goods.plank, 2); assert.equal(t.goods.log, 16);
+  const t = fresh(); t.level = 12; t.coins = 1e5; t.goods.log = 20; assert.ok(L.buyMachine(t, 'sawmill').ok); assert.ok(L.setRun(t, 'sawmill', true).ok); L.tick(t, 41000); assert.equal(t.goods.plank, 2); assert.equal(t.goods.log, 16);
 });
 test('стройка: материалы, этапы, продажа, площадки по уровню', () => {
   const s = fresh(); s.coins = 1e5; s.goods.plank = 100;
@@ -239,4 +239,65 @@ test('цена недвижимости колеблется в пределах
 });
 test('старое сохранение получает стройки и цену недвижимости', () => {
   const s = fresh(); delete s.sites; delete s.market.prop; const m = L.migrate(s); assert.deepEqual(m.sites, []); assert.equal(m.market.prop, 1);
+});
+
+// ---------------- работа техники только по команде игрока
+const owned = (keys, lv) => { const s = fresh(); s.level = 14; s.coins = 1e6; s.crystals = 99; for (const k of keys) s.up[k] = lv || 1; return s; };
+const runUntil = (s, ms) => { for (let t = 0; t < ms; t += 500) L.tick(s, 500); };
+const snap = (s) => JSON.stringify([s.farms, s.goods, s.coins, s.items, s.seeds]);
+test('без команды техника и автоматика ничего не меняют', () => {
+  const s = owned(['tractor', 'combine', 'waterer', 'spreader', 'drone', 'collector', 'seeder', 'courier', 'sawmill']); s.autoSeed = 'wheat'; s.goods.log = 20; s.items.fert = 5;
+  L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 80000);
+  const before = JSON.stringify([s.farms[0].tiles.filter((t) => t.k !== 'crop'), s.goods, s.seeds, s.coins]);
+  runUntil(s, 120000);
+  assert.equal(L.isRun(s, 'tractor'), false); assert.equal(L.isRun(s, 'drone'), false);
+  assert.equal(JSON.stringify([s.farms[0].tiles.filter((t) => t.k !== 'crop'), s.goods, s.seeds, s.coins]), before);
+  assert.deepEqual(L.drainFx(), []);
+});
+test('включить можно только купленное, животное оборудование не включается', () => {
+  const s = owned([]); assert.equal(L.setRun(s, 'tractor', true).ok, false); assert.equal(L.setRun(s, 'feeder', true).ok, false);
+  s.up.tractor = 1; assert.ok(L.setRun(s, 'tractor', true).ok); assert.equal(L.setRun(s, 'tractor', true, 'nope').ok, false); assert.equal(L.runStatus(s, 'tractor').state, 'idle');
+  assert.ok(L.setRun(s, 'tractor', false).ok); assert.equal(L.runStatus(s, 'tractor').state, 'off');
+});
+test('трактор сам вспахивает всё поле и платит топливо; выключили — стоит', () => {
+  const s = owned(['tractor'], 3); const f = L.farm(s), grass = () => f.tiles.filter((t) => t.k === 'grass').length, g0 = grass(), c0 = s.coins; L.drainFx();
+  assert.ok(L.setRun(s, 'tractor', true).ok);
+  runUntil(s, 2000); assert.ok(s.job.tractor, 'выехал'); assert.equal(grass(), g0, 'пока едет, поле не меняется');
+  runUntil(s, 240000); assert.equal(grass(), 0, 'всё поле вспахано'); assert.ok(s.coins < c0);
+  const ev = L.drainFx(); assert.ok(ev.length >= 2); assert.equal(ev[0].key, 'tractor'); assert.ok(ev[0].cells.length > 0 && ev[0].cells[0][2] === 'grass');
+  L.setRun(s, 'tractor', false); const c = s.coins; runUntil(s, 60000); assert.equal(s.coins, c);
+});
+test('трактор сеет выбранные семена, пока они есть', () => {
+  const s = owned(['tractor'], 5); s.seeds.wheat = 7; s.runSeed = 'wheat'; L.setRun(s, 'tractor', true); runUntil(s, 120000);
+  assert.equal(s.seeds.wheat, 0); assert.equal(L.farm(s).tiles.filter((t) => t.k === 'crop').length, 7 + 0 + (4 - 4)); // 4 клетки были вскопаны и тоже засеяны
+});
+test('комбайн собирает созревшее, водная и удобрение работают только когда нужно', () => {
+  const s = owned(['combine', 'waterer', 'spreader'], 2); for (let x = 0; x < 6; x++) L.act(s, 'hoe', x, 0), L.act(s, 'seed', x, 0, 'wheat'); L.setRun(s, 'waterer', true); s.items.fert = 3; L.setRun(s, 'spreader', true);
+  runUntil(s, 40000); assert.ok(L.farm(s).tiles.slice(0, 6).every((t) => t.water > 0 || L.isRipe(t)));
+  assert.ok(s.items.fert < 3);
+  L.tick(s, 120000); assert.ok(L.farm(s).tiles.slice(0, 6).some((t) => L.isRipe(t)));
+  L.setRun(s, 'combine', true); runUntil(s, 60000); assert.ok(s.goods.wheat >= 1); assert.equal(L.farm(s).tiles.slice(0, 6).filter((t) => L.isRipe(t)).length, 0);
+});
+test('комбайн ждёт, если склад полон, и говорит почему', () => {
+  const s = owned(['combine']); L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 80000); s.goods.wheat = L.barnCap(s); L.setRun(s, 'combine', true); runUntil(s, 10000);
+  assert.ok(/Склад полон/.test(L.runStatus(s, 'combine').why)); assert.ok(L.isRipe(L.tileAt(s, 2, 2)));
+});
+test('харвестер и корчеватель сами расчищают целину, ферма игрока не переключается', () => {
+  const s = owned(['logger', 'grinder'], 6); s.up.barn = 3; assert.ok(L.unlockFarm(s, 'wild').ok); s.cur = 0; const f = s.farms[1], n = (k) => f.tiles.filter((t) => t.k === k).length;
+  const trees = n('tree'); assert.ok(trees > 50);
+  L.setRun(s, 'logger', true, 'wild'); L.setRun(s, 'grinder', true, 'wild'); let maxStump = 0;
+  for (let t = 0; t < 600000; t += 500) { L.tick(s, 500); maxStump = Math.max(maxStump, n('stump')); }
+  assert.ok(n('tree') < trees * 0.6, 'деревьев сильно меньше'); assert.ok(maxStump > 0); assert.ok(s.goods.log > 0 || s.stats.logs > 0);
+  assert.equal(s.cur, 0); assert.equal(L.farm(s).id, 'home');
+});
+test('в лесном участке трактор не пашет: ни вручную, ни сам', () => {
+  const s = owned(['tractor']); assert.ok(L.unlockFarm(s, 'forest').ok); assert.equal(L.act(s, 'tractor', 2, 2).ok, false);
+  L.setRun(s, 'tractor', true, 'forest'); runUntil(s, 20000); assert.equal(L.runStatus(s, 'tractor').state, 'idle'); assert.ok(s.runWhy.tractor);
+});
+test('автоматика включается по команде, старые сохранения продолжают работать как раньше', () => {
+  const old = fresh(); old.up.drone = 1; delete old.run; L.migrate(old); assert.equal(L.isRun(old, 'drone'), true); assert.equal(L.isRun(old, 'collector'), false);
+  const s = fresh(); s.coins = 1e5; s.level = 12; assert.ok(L.buyMachine(s, 'drone').ok); assert.equal(L.isRun(s, 'drone'), false, 'новая покупка выключена');
+});
+test('выключенная ферма удалена или машина продана — работа сама гасится', () => {
+  const s = owned(['tractor']); L.setRun(s, 'tractor', true); s.run.tractor = 'gone'; L.tick(s, 1000); assert.equal(L.isRun(s, 'tractor'), false);
 });

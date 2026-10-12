@@ -148,9 +148,10 @@
   const canvasOf = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c; };
   // тайловые текстуры через общий реестр world3d (addProc): гофрированный лист, навоз
   C.addProc('mach_corrug', (cv, g) => { // гофрированный оцинкованный лист (вертикальные волны)
-    const s = cv.width, n = 12, w = s / n; g.fillStyle = '#d9dcdc'; g.fillRect(0, 0, s, s);
-    for (let i = 0; i < n; i++) { const gr = g.createLinearGradient(i * w, 0, (i + 1) * w, 0); gr.addColorStop(0, '#f4f6f6'); gr.addColorStop(0.45, '#e2e5e5'); gr.addColorStop(0.5, '#8d9393'); gr.addColorStop(0.58, '#d0d4d4'); gr.addColorStop(1, '#f4f6f6'); g.fillStyle = gr; g.fillRect(i * w, 0, w, s); }
-    for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(70,60,50,' + (0.03 + ((i * 37) % 7) * 0.008) + ')'; g.fillRect(((i * 97) % s), ((i * 53) % (s / 2)), 2, 30 + (i * 29) % 80); }
+    const s = cv.width, n = 8, w = s / n; g.fillStyle = '#9aa1a5'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < n; i++) { const gr = g.createLinearGradient(i * w, 0, (i + 1) * w, 0); gr.addColorStop(0, '#b9c0c4'); gr.addColorStop(0.3, '#d6dcdf'); gr.addColorStop(0.5, '#6a7175'); gr.addColorStop(0.75, '#8e969a'); gr.addColorStop(1, '#b9c0c4'); g.fillStyle = gr; g.fillRect(i * w, 0, w, s); }
+    for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(70,55,40,' + (0.04 + ((i * 37) % 7) * 0.01) + ')'; g.fillRect(((i * 97) % s), ((i * 53) % (s / 2)), 2, 30 + (i * 29) % 80); }
+    g.fillStyle = 'rgba(40,30,20,0.22)'; g.fillRect(0, s - 14, s, 14);
   }, 128);
   C.addProc('mach_manure', (cv, g) => { // навоз: бурая масса с волокнами соломы
     const s = cv.width; g.fillStyle = '#4a3420'; g.fillRect(0, 0, s, s); let k = 5;
@@ -198,7 +199,7 @@
 
   // ------------------------------------------------------------------ материалы техники (общий набор; <= 14 на модель)
   function tMats(col) {
-    const m = { body: paint(col.body), trim: paint(col.trim), dark: pmat(0x1b1d20, { metalness: 0.3, roughness: 0.45, envMapIntensity: 0.6 }), steel: metal(0x5f656c, { roughness: 0.45 }), chrome: chromeM(), rubber: rubberM(), lamp: lightM(0xfff3cf), amber: lightM(0xffa51f), disc: pmat(0xa7adb3, { metalness: 0.85, roughness: 0.38, envMapIntensity: 0.9, side: T.DoubleSide }), accent: paint(col.accent == null ? 0xee7d1a : col.accent) };
+    const m = { body: paint(col.body), trim: paint(col.trim), dark: pmat(0x1b1d20, { metalness: 0.3, roughness: 0.45, envMapIntensity: 0.6 }), steel: metal(0x5f656c, { roughness: 0.45 }), chrome: chromeM(), rubber: rubberM(), lamp: lightM(0xfff3cf), amber: lightM(0xffa51f), disc: pmat(0xa7adb3, { metalness: 0.85, roughness: 0.38, envMapIntensity: 0.9, side: T.DoubleSide }), accent: paint(col.accent == null ? 0xee7d1a : col.accent), frame: paint(0x30353b, { metalness: 0.35, roughness: 0.42 }), red: lightM(0xff2a1a) };
     m.roof = col.roof === 'dark' ? m.dark : col.roof === 'trim' ? m.trim : m.body;
     return m;
   }
@@ -281,6 +282,8 @@
     const fh = (yr - 0.05) - (yf + 0.28), fa = Math.atan(rake / fh);
     glassBox(c.W - 0.14, fh / Math.cos(fa), 0.02, 0, (yr - 0.05 + yf + 0.28) / 2, zF - rake / 2 - 0.01, -fa, 0, 0);
     glassBox(c.W - 0.12, gT - gB, 0.02, 0, (gT + gB) / 2, zR + 0.01);
+    // дворник на лобовом стекле
+    { const zAt = (y) => zF - rake * (y - (yf + 0.28)) / fh + 0.025; beam(g, mt.dark, [0.4, yf + 0.33, zAt(yf + 0.33)], [-0.14, yf + 0.33 + fh * 0.62, zAt(yf + 0.33 + fh * 0.62)], 0.018, 0.018, 0); beam(g, mt.dark, [0.34, yf + 0.37, zAt(yf + 0.37)], [-0.2, yf + 0.37 + fh * 0.6, zAt(yf + 0.37 + fh * 0.6)], 0.012, 0.012, 0); }
     // крыша: скруглённая плита с козырьком
     const ov = modern ? 0.2 : 0.1, zr0 = zR - 0.1, zr1 = zF - rake + ov, wR = c.W + 0.12, tk = modern ? 0.16 : 0.13;
     put(g, loft([sec(zr0, yr - 0.03, yr - 0.03 + tk * 0.7, wR - 0.05, wR - 0.18, [0.04, 0.04, 0.06, 0.06]), sec(zr0 + 0.15, yr - 0.03, yr + tk, wR, wR - 0.1, [0.04, 0.04, 0.08, 0.08]), sec((zr0 + zr1) / 2, yr - 0.03, yr + tk + 0.03, wR, wR - 0.08, [0.04, 0.04, 0.09, 0.09]), sec(zr1 - 0.15, yr - 0.03, yr + tk, wR, wR - 0.1, [0.04, 0.04, 0.08, 0.08]), sec(zr1, yr - 0.03, yr - 0.03 + tk * 0.65, wR - 0.04, wR - 0.18, [0.04, 0.04, 0.06, 0.06])]), mt.roof, 0, 0, 0);
@@ -389,6 +392,9 @@
       put(g, rb(0.05, 0.08, 0.7, 0.02), mt.dark, s * (xr - Wr / 2 - 0.02), Rr + Rr + 0.03, -0.1);
       if (modern) { put(g, sx(fenderPts(WB, Rf, Rf, 24, 160, 0.035, 0.05), Wf + 0.14), mt.body, s * xf, 0, 0); put(g, rb(0.14, 0.04, 0.3, 0.015), mt.dark, s * (xf - Wf / 2 + 0.03), Rf * 2 + 0.1, WB); }
     }
+    // задние фонари на крыльях и брызговики
+    { const ro = Rr + 0.09, tz = -0.978 * ro, ty = Rr + 0.208 * ro;
+      for (const s of [-1, 1]) { put(g, rb(0.2, 0.13, 0.05, 0.015), mt.red, s * (xr + Wr / 2 - 0.1), ty + 0.02, tz - 0.02); put(g, rb(Wr - 0.06, 0.5, 0.035, 0.01), mt.rubber, s * xr, ty - 0.27, tz + 0.02); } }
     // ступеньки слева, топливный бак справа
     for (let i = 0; i < 2; i++) put(g, rb(0.42, 0.045, 0.34, 0.015), mt.dark, -(c.W / 2 - 0.1), 0.38 + i * 0.36, c.zc + 0.4);
     put(g, rb(0.05, 0.75, 0.3, 0.02), mt.dark, -(c.W / 2 - 0.3), 0.7, c.zc + 0.4);
@@ -545,28 +551,30 @@
     const hz = D.hitchZ, hy = D.hitchY;
     put(g, rb(0.5, 0.15, 1.15, 0.04), mt.steel, 0, hy - 0.02, hz + 0.4); for (const s of [-1, 1]) beam(g, mt.dark, [s * 0.5, 1.15, -3.3], [s * 0.22, hy, hz + 0.7], 0.13, 0.12, 0);
     cylY(g, mt.chrome, 0.045, 0.3, 0, hy + 0.04, hz + 0.18, 10); cylZ(g, mt.chrome, 0.04, 0.24, 0, 1.18, -3.74, 10);
-    // доп. оборудование старших уровней: крышевая светодиодная балка
+    // доп. оборудование старших уровней: белые полосы по крыльям и капоту
+    if (ex >= 3) for (const s of [-1, 1]) for (const zc of [D.zf, D.zr]) beam(g, mt.trim, [s * (D.xt + 0.03 + 0.485), 1.71, zc - 1.0], [s * (D.xt + 0.03 + 0.485), 1.71, zc + 1.0], 0.02, 0.05, 0);
+    if (ex >= 4) { const yT = (z) => lerp(H.yt0, H.yt1, Math.pow(clamp((z - H.z0) / (H.z1 - H.z0), 0, 1), H.curve)); beam(g, mt.trim, [0, yT(H.z0 + 0.35) + 0.0, H.z0 + 0.35], [0, yT(H.z1 - 0.3) + 0.0, H.z1 - 0.3], 0.14, 0.04, 0); beam(g, mt.dark, [0, yT(H.z0 + 0.35) - 0.005, H.z0 + 0.35], [0, yT(H.z1 - 0.3) - 0.005, H.z1 - 0.3], 0.26, 0.035, 0); }
     return { g, mt, hz, hy };
   }
 
   // ------------------------------------------------------------------ широкие орудия: сеялка-культиватор (L4-6) и сеялка с крыльями (L7-10)
   const sec6 = (z, y0, ym, y1, wB, wT, r) => ({ z, cx: 0, r, poly: [[-wB / 2, y0], [wB / 2, y0], [wT / 2, ym], [wT / 2, y1], [-wT / 2, y1], [-wT / 2, ym]] });
   function buildBar(root, mt, P) {
-    const { W, Wc, L1, hy, big } = P, wl = (W - Wc) / 2, yb = big ? 1.1 : 1.0, ang = big ? 0.12 : 0.05, bw = big ? 0.28 : 0.2;
+    const { W, Wc, L1, hy, big, lv } = P, wl = (W - Wc) / 2, yb = big ? 1.1 : 1.0, ang = big ? 0.12 : 0.05, bw = big ? 0.28 : 0.2;
     const zA = -L1, zD = zA - (big ? 0.7 : 0.55), zM = zA - (big ? 1.7 : 1.4), zC = zM - 0.12, zB = zA - (big ? 2.9 : 2.4), zR = zA - (big ? 3.7 : 3.1), ry = big ? 0.34 : 0.29;
     const wheelsX = big ? [Wc / 2 - 0.6, Wc / 2 - 1.3, -(Wc / 2 - 0.6), -(Wc / 2 - 1.3)] : [Wc / 2 - 0.45, -(Wc / 2 - 0.45)];
     const skip = (x) => { for (const wx of wheelsX) if (Math.abs(x - wx) < 0.4) return true; return false; };
     // дышло (А-образная рама)
     const hb = big ? 0.55 : 0.5;
-    for (const s of [-1, 1]) beam(root, mt.dark, [s * 0.05, hy + 0.05, -0.05], [s * hb, yb, zA], big ? 0.2 : 0.14, big ? 0.18 : 0.14, 0);
-    beam(root, mt.dark, [-hb, yb, zA], [hb, yb, zA], big ? 0.3 : 0.2, big ? 0.28 : 0.2, 0);
+    for (const s of [-1, 1]) beam(root, mt.frame, [s * 0.05, hy + 0.05, -0.05], [s * hb, yb, zA], big ? 0.2 : 0.14, big ? 0.18 : 0.14, 0);
+    beam(root, mt.frame, [-hb, yb, zA], [hb, yb, zA], big ? 0.3 : 0.2, big ? 0.28 : 0.2, 0);
     put(root, new T.TorusGeometry(0.11, 0.04, 6, 14), mt.chrome, 0, hy + 0.06, -0.06, PI / 2); put(root, rb(0.34, 0.08, 0.4, 0.02), mt.steel, 0, hy + 0.02, -0.18);
     rod(root, mt.steel, [0, hy, -0.5], [0, 0.0, -0.9], 0.05, 8); put(root, cyg(0.12, 0.12, 0.04, 10), mt.steel, 0, 0.02, -0.9);   // опорная стойка
     // секция рамы со всеми рабочими органами между x0 и x1 (в координатах орудия)
     function section(gx, x0, x1, skipWheels) {
       const len = Math.abs(x1 - x0), sg = Math.sign(x1 - x0), xm = (x0 + x1) / 2;
-      for (const z of [zA, zM, zB]) beam(gx, mt.dark, [x0, yb, z], [x1, yb, z], bw, bw, 0);
-      for (const f of [0.1, 0.5, 0.9]) beam(gx, mt.dark, [lerp(x0, x1, f), yb, zA], [lerp(x0, x1, f), yb, zB], 0.14, 0.14, 0);
+      for (const z of [zA, zM, zB]) beam(gx, mt.frame, [x0, yb, z], [x1, yb, z], bw, bw, 0);
+      for (const f of [0.1, 0.5, 0.9]) beam(gx, mt.frame, [lerp(x0, x1, f), yb, zA], [lerp(x0, x1, f), yb, zB], 0.14, 0.14, 0);
       // распределительная магистраль (воздуховод) над рамой
       cylX(gx, mt.trim, big ? 0.1 : 0.075, len - 0.1, xm, yb + (big ? 0.3 : 0.24), zM + 0.3, 10);
       const nclamp = Math.max(2, Math.floor(len / 1.4)); for (let i = 0; i < nclamp; i++) put(gx, rb(0.1, 0.24, 0.16, 0.02), mt.steel, x0 + sg * (i + 0.5) * len / nclamp, yb + 0.15, zM + 0.3);
@@ -605,14 +613,21 @@
       const ex = s * (W / 2 - 0.15);
       put(inner, rb(0.9, 0.5, 0.05, 0.01), mt.dark, ex, yb + 0.35, zB - 0.25); decalS(inner, mt.sh, 'haz', 0.84, 0.44, ex, yb + 0.35, zB - 0.28, PI);
       beam(inner, mt.dark, [ex, yb, zB], [ex, yb + 0.35, zB - 0.25], 0.06, 0.06, 0);
+      if (big && lv >= 8) { put(inner, cyg(0.06, 0.07, 0.06, 8), mt.dark, ex - s * 0.5, yb + 0.15, zA + 0.1); put(inner, cyg(0.05, 0.05, 0.1, 8), mt.amber, ex - s * 0.5, yb + 0.23, zA + 0.1); }
     }
     // бункер: скошенный профиль, люки, лестница, площадка
-    const hl = big ? 1.75 : 1.2, hwT = big ? 4.9 : 2.5, hwB = big ? 1.6 : 1.0, zh = zA - (big ? 1.5 : 1.15), y0 = yb + 0.3, y1 = yb + (big ? 2.0 : 1.5), ym = lerp(y0, y1, 0.5);
+    const hl = big ? 1.6 + 0.07 * (lv - 7) : 1.2, hwT = big ? 4.4 + 0.25 * (lv - 7) : 2.4 + 0.1 * (lv - 4), hwB = big ? 1.6 : 1.0, zh = zA - (big ? 1.5 : 1.15), y0 = yb + 0.3, y1 = yb + (big ? 2.0 : 1.5), ym = lerp(y0, y1, 0.5);
     const R1 = [0.05, 0.05, 0.1, 0.14, 0.14, 0.1];
     put(root, loft([sec6(zh - hl, y0 + 0.28, ym + 0.1, y1 - 0.22, hwB * 0.7, hwT * 0.88, R1), sec6(zh - hl + 0.14, y0, ym, y1, hwB, hwT, R1), sec6(zh + hl - 0.4, y0, ym, y1 - 0.05, hwB, hwT, R1), sec6(zh + hl, y0 + 0.2, ym - 0.1, y1 - 0.5, hwB * 0.8, hwT * 0.92, R1)]), mt.body, 0, 0, 0);
     const nm = big ? 6 : 4; for (let i = 0; i < nm; i++) { const x = (i - (nm - 1) / 2) * (hwB / (nm - 1)) * 0.8; put(root, cyg(0.13, 0.1, 0.34, 10), mt.dark, x, y0 - 0.16, zh); }
-    const hatches = big ? [-1.5, -0.5, 0.5, 1.5] : [-0.6, 0.6];
+    const nHat = big ? [4, 4, 5, 6][lv - 7] : 2, hatches = []; for (let i = 0; i < nHat; i++) hatches.push((i - (nHat - 1) / 2) * (hwT * 0.72 / Math.max(1, nHat - 1)));
     for (const hx of hatches) { put(root, cyg(0.32, 0.34, 0.07, 14), mt.dark, hx, y1 + 0.04, zh - 0.3); put(root, cyg(0.12, 0.12, 0.06, 8), mt.chrome, hx, y1 + 0.1, zh - 0.3); }
+    // перила по периметру крыши бункера
+    { const rx = hwT / 2 - 0.18, rzF = zh + hl - 0.55, rzR = zh - hl + 0.3, ry0 = y1 + 0.02, ry1 = y1 + 0.5;
+      for (const [px, pz] of [[-rx, rzF], [rx, rzF], [-rx, rzR], [rx, rzR], [-rx, zh], [rx, zh]]) rod(root, mt.chrome, [px, ry0, pz], [px, ry1, pz], 0.018, 6);
+      for (const s of [-1, 1]) rod(root, mt.chrome, [s * rx, ry1, rzF], [s * rx, ry1, rzR], 0.018, 6);
+      rod(root, mt.chrome, [-rx, ry1, rzR], [rx, ry1, rzR], 0.018, 6); rod(root, mt.chrome, [-rx, ry1, rzF], [rx, ry1, rzF], 0.018, 6); }
+    if (big && lv >= 8) { const ax = -(hwT / 2 + 0.2); rod(root, mt.trim, [ax, y0 + 0.1, zh + hl - 0.2], [ax, y1 + 0.3, zh - hl + 0.7], 0.13, 10); put(root, cyg(0.04, 0.17, 0.3, 10), mt.trim, ax, y1 + 0.36, zh - hl + 0.6); beam(root, mt.dark, [ax + 0.2, y0, zh + hl - 0.2], [ax, y0 + 0.1, zh + hl - 0.2], 0.1, 0.1, 0); }
     put(root, rb(hwT * 0.6, 0.08, 0.12, 0.03), mt.trim, 0, y1 + 0.02, zh + 0.6);
     for (const s of [-1, 1]) decalS(root, mt.sh, 'bar', big ? 2.1 : 1.5, (big ? 2.1 : 1.5) * 128 / 512, s * (hwT / 2 + 0.006), lerp(ym, y1, 0.5), zh, s * PI / 2, 0);
     const lx = big ? 1.3 : 0.9, lz = zh - hl - 0.05;
@@ -635,16 +650,16 @@
     const w = buildWheeled({ modern: true, lv, extra: lv >= 5 ? 1 : 0, lights: lv >= 5 ? 2 : 1, label: 'M' + (200 + lv * 15), bar: 'SD ' + (80 + lv * 5), col: { body: 0x7cb518, trim: 0xc8201a, roof: 'dark' }, accent: '#c8201a', stripe: '#c8201a' });
     w.g.scale.setScalar(k); root.add(w.g);
     const ig = new T.Group(); ig.position.set(0, 0, (w.hz + 0.18) * k); root.add(ig);
-    buildBar(ig, w.mt, { W: 8.4 + 0.6 * (lv - 4), Wc: 3.2, L1: 3.0, hy: w.hy * k, big: false });
+    buildBar(ig, w.mt, { W: 8.4 + 0.6 * (lv - 4), Wc: 3.2, L1: 3.0, hy: w.hy * k, big: false, lv });
     return finish(root, 0x5e7d8a, k);
   }
   /** Сборка L7-10: красный гусеничный трактор + широкая сеялка с крыльями 12-16 м. */
   function tractorTier2(lv) {
     const root = begin(), W = [12, 13.4, 14.7, 16][lv - 7];
-    const w = buildTracked({ lv, extra: lv - 6, lights: lv >= 8 ? 2 : 1, label: 'T' + (520 + (lv - 7) * 60), bar: 'AS ' + Math.round(W * 10), col: { body: 0xa31616, trim: 0xe8e8e8, roof: 'trim' }, accent: '#e8e8e8', stripe: '#ffffff' });
+    const w = buildTracked({ lv, extra: lv - 6, lights: lv >= 10 ? 3 : lv >= 8 ? 2 : 1, label: 'T' + (520 + (lv - 7) * 60), bar: 'AS ' + Math.round(W * 10), col: { body: 0xa31616, trim: 0xe8e8e8, roof: 'trim' }, accent: '#e8e8e8', stripe: '#ffffff' });
     root.add(w.g);
     const ig = new T.Group(); ig.position.set(0, 0, w.hz + 0.18); root.add(ig);
-    buildBar(ig, w.mt, { W, Wc: 6.2, L1: 3.6, hy: w.hy, big: true });
+    buildBar(ig, w.mt, { W, Wc: 6.2, L1: 3.6, hy: w.hy, big: true, lv });
     return finish(root, 0x5e7d8a, 1);
   }
   reg('vehicle', 'tractor', (lv) => tierOf(lv) === 0 ? tractorTier0(lv) : tierOf(lv) === 1 ? tractorTier1(lv) : tractorTier2(lv));
@@ -682,7 +697,7 @@
     for (const f of [0.0, 0.5, 1.0]) beam(root, mt.accent, [-0.7, 0.78, lerp(zF, zE, f)], [0.7, 0.78, lerp(zF, zE, f)], 0.12, 0.12, 0);
     // кузов: гофрированный лист, трапеция, лофт с UV
     const R6 = [0.05, 0.05, 0.05, 0.05];
-    put(root, loft([sec(zE, 0.92, 2.02, 1.5, Wt, R6), sec(zE + 0.12, 0.92, 2.02, 1.55, Wt, R6), sec(zF - 0.12, 0.92, 2.02, 1.55, Wt, R6), sec(zF, 0.92, 2.02, 1.5, Wt, R6)], { uv: [1 / 0.9, 1 / 0.9] }), corrugM(), 0, 0, 0);
+    put(root, loft([sec(zE, 0.92, 2.02, 1.5, Wt, R6), sec(zE + 0.12, 0.92, 2.02, 1.55, Wt, R6), sec(zF - 0.12, 0.92, 2.02, 1.55, Wt, R6), sec(zF, 0.92, 2.02, 1.5, Wt, R6)], { uv: [1 / 0.45, 1 / 0.45] }), corrugM(), 0, 0, 0);
     // груз навоза: бугор
     const hz = (u) => lerp(zF - 0.1, zE + 0.2, u);
     put(root, loft([sec(hz(1), 1.9, 2.2, Wt - 0.15, Wt - 0.7, [0.1, 0.1, 0.2, 0.2]), sec(hz(0.92), 1.9, 2.42, Wt - 0.1, Wt - 0.55, [0.1, 0.1, 0.25, 0.25]), sec(hz(0.5), 1.9, 2.55, Wt - 0.1, Wt - 0.6, [0.1, 0.1, 0.25, 0.25]), sec(hz(0.08), 1.9, 2.4, Wt - 0.1, Wt - 0.55, [0.1, 0.1, 0.25, 0.25]), sec(hz(0), 1.9, 2.15, Wt - 0.15, Wt - 0.7, [0.1, 0.1, 0.2, 0.2])], { uv: [1 / 1.2, 1 / 1.2] }), manureM(), 0, 0, 0);
@@ -804,7 +819,7 @@
     const root = begin(), tier = tierOf(lv), t = tOf(lv);
     const cols = [{ body: 0x2a62c9, trim: 0xee7d1a, roof: 'body' }, { body: 0x1f56b3, trim: 0xee7d1a, roof: 'dark' }, { body: 0x153f8f, trim: 0xe9ebee, roof: 'trim' }][tier];
     const k = [lerp(0.94, 1.05, t), lerp(0.97, 1.07, t), lerp(1.04, 1.14, t)][tier];
-    const w = buildWheeled({ modern: tier > 0, lv, extra: tier === 2 ? 2 : tier === 1 && lv >= 5 ? 1 : 0, lights: tier === 2 ? 3 : tier === 1 ? (lv >= 5 ? 2 : 1) : (lv >= 3 ? 2 : (lv >= 2 ? 1 : 0)), label: 'S' + (90 + lv * 20), bar: tier === 2 ? 'SL ' + (80 + lv * 10) : 'MS ' + (20 + lv * 5), col, accent: '#ee7d1a', stripe: '#ee7d1a' });
+    const w = buildWheeled({ modern: tier > 0, lv, extra: tier === 2 ? 2 : tier === 1 && lv >= 5 ? 1 : 0, lights: tier === 2 ? 3 : tier === 1 ? (lv >= 5 ? 2 : 1) : (lv >= 3 ? 2 : (lv >= 2 ? 1 : 0)), label: 'S' + (90 + lv * 20), bar: tier === 2 ? 'SL ' + (80 + lv * 10) : 'MS ' + (20 + lv * 5), col: cols, accent: '#ee7d1a', stripe: '#ee7d1a' });
     w.g.scale.setScalar(k); root.add(w.g);
     const pinZ = (w.hz + 0.18) * k, ig = new T.Group(); ig.position.set(0, 0, pinZ); root.add(ig);
     const pto = { y: w.pto.y * k, z: w.pto.z * k - pinZ };
