@@ -363,7 +363,16 @@
     <button class="btn" data-save>💾 Сохранить сейчас</button><button class="btn red" data-reset>🗑️ Начать заново</button></div></div>`));
   $('#modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-save]')) { save(); toast('Сохранено 💾'); }
-    if (e.target.closest('[data-reset]') && confirm('Удалить всю ферму и начать заново?')) { localStorage.removeItem(KEY); state = L.createState(); particles.length = 0; closeModal(); changed(); resize(); toast('Новая ферма! 🌱'); }
+    const r = e.target.closest('[data-reset]');
+    if (r) { // подтверждение прямо на кнопке: нажми второй раз в течение 4 секунд
+      if (!r.dataset.armed) {
+        r.dataset.armed = '1'; r.textContent = '⚠️ Нажми ещё раз: удалить всё';
+        setTimeout(() => { if (r.isConnected) { delete r.dataset.armed; r.textContent = '🗑️ Начать заново'; } }, 4000);
+        return;
+      }
+      try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+      state = L.createState(); particles.length = 0; closeModal(); changed(); resize(); toast('Новая ферма! 🌱');
+    }
   });
 
   // ---------------------------------------------------------------- ввод
