@@ -14,7 +14,7 @@
 
   let S, world;
   const ui = { speed: 1, mode: 'map', tool: 'hoe', seed: null, modal: null, tab: {}, load: {}, truck: 0, sound: true, spinning: false, hold: null, wheelAngle: 0, lastLog: 0, confirm: null, toastAt: {} };
-  window.__game = { get S() { return S; }, ui, L, open: (id, t) => openModal(id, t) };
+  window.__game = { get S() { return S; }, ui, L, open: (id, t) => openModal(id, t), onTile: (a, b, c, d) => onTile(a, b, c, d) };
 
   // ---------------------------------------------------------------- звук
   let actx = null;
@@ -28,6 +28,7 @@
     } catch (e) { /* без звука */ }
   }
   const sfx = {
+    chop: () => { beep(190, 0.06, 'square', 0.05); setTimeout(() => beep(110, 0.1, 'triangle', 0.05), 40); }, fell: () => { beep(130, 0.25, 'sawtooth', 0.05); setTimeout(() => beep(70, 0.35, 'triangle', 0.06), 280); },
     dig: () => beep(140, 0.1, 'triangle'), plant: () => beep(520, 0.08), water: () => beep(700, 0.12, 'sine', 0.03),
     harvest: () => { beep(660, 0.08); setTimeout(() => beep(880, 0.1), 70); }, coin: () => { beep(988, 0.07, 'square', 0.03); setTimeout(() => beep(1319, 0.14, 'square', 0.03), 70); },
     bad: () => beep(150, 0.25, 'sawtooth', 0.04), level: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18), i * 110)),
@@ -61,6 +62,9 @@
     fert: SV('<path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.500 15h9"/>'),
     superfert: SV('<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>', 'currentColor'),
     sprinkler: SV('<path d="M12 21v-8"/><circle cx="12" cy="10" r="3"/><path d="M5 6l2 2M19 6l-2 2M3 11h3M18 11h3"/>'),
+    axe: SV('<path d="M14 4l6 6-3 3-6-6z" fill="currentColor"/><path d="M11 7L4 20l1 1 13-8"/><path d="M4 20l3-3"/>'),
+    build: SV('<path d="M3 21h18"/><path d="M5 21V10l7-6 7 6v11"/><path d="M9 21v-6h6v6"/><path d="M2 12l10-9 10 9"/>'),
+    saw: SV('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>'),
     remove: SV('<path d="M6 6l12 12M18 6L6 18"/>'),
     barn: SV('<path d="M3 11l9-7 9 7v9H3z"/><path d="M9 20v-6h6v6"/>'),
     paw: SV('<circle cx="7" cy="9" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="17" cy="9" r="2"/><path d="M8 17c0-3 2-5 4-5s4 2 4 5c0 2-2 2-4 2s-4 0-4-2z"/>'),
@@ -85,11 +89,11 @@
   // ---------------------------------------------------------------- действия на ферме
   const TOOLS = [
     { id: 'hoe', name: 'Копать' }, { id: 'seed', name: 'Сеять' }, { id: 'water', name: 'Полив' }, { id: 'harvest', name: 'Сбор' },
-    { id: 'fert', name: 'Удобрение' }, { id: 'superfert', name: 'Супер' }, { id: 'sprinkler', name: 'Поливалка' }, { id: 'remove', name: 'Убрать' },
+    { id: 'fert', name: 'Удобрение' }, { id: 'superfert', name: 'Супер' }, { id: 'sprinkler', name: 'Поливалка' }, { id: 'axe', name: 'Топор' }, { id: 'remove', name: 'Убрать' },
   ];
-  const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
   const needSeed = () => ui.tool === 'seed' || S.up.tractor > 0;
-  const FXK = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest', waterer: 'water', spreader: 'fert' };
+  const FXK = { dig: 'dig', plant: 'plant', water: 'water', harvest: 'harvest', fert: 'fert', build: 'build', remove: 'remove', tractor: 'dig', combine: 'harvest', waterer: 'water', spreader: 'fert', chop: 'chop', fell: 'fell', logger: 'fell', grinder: 'dig' };
   function pickSeed() {
     if (ui.seed && S.seeds[ui.seed] > 0) return;
     ui.seed = L.CROP_ORDER.find((k) => S.seeds[k] > 0 && L.CROPS[k].level <= S.level) || null;
@@ -111,11 +115,11 @@
     pickSeed(); L.setFarm(S, sfi);
     const tool = ui.tool;
     if (tool === 'seed' && !ui.seed) { toastOnce('Нет семян — купи в магазине семян в городе', 'bad'); return; }
-    const had = S.level;
+    const had = S.level, before = L.tileAt(S, x, y), sp = before && before.sp;
     const r = L.act(S, tool, x, y, ui.seed);
     if (!r.ok) { toastOnce(r.msg, 'bad'); if (first) sfx.bad(); return; }
     const kind = FXK[r.fx] || 'dig';
-    world.fx(kind, sfi, x, y, { gold: r.gold });
+    world.fx(kind, sfi, x, y, { gold: r.gold, sp });
     afterAction(r, sfi, x, y, tool, kind);
     if (S.level > had) onLevelUp();
   }
@@ -123,10 +127,11 @@
   function onVehicleDrop(key, sfi, x, y) {
     if (ui.modal) return;
     pickSeed(); L.setFarm(S, sfi);
-    const had = S.level, r = L.act(S, key, x, y, ui.seed);
+    const had = S.level, cells = L.areaCells(S, key, x, y).map(([cx, cy]) => [cx, cy, (L.tileAt(S, cx, cy) || {}).k, (L.tileAt(S, cx, cy) || {}).sp]);
+    const r = L.act(S, key, x, y, ui.seed);
     if (!r.ok) { toastOnce(r.msg, 'bad'); sfx.bad(); return; }
     const kind = FXK[r.fx] || 'dig';
-    for (const [cx, cy] of L.areaCells(S, key, x, y)) world.fx(kind, sfi, cx, cy);
+    for (const [cx, cy, k0, sp0] of cells) world.fx(key === 'logger' ? (k0 === 'tree' ? 'fell' : 'dig') : kind, sfi, cx, cy, { sp: k0 === 'tree' ? sp0 : undefined });
     world.workAnim(key); afterAction(r, sfi, x, y, key, kind);
     if (S.level > had) onLevelUp();
   }
@@ -140,6 +145,7 @@
   }
   function onFarmSign(id) {
     const d = L.FARM_DEFS.find((x) => x.id === id); if (!d || ui.modal) return;
+    if (S.farms.some((f) => f.id === id)) { world.focusFarm(id); return; }
     if (S.level < d.level) return toast(`${d.name} откроется на ${d.level} уровне`, 'bad');
     ui.buyId = id; openModal('buyfarm');
   }
@@ -181,6 +187,8 @@
         ${rb('cam', { v: 'home' }, ICON.farm, 'К моей ферме (Tab)')}
         ${rb('cam', { v: 'town' }, ICON.town, 'К городу (Tab)')}
         ${rb('cam', { v: 'all' }, ICON.map, 'Вся карта')}
+        ${rb('cam', { v: 'wild' }, ICON.axe, 'К лесу и целине')}
+        ${rb('cam', { v: 'sites' }, ICON.build, 'К стройплощадкам')}
         ${rb('modal', { id: 'farms' }, ICON.fields, 'Мои фермы')}
         <button class="rbtn glow" id="h-d" data-act="daily" title="Ежедневный подарок">${ICON.gift}</button>
       </div>
@@ -227,6 +235,8 @@
       <button class="tool" data-act="modal" data-id="animals" title="Загон и сараи">${ICON.paw}</button>
       <button class="tool" data-act="modal" data-id="barn" title="Склад: отправить на рынок (B)">${ICON.barn}</button>
       <button class="tool" data-act="modal" data-id="market" title="Рынок (M)">${ICON.market}${Object.keys(S.stall).length ? '<span class="n g">•</span>' : ''}</button>
+      <button class="tool" data-act="modal" data-id="sawmill" title="Лесопилка: брёвна → доски">${ICON.saw}${S.goods.log ? `<span class="n g">${S.goods.log}</span>` : ''}</button>
+      <button class="tool" data-act="modal" data-id="sites" title="Стройка: дома и сараи на продажу">${ICON.build}${S.sites.some((x) => x.done) ? '<span class="n g">!</span>' : ''}</button>
       <button class="tool" data-act="modal" data-id="seeds" title="Магазин семян">${ICON.seed}<span class="n g">+</span></button>
       <button class="tool" data-act="modal" data-id="tech" title="Техцентр">${ICON.truck}</button>
       <button class="tool" data-act="modal" data-id="bank" title="Банк">${ICON.bank}</button>
@@ -247,7 +257,8 @@
   }
   let camAt = 'home';
   function goCam(v) {
-    camAt = v; if (v === 'home') world.focusHome(); else if (v === 'town') { world.focusTown(); if (L.total(S.goods) > 0) toastOnce('📦 На складе есть урожай — отправь машину на рынок!', 'good'); } else world.focusAll();
+    camAt = v; if (v === 'wild') { world.focusWild(); return; } if (v === 'sites') { world.focusSites(); return; } if (v === 'sawmill') { world.focusSawmill(); return; }
+    if (v === 'home') world.focusHome(); else if (v === 'town') { world.focusTown(); if (L.total(S.goods) > 0) toastOnce('📦 На складе есть урожай — отправь машину на рынок!', 'good'); } else world.focusAll();
   }
 
   // ---------------------------------------------------------------- окна
@@ -461,6 +472,43 @@
     },
   };
 
+  // --- Лесопилка
+  MODALS.sawmill = {
+    title: '🪚 Лесопилка',
+    render() {
+      const logs = S.goods.log || 0, planks = S.goods.plank || 0, can = Math.floor(logs / 2);
+      let h = `<div class="hint">Брёвна даёт лес и целина. Из <b>2 бревён получается 1 доска</b>. Доски нужны для стройки домов и сараев 🏗, а ещё их можно продавать на рынке. Ручная распиловка стоит 3🪙 за доску. Лесопилка-автомат (в Техцентре, вкладка «Автоматика») пилит сама.</div>`;
+      h += card('🪵', `Брёвна · ${logs} шт.`, `На рынке ~${L.price(S, 'log')}🪙 за штуку ${trend('log')}`, '') + card('🪚', `Доски · ${planks} шт.`, `На рынке ~${L.price(S, 'plank')}🪙 за штуку ${trend('plank')}`, '');
+      h += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px">${btn('saw', { n: 1 }, 'Распилить ×1 (2 бревна)', 'y', can < 1)}${btn('saw', { n: 5 }, '×5', 'y', can < 5)}${btn('saw', { n: 'all' }, `Всё: ${can} досок · ${can * 3}🪙`, '', can < 1)}</div>`;
+      h += machCard('sawmill');
+      h += `<div class="hint" style="margin-top:8px">Склад: ${L.total(S.goods)} / ${L.barnCap(S)}. Отвези товар на рынок через склад 📦.</div>`;
+      return h;
+    },
+  };
+  // --- Стройка
+  MODALS.sites = {
+    title: '🏗 Стройка: дома и сараи на продажу',
+    render() {
+      const slots = L.siteSlots(S), pl = S.goods.plank || 0;
+      let h = `<div class="hint">Построй сарай, дом или амбар из <b>досок</b> и продай. Здание строится само, этапы видно на стройплощадке. Цены на недвижимость меняются: сейчас <b>${Math.round(S.market.prop * 100)}%</b>. Досок на складе: <b>${pl}</b>.</div>`;
+      for (let i = 0; i < L.SITE_SLOTS.length; i++) {
+        if (i >= slots) { h += card('🔒', `Стройплощадка ${i + 1}`, `Откроется на ${L.SITE_SLOTS[i].level} уровне`, '', 'lock'); continue; }
+        const st = S.sites[i];
+        if (st) {
+          const d = L.SITE_TYPES[st.type], pct = Math.floor(st.prog / st.total * 100), stg = ['Фундамент и разметка', 'Каркас', 'Стены и леса', 'Крыша'][L.siteStage(st)] || 'Готово';
+          h += card(d.icon, `${d.name} · стройплощадка ${i + 1}`, st.done ? `Готово! Можно продавать за <b>${fmt(L.sitePrice(S, st))}🪙</b>` : `${stg} · ${pct}%<div class="bar" style="margin-top:6px"><i style="width:${pct}%"></i></div>`,
+            st.done ? btn('sellsite', { id: st.id }, `Продать ${fmt(L.sitePrice(S, st))}🪙`, 'y') : btn('rushsite', { id: st.id }, 'Ускорить 💎', 'b'));
+        } else {
+          h += `<div class="card"><div class="ic">➕</div><div class="in"><b>Стройплощадка ${i + 1}: свободна</b><small>Выбери, что строить</small></div></div>`;
+          for (const [k, d] of Object.entries(L.SITE_TYPES)) {
+            const lock = S.level < d.level, lack = pl < d.planks || S.coins < d.coins;
+            h += card(d.icon, `${d.name}${lock ? ' · с ' + d.level + ' ур.' : ''}`, `${d.planks} досок + ${d.coins}🪙 · стройка ${Math.round(d.ms / 60000 * 10) / 10} мин · продажа около ${fmt(d.price)}🪙`, lock ? '🔒' : btn('build', { t: k }, 'Строить', '', lack), lock ? 'lock' : '');
+          }
+        }
+      }
+      return h;
+    },
+  };
   // --- Все фермы
   MODALS.farms = {
     title: '🗺️ Мои фермы',
@@ -508,7 +556,7 @@
     title: '❓ Как играть',
     render() {
       return `<div class="hint" style="font-size:15px">
-        <b>На телефоне:</b> один палец — действие или перетаскивание техники, два пальца — двигать, приближать и вращать карту.<br><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
+        <b>На телефоне:</b> один палец — действие или перетаскивание техники, два пальца — двигать, приближать и вращать карту.<br><b>0.</b> Карта большая: <span class="kbd">W A S D</span> или правая кнопка мыши — двигать, колесо — приближать, <span class="kbd">Q</span>/<span class="kbd">E</span> — вращать. Купленную технику (🚜🌾🚒🧂) <b>тащи мышью</b> на любую грядку: она поработает там.<br><b>Лес:</b> на «Целине с лесом» (север карты, с 2 уровня) сначала нужно расчистить землю: 🪓 топором руби деревья (брёвна идут на склад), пни и камни убирай инструментом «Убрать», потом копай и сей. Харвестер 🌲 и корчеватель 🪓 делают это на большой площади. Брёвна пили на 🪚 лесопилке в доски и строй из них 🏗 дома и сараи на продажу.<br><b>1.</b> На ферме выбери ⛏️ и копай землю, потом 🌱 — сажай семена, 💧 — поливай (полив ускоряет рост).<br>
         <b>2.</b> Когда созреет — 🧺 собери. Урожай попадает на <b>склад</b>.<br>
         <b>3.</b> Продать урожай можно <b>только на рынке в городе</b>: открой «📦 Склад», выбери машину, загрузи и отправь 🚚. В пути бывают пробки, поломки и разбойники.<br>
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📜 заказы — они платят в разы больше.<br>
@@ -562,6 +610,10 @@
     ex: (d) => { const r = L.exchange(S, d.d, +d.n); r.ok ? sfx.coin() : toast(r.msg, 'bad'); },
     farmbuy: (d) => { const r = L.unlockFarm(S, d.id); if (r.ok) { sfx.level(); toast('Новая ферма твоя! 🎉', 'good'); closeModal(); world.focusFarm(d.id); } else toast(r.msg, 'bad'); },
     gofarm: (d) => { L.setFarm(S, +d.i); closeModal(); world.focusFarm(S.farms[+d.i].id); },
+    saw: (d) => { const can = Math.floor((S.goods.log || 0) / 2), r = L.sawLogs(S, d.n === 'all' ? can : +d.n); r.ok ? (sfx.chop(), toast(`🪚 +${r.planks} досок (−${r.fee}🪙)`, 'good')) : toast(r.msg, 'bad'); },
+    build: (d) => { const r = L.startBuild(S, d.t); r.ok ? (sfx.level(), toast('🏗 Стройка началась!', 'good')) : toast(r.msg, 'bad'); },
+    sellsite: (d) => { const r = L.sellSite(S, +d.id); if (r.ok) { sfx.coin(); toast(`🏠 Продано! +${fmt(r.gain)}🪙 +${r.xp}⭐`, 'good'); if (r.levelUp) onLevelUp(); } else toast(r.msg, 'bad'); },
+    rushsite: (d) => { const r = L.rushSite(S, +d.id); r.ok ? (sfx.level(), toast('Стройка завершена!', 'good')) : toast(r.msg, 'bad'); },
     snd: () => { ui.sound = !ui.sound; renderModal(); },
     reset: () => { if (ui.confirm !== 'reset') { ui.confirm = 'reset'; renderModal(); return; } store.del(SAVE); location.reload(); },
     spin: () => {

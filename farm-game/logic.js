@@ -759,7 +759,7 @@
     CROPS, CROP_ORDER, ANIMALS, ANIMAL_ORDER, PRODUCTS, GOODS, GOOD_KEYS, TRUCKS, TRUCK_SLOTS, MACHINES, MACH_MAX, MACH_KEYS, FIELD_TOOLS, AUTO_KEYS, FARM_DEFS, WATER_MS, CAN_COSTS,
     BARN_CAP, BARN_COSTS, STALL_CAP, STALL_COSTS, GUARD_COSTS, SPRINKLER, SCARECROW_COST, FEED_COST, FERT_COST, SHOP_CRYSTALS, BOOST_MS,
     DAY_MS, OFFLINE_CAP, WHEEL, EXCHANGE, PERENNIAL_HARVESTS,
-    WOOD, SITE_TYPES, SITE_SLOTS, siteSlots, siteStage, sitePrice, startBuild, sellSite, rushSite, sawLogs, fellTree, YOUNG_MS,
+    makeFarm, WOOD, SITE_TYPES, SITE_SLOTS, siteSlots, siteStage, sitePrice, startBuild, sellSite, rushSite, sawLogs, fellTree, YOUNG_MS,
     machineCost, buyMachine, barnCost, buyBarn, animalCap, animalMachine, areaOf, coolOf, autoEvery, autoN, speedOf, doubleOf, feedUseOf, migrate,
     setRandom, xpNeeded, levelGems, createState, farm, farmDef, tileAt, isRipe, stage, progressOf, tick, catchUp, act, areaCells,
     buySeeds, buyFeed, buyFert, buyScarecrow, buyGems, upgradeCost, buyUpgrade, buyAnimal, collect, unlockFarm, setFarm,

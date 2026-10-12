@@ -335,7 +335,7 @@
 
   // ---------------------------------------------------------------- мир: одна большая карта
   const TS = 3; // размер одной клетки поля в единицах мира (1 единица ≈ 1 метр)
-  const SLOT = { home: [-144, -30], meadow: [-48, -30], grove: [48, -30], valley: [144, -30], lake: [-144, 30], hills: [-48, 30], orchard: [48, 30] };
+  const SLOT = { wild: [-150, -150], forest: [40, -150], home: [-144, -30], meadow: [-48, -30], grove: [48, -30], valley: [144, -30], lake: [-144, 30], hills: [-48, 30], orchard: [48, 30] };
   const FIELD_LEFT = 8; // левый край поля от центра участка: поле растёт вправо
   const TOWN = { market: [-68, 82], seeds: [-34, 82], tech: [0, 82], bank: [34, 82], casino: [68, 82] };
   const TOWN_MODEL = { market: 'market', seeds: 'seedshop', tech: 'techcenter', bank: 'bank', casino: 'casino' };
@@ -345,9 +345,12 @@
     route: [[-134, -14], [-134, 0.2], [-96, 0.2], [-96, 100], [-68, 100], [-68, 93]],
     center: [0, 30],
   };
-  const VEH_KEYS = ['tractor', 'combine', 'waterer', 'spreader'];
-  const VEH_START = { tractor: [-147, -8], combine: [-139, -8], waterer: [-130, -8], spreader: [-121, -8] };
-  const VEH_VER = 3;
+  const VEH_KEYS = ['tractor', 'combine', 'waterer', 'spreader', 'logger', 'grinder'];
+  const VEH_START = { tractor: [-147, -8], combine: [-139, -8], waterer: [-130, -8], spreader: [-121, -8], logger: [-170, -116], grinder: [-188, -116] };
+  const VEH_VER = 4;
+  const ROAD_N = -100; // северная дорога вдоль леса и целины
+  const SITE_POS = [[165, -135], [198, -135], [231, -135]]; // три стройплощадки
+  const SAWMILL_POS = [-28, -128];
   const MODEL = (kind, name, opts, fb, sc) => { const FM = root.FarmModels; let m = FM && FM.has(kind, name) ? FM.make(kind, name, opts) : null; if (!m) { m = fb ? fb() : new T.Group(); if (sc) m.scale.multiplyScalar(sc); } return m; };
   const hasModel = (kind, name) => !!(root.FarmModels && root.FarmModels.has(kind, name));
   const disposeObj = (o) => o.traverse((c) => { if (c.geometry && c.geometry.dispose) c.geometry.dispose(); });
@@ -394,7 +397,8 @@
     (function buildStatic() {
       const road = (x, z, w, d) => { const m = part('box', 0x4a4f57, x, 0.04, z, w, 0.08, d); m.material = texMat('asphalt', w / 6, d / 6, 0x4a4f57); m.castShadow = false; world.add(m); };
       const line = (x, z, w, d, col) => { const m = part('box', col || 0xe2c64a, x, 0.1, z, w, 0.02, d); m.castShadow = false; world.add(m); };
-      const ZEND = ROAD_Z[ROAD_Z.length - 1], zTop = -80, zBot = 205, zMid = (zTop + zBot) / 2, zLen = zBot - zTop;
+      const ZEND = ROAD_Z[ROAD_Z.length - 1], zTop = -100, zBot = 205, zMid = (zTop + zBot) / 2, zLen = zBot - zTop;
+      road(0, ROAD_N, 620, RW); for (let x = -300; x < 300; x += 10) line(x, ROAD_N, 5, 0.35); line(0, ROAD_N - RW / 2 + 0.5, 620, 0.3, 0xd9c35a); line(0, ROAD_N + RW / 2 - 0.5, 620, 0.3, 0xd9c35a);
       for (const z of ROAD_Z) road(0, z, 620, RW);
       for (const x of ROAD_X) road(x, zMid, RW, zLen);
       for (const z of ROAD_Z) { for (let x = -300; x < 300; x += 10) line(x, z, 5, 0.35); line(0, z - RW / 2 + 0.5, 620, 0.3, 0xd9c35a); line(0, z + RW / 2 - 0.5, 620, 0.3, 0xd9c35a); }
@@ -406,6 +410,16 @@
         b.traverse((o) => { o.userData.bid = id; });
         townLabels[id] = addLabel('map', CITY.names[id], new T.Vector3(x, 17, z), 'bld', () => cb.onBuilding(id));
       }
+      // лесопилка у северной дороги
+      { const sm = MODEL('building', 'sawmill', {}, () => { const g = new T.Group(); g.add(part('box', 0x8a9096, 0, 4, 0, 18, 8, 12)); g.add(gable(20, 14, 3, 0x6d7378, 0, 8, 0)); return g; });
+        sm.position.set(SAWMILL_POS[0], 0, SAWMILL_POS[1]); world.add(sm); sm.traverse((o) => { o.userData.bid = 'sawmill'; }); bMeshes.sawmill = sm;
+        const yard = part('box', 0xb3a58a, SAWMILL_POS[0], 0.03, SAWMILL_POS[1] + 6, 46, 0.06, 40); yard.material = texMat('dirt_path', 10, 8, 0xb9ab8e); yard.castShadow = false; world.add(yard);
+        townLabels.sawmill = addLabel('map', '🪚 Лесопилка', new T.Vector3(SAWMILL_POS[0], 15, SAWMILL_POS[1]), 'bld', () => cb.onBuilding('sawmill'));
+        const lane = part('box', 0x4a4f57, SAWMILL_POS[0], 0.05, (SAWMILL_POS[1] + ROAD_N) / 2 + 8, 7, 0.08, ROAD_N - SAWMILL_POS[1] + 6); lane.material = texMat('asphalt', 1, 3, 0x4a4f57); lane.castShadow = false; world.add(lane);
+        for (let i = 0; i < 4; i++) { const lp = MODEL('forest', 'logpile', { size: 1 + (i % 3) }, () => part('cyl', 0x6d4c2f, 0, 0.8, 0, 2, 1.6, 6)); lp.position.set(SAWMILL_POS[0] - 22 + i * 7, 0, SAWMILL_POS[1] + 15); lp.rotation.y = i * 0.7; world.add(lp); }
+        for (let i = 0; i < 3; i++) { const pk = MODEL('forest', 'plankstack', { size: 1 + (i % 3) }, () => part('box', 0xd9b779, 0, 0.8, 0, 3, 1.6, 1.8)); pk.position.set(SAWMILL_POS[0] + 14 + i * 5, 0, SAWMILL_POS[1] + 14); world.add(pk); } }
+      // стройплощадки (по уровню): бетонные площадки у северной дороги
+      for (const [x, z] of SITE_POS) { const pad = part('box', 0xb9b6ac, x, 0.05, z, 28, 0.1, 22); pad.material = texMat('concrete', 5, 4, 0xbdb9ad); pad.castShadow = false; world.add(pad); const pth = part('box', 0xb08d57, x, 0.04, (z + ROAD_N) / 2 + 6, 5, 0.06, z - ROAD_N - 22 + 12); pth.material = texMat('dirt_path', 1, 3, 0xb08d57); pth.castShadow = false; world.add(pth); }
       // пруд с пирсом на свободном участке
       const pond = part('cyl', 0x3f9fd6, 144, 0.07, 30, 54, 0.1, 42); pond.castShadow = false; world.add(pond);
       { const d = MODEL('prop', 'dock', {}, () => new T.Group()); d.position.set(144, 0, 12); d.rotation.y = Math.PI; world.add(d); }
@@ -501,12 +515,43 @@
       }
       return bake(g, 0.1);
     }
+    // --- лес: деревья рисуются через InstancedMesh (быстро), пни, камни и молодые деревья — отдельными моделями
+    const treePartsCache = {};
+    function treeParts(sp, v) {
+      const key = sp + v; if (treePartsCache[key]) return treePartsCache[key];
+      const g = MODEL('tree', sp, { seed: v }, () => { const q = tree(3 + v * 0.5, sp === 'pine' ? 'pine' : 'oak'); return bake(q, 0.12); });
+      g.updateMatrixWorld(true); const parts = []; g.traverse((o) => { if (o.isMesh && !o.material.transparent) parts.push({ geo: o.geometry, mat: o.material, mw: o.matrixWorld.clone() }); });
+      return (treePartsCache[key] = parts);
+    }
+    const hash2 = (i, k) => { let h = Math.imul(i + 1, 374761393) ^ Math.imul(k + 7, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    function treeInit(fv, w, h) { fv.treeInst = {}; fv.treeAt = new Array(w * h).fill(null); }
+    function treeAdd(fv, i, sp) {
+      const v = Math.floor(hash2(i, 1) * 3), key = sp + v; let ent = fv.treeInst[key];
+      if (!ent) { const cap = fv.w * fv.h; ent = fv.treeInst[key] = { tiles: [], meshes: treeParts(sp, v).map((pt) => { const m = new T.InstancedMesh(pt.geo, pt.mat, cap); m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false; world.add(m); return { m, pt }; }) }; }
+      const x = i % fv.w, y = (i / fv.w) | 0, [wx, wz] = tileWorld(fv, x, y), M = new T.Matrix4(), sc = 0.85 + hash2(i, 2) * 0.4;
+      M.compose(new T.Vector3(wx + (hash2(i, 3) - 0.5) * 1.6, 0, wz + (hash2(i, 4) - 0.5) * 1.6), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), hash2(i, 5) * 6.28), new T.Vector3(sc, sc * (0.9 + hash2(i, 6) * 0.25), sc));
+      const slot = ent.tiles.length; ent.tiles.push(i); fv.treeAt[i] = { key, slot, M };
+      for (const { m, pt } of ent.meshes) { m.setMatrixAt(slot, new T.Matrix4().multiplyMatrices(M, pt.mw)); m.count = ent.tiles.length; m.instanceMatrix.needsUpdate = true; }
+    }
+    function treeRemove(fv, i) {
+      const at = fv.treeAt[i]; if (!at) return; const ent = fv.treeInst[at.key], last = ent.tiles.length - 1, li = ent.tiles[last];
+      if (at.slot !== last) { const lm = fv.treeAt[li].M; for (const { m, pt } of ent.meshes) m.setMatrixAt(at.slot, new T.Matrix4().multiplyMatrices(lm, pt.mw)); ent.tiles[at.slot] = li; fv.treeAt[li].slot = at.slot; }
+      ent.tiles.pop(); for (const { m } of ent.meshes) { m.count = ent.tiles.length; m.instanceMatrix.needsUpdate = true; } fv.treeAt[i] = null;
+    }
+    function treeClear(fv) { for (const ent of Object.values(fv.treeInst || {})) for (const { m } of ent.meshes) { world.remove(m); m.dispose && m.dispose(); } fv.treeInst = {}; fv.treeAt = []; }
+    const falling = [];
+    function fellAnim(fv, x, y, sp) {
+      const [wx, wz] = tileWorld(fv, x, y), v = Math.floor(hash2(y * fv.w + x, 1) * 3);
+      const g = MODEL('tree', sp || 'oak', { seed: v }, () => tree(3, sp === 'pine' ? 'pine' : 'oak')); const piv = new T.Group(); piv.position.set(wx, 0, wz); piv.add(g); world.add(piv);
+      falling.push({ piv, t: 0, dir: Math.random() * 6.28 });
+    }
     function tileMaterial(kind, wet, x, y) {
+      if (kind === 'forest') return hasTex('grass') ? texMat('grass', 0.5, 0.5, 0x6b7c45, (x % 2) * 0.5, (y % 2) * 0.5, ((x + y) % 2) * Math.PI / 2) : mat(0x4a5a2a);
       const v = (x * 7 + y * 13) % 4, ox = (v & 1) * 0.5, oy = (v >> 1) * 0.5;
       if (kind === 'grass') return hasTex('grass') ? texMat('grass', 0.5, 0.5, 0x74b84f, ox, oy, ((x + y) % 2) * Math.PI / 2) : mat(tileCol.grass[(x + y) & 1]);
       return wet ? texMat('soil_wet', 0.5, 0.5, tileCol.wet, ox, oy) : texMat('soil_plowed', 0.5, 0.5, tileCol.soil, ox, oy);
     }
-    const tileSig = (t, wet) => (t.k === 'crop' ? 'c' + t.crop + L.stage(t) + (wet ? 'w' : '') : t.k);
+    const tileSig = (t, wet) => (t.k === 'crop' ? 'c' + t.crop + L.stage(t) + (wet ? 'w' : '') : t.k === 'tree' ? 'tree' + t.sp : t.k === 'stump' ? 'stump' + t.sp : t.k === 'rock' ? 'rock' + t.v : t.k === 'young' ? 'young' + t.sp + Math.min(2, Math.floor(t.progress / L.YOUNG_MS * 3)) : t.k);
 
     function createView(di) {
       const def = L.FARM_DEFS[di], [sx, sz] = SLOT[def.id];
@@ -516,7 +561,22 @@
       return fv;
     }
     /** Двор фермы: дом, амбар, силосы, сарай, хозяйственные постройки и (на домашней ферме) загон для животных. Координаты: x от центра участка, zr от центра к дороге. */
+    /** Лагерь лесорубов у целины/леса: домик, брёвна, стоянка техники. */
+    function buildWildStead(fv, owned, S) {
+      const g = fv.w3, sg = fv.sgn, face = sg > 0 ? 0 : Math.PI, Z = (zr) => sg * zr, def = fv.def;
+      const place = (m, x, zr, rot) => { m.position.set(x, 0, Z(zr)); m.rotation.y = face + (rot || 0); g.add(m); return m; };
+      { const yard = part('box', 0xa89a7c, -26, 0.03, Z(-6), 52, 0.06, 56); yard.material = texMat('dirt_path', 10, 10, 0xa89a7c); yard.castShadow = false; g.add(yard); }
+      place(MODEL('building', 'loggerHut', {}, () => { const h = house(5, 4, 2.6, 0xa8794a, 0x5d4037); h.scale.setScalar(1.7); return h; }), -34, 8);
+      for (let i = 0; i < 3; i++) place(MODEL('forest', 'logpile', { size: 1 + (i % 3) }, () => part('cyl', 0x6d4c2f, 0, 0.8, 0, 2, 1.6, 6)), -44 + i * 5, -14, i * 0.5);
+      place(MODEL('forest', 'branchpile', {}, () => part('sph', 0x6b5a3a, 0, 0.7, 0, 3, 1.4, 3)), -12, -26, 0.3);
+      place(MODEL('forest', 'chips', {}, () => part('sph', 0xcaa56a, 0, 0.5, 0, 3, 1, 3)), -8, -14);
+      { const bay = MODEL('prop', 'parkingBay', {}, () => { const b = part('box', 0xb9b9b4, 0, 0.04, 0, 15, 0.08, 10); b.material = texMat('concrete', 3, 2, 0xb9b9b4); return b; }); bay.position.set(-38, 0, Z(-28)); g.add(bay); }
+      rails(g, [[-50, Z(-40)], [-2, Z(-40)]], 0x8a6a42, 1.1, 3);
+      if (owned) fv.labels.push(addLabel('map', `${def.icon} ${def.name}`, new T.Vector3(fv.sx - 34, 12, fv.sz + Z(8)), 'bld', () => cb.onFarmSign(def.id)));
+      else { const lock = !(S.level >= def.level); const l = addLabel('map', `${def.icon} ${def.name}<br><small>${lock ? '🔒 с ' + def.level + ' уровня' : '🛒 купить за ' + def.cost + ' 🪙'}</small>`, new T.Vector3(fv.sx - 20, 14, fv.sz + Z(6)), 'bld' + (lock ? ' locked' : ''), () => cb.onFarmSign(def.id)); l.dyn = true; fv.labels.push(l); }
+    }
     function buildStead(fv, owned, S) {
+      if (fv.def.wild || fv.def.forestry) return buildWildStead(fv, owned, S);
       const g = fv.w3, sg = fv.sgn, face = sg > 0 ? 0 : Math.PI, Z = (zr) => sg * zr, def = fv.def;
       const place = (m, x, zr, rot) => { m.position.set(x, 0, Z(zr)); m.rotation.y = face + (rot || 0); g.add(m); return m; };
       { const yard = part('box', 0xb3a58a, -22, 0.03, Z(0), 62, 0.06, 40); yard.material = texMat('dirt_path', 14, 9, 0xb3a58a); yard.material = texMat('concrete', 10, 7, 0xc9c3b0); yard.castShadow = false; g.add(yard); }
@@ -551,7 +611,7 @@
     function buildStatic(fv, S, owned, w, h) {
       for (const g of [fv.tg, fv.crops, fv.props, fv.w3]) { while (g.children.length) { const c = g.children[0]; g.remove(c); disposeObj(c); } }
       for (const l of fv.labels || []) dropLabel(l); fv.labels = []; fv.tiles = []; fv.animals = []; fv.animalSig = ''; fv.sig = ''; fv.extra = null; fv.drone = null; fv.pen = null; fv.penLabel = null;
-      fv.w = w; fv.h = h; fv.cx = fv.sx + FIELD_LEFT + w * TS / 2; fv.g.position.set(fv.cx, 0, fv.cz);
+      treeClear(fv); fv.w = w; fv.h = h; fv.cx = fv.sx + FIELD_LEFT + w * TS / 2; fv.g.position.set(fv.cx, 0, fv.cz); treeInit(fv, w, h);
       const fenceC = 0x8a6a42;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const m = part('box', 0x74b84f, x - w / 2 + 0.5, 0.05, y - h / 2 + 0.5, 0.97, 0.1, 0.97); m.material = tileMaterial('grass', false, x, y); m.castShadow = false;
@@ -562,24 +622,32 @@
       for (let x = -1; x <= w; x++) for (const zz of [-1, h]) { const isRoadSide = (side > 0 && zz === h) || (side < 0 && zz === -1); if (isRoadSide && (x === gateX || x === gateX - 1)) continue; fv.props.add(part('box', fenceC, x - w / 2 + 0.5, 0.3, zz - h / 2 + 0.5, 0.1, 0.6, 0.1)); if (x < w) fv.props.add(part('box', fenceC, x - w / 2 + 1, 0.42, zz - h / 2 + 0.5, 1, 0.05, 0.05)); }
       for (let y = -1; y <= h; y++) for (const xx of [-1, w]) { fv.props.add(part('box', fenceC, xx - w / 2 + 0.5, 0.3, y - h / 2 + 0.5, 0.1, 0.6, 0.1)); if (y < h) fv.props.add(part('box', fenceC, xx - w / 2 + 0.5, 0.42, y - h / 2 + 1, 0.05, 0.05, 1)); }
       // дорожка от ворот к дороге
-      const pathLen = Math.abs(fv.sz) - (h * TS) / 2 - RW / 2, pathZ = side > 0 ? h / 2 + 0.5 + pathLen / TS / 2 : -h / 2 - 0.5 - pathLen / TS / 2;
+      const roadZ = fv.sz < -100 ? ROAD_N : 0.2, pathLen = Math.abs(roadZ - fv.sz) - (h * TS) / 2 - RW / 2, pathZ = side > 0 ? h / 2 + 0.5 + pathLen / TS / 2 : -h / 2 - 0.5 - pathLen / TS / 2;
       { const pth = part('box', 0xb08d57, gateX - w / 2, 0.03, pathZ, 2.4, 0.06, pathLen / TS); pth.material = texMat('dirt_path', 1, Math.max(1, pathLen / 6), 0xb08d57); pth.castShadow = false; fv.props.add(pth); }
       buildStead(fv, owned, S);
     }
     function syncView(fv, S) {
-      const sfi = S.farms.findIndex((f) => f.id === fv.id), owned = sfi >= 0, f = owned ? S.farms[sfi] : null;
+      const sfi = S.farms.findIndex((f) => f.id === fv.id), owned = sfi >= 0, wildDef = fv.def.wild || fv.def.forestry, f = owned ? S.farms[sfi] : (wildDef ? (fv.preview || (fv.preview = L.makeFarm(fv.def))) : null);
       const w = owned ? f.w : fv.def.plots[0][0], h = owned ? f.h : fv.def.plots[0][1];
       const key = fv.id + ':' + owned + ':' + w + 'x' + h + ':' + (owned || S.level >= fv.def.level);
       if (fv.key !== key) { fv.key = key; buildStatic(fv, S, owned, w, h); }
-      fv.sfi = sfi; if (!owned) return;
+      fv.sfi = sfi; if (!f) return;
       for (let i = 0; i < f.tiles.length; i++) {
         const t = f.tiles[i], c = fv.tiles[i], wet = t.k === 'crop' && t.water > 0, sig = tileSig(t, wet);
         if (sig === c.sig) continue; c.sig = sig;
         if (c.model) { fv.crops.remove(c.model); disposeObj(c.model); c.model = null; }
-        c.mesh.material = tileMaterial(t.k, wet, i % f.w, (i / f.w) | 0);
-        c.mesh.scale.y = t.k === 'grass' ? 0.1 : 0.16; c.mesh.position.y = t.k === 'grass' ? 0.05 : 0.08;
+        if (fv.treeAt[i]) treeRemove(fv, i);
+        const wildK = t.k === 'tree' || t.k === 'stump' || t.k === 'rock' || t.k === 'young';
+        c.mesh.material = tileMaterial(wildK ? 'forest' : t.k, wet, i % f.w, (i / f.w) | 0);
+        c.mesh.scale.y = t.k === 'grass' || wildK ? 0.1 : 0.16; c.mesh.position.y = t.k === 'grass' || wildK ? 0.05 : 0.08;
+        if (t.k === 'tree') treeAdd(fv, i, t.sp);
+        else if (t.k === 'stump' || t.k === 'rock' || t.k === 'young') {
+          const nm = t.k === 'young' ? { stage: Math.min(2, Math.floor(t.progress / L.YOUNG_MS * 3)), variant: ['oak', 'pine', 'birch'].indexOf(t.sp) } : { variant: t.k === 'rock' ? t.v : ['oak', 'pine', 'birch'].indexOf(t.sp) };
+          const b = MODEL('forest', t.k, nm, () => part(t.k === 'rock' ? 'sph' : 'cyl', t.k === 'rock' ? 0x8a8d8f : 0x6b4f33, 0, 0.4, 0, 1.4, 0.8, 1.4)); b.position.set(c.mesh.position.x + (hash2(i, 8) - 0.5) * 0.3, 0.1, c.mesh.position.z + (hash2(i, 9) - 0.5) * 0.3); b.rotation.y = hash2(i, 10) * 6.28; b.scale.multiplyScalar(0.33 * (t.k === 'rock' ? 1.15 : 1)); fv.crops.add(b); c.model = b;
+        }
         if (t.k === 'crop') { const b = MODEL('crop', t.crop, { stage: L.stage(t), seed: i }, () => fieldPlants(t.crop, L.stage(t), i)); b.position.set(c.mesh.position.x, 0.16, c.mesh.position.z); b.scale.y = hasModel('crop', t.crop) ? 0.62 : 1; fv.crops.add(b); c.model = b; }
       }
+      if (!owned) return;
       const esig = JSON.stringify(f.sprinklers) + f.scarecrows + [S.up.drone, S.up.collector, S.up.courier].join() + JSON.stringify(S.barns);
       if (fv.sig !== esig) {
         fv.sig = esig; if (fv.extra) { fv.props.remove(fv.extra); fv.w3.remove(fv.extra2); }
@@ -605,6 +673,24 @@
         const pend = L.ANIMAL_ORDER.reduce((a, k) => a + ((S.prod[k] && S.prod[k].pending) || 0), 0), own = L.ANIMAL_ORDER.reduce((a, k) => a + (S.animals[k] || 0), 0);
         if (fv.penLabel) { fv.penLabel.el.innerHTML = own ? (pend ? `🧺 Собрать (${pend})` : '🐾 Животные') : '➕ Животные'; fv.penLabel.el.classList.toggle('ready', pend > 0); }
       }
+    }
+    // --- стройплощадки
+    const siteViews = SITE_POS.map(() => ({ sig: '', g: null, lab: null }));
+    function syncSites(S) {
+      SITE_POS.forEach(([x, z], i) => {
+        const v = siteViews[i], open = i < L.siteSlots(S), st = S.sites[i], stage = st ? L.siteStage(st) : -1;
+        const sig = !open ? 'lock' : st ? st.type + stage : 'free';
+        if (v.sig !== sig) {
+          v.sig = sig; if (v.g) { world.remove(v.g); disposeObj(v.g); v.g = null; }
+          if (st) { v.g = MODEL('construct', st.type, { stage, variant: i }, () => { const q = new T.Group(); q.add(part('box', st.type === 'barn' ? 0x9c6b3f : 0xd9c8a0, 0, 2 + stage, 0, 8, 4 + stage * 1.5, 6)); return q; }); }
+          else if (open) { v.g = MODEL('construct', 'sign', {}, () => part('box', 0xc9a56a, 0, 1.4, 0, 3, 2, 0.3)); }
+          if (v.g) { v.g.position.set(x, 0.1, z); v.g.rotation.y = 0; world.add(v.g); v.g.traverse((o) => { o.userData.bid = 'sites'; }); }
+        }
+        if (!v.lab) v.lab = addLabel('map', '', new T.Vector3(x, 14, z), 'bld', () => cb.onBuilding('sites'));
+        v.lab.pos.set(x, st && st.type === 'barn' ? 17 : 13, z);
+        const txt = !open ? `🔒 Стройка · с ${L.SITE_SLOTS[i].level} ур.` : st ? (st.done ? `${L.SITE_TYPES[st.type].icon} ${L.SITE_TYPES[st.type].name} готов: продать` : `${L.SITE_TYPES[st.type].icon} ${L.SITE_TYPES[st.type].name} ${Math.floor(st.prog / st.total * 100)}%`) : `➕ Стройплощадка ${i + 1}`;
+        if (v.lab.el.textContent !== txt) { v.lab.el.textContent = txt; v.lab.el.classList.toggle('locked', !open); v.lab.el.classList.toggle('ready', !!(st && st.done)); }
+      });
     }
     function syncViews(S) { if (!views.length) L.FARM_DEFS.forEach((d, i) => views.push(createView(i))); for (const v of views) syncView(v, S); }
     const sfiView = (sfi) => views.find((v) => v.sfi === sfi);
@@ -783,10 +869,10 @@
     // --- эффекты
     const parts = [];
     function burst(kind, x, y, z) {
-      const col = { dig: 0x7a4e2b, plant: 0x7cb342, water: 0x4fc3f7, harvest: 0xffd54f, build: 0xb0bec5, fert: 0xce93d8, coin: 0xffc107, remove: 0x9e9e9e, gold: 0xffeb3b }[kind] || 0xffffff;
+      const col = { chop: 0xc79a5b, fell: 0x8a6a42, dig: 0x7a4e2b, plant: 0x7cb342, water: 0x4fc3f7, harvest: 0xffd54f, build: 0xb0bec5, fert: 0xce93d8, coin: 0xffc107, remove: 0x9e9e9e, gold: 0xffeb3b }[kind] || 0xffffff;
       for (let i = 0; i < 10; i++) { const m = new T.Mesh(G.box(), new T.MeshBasicMaterial({ color: col })); m.scale.setScalar(0.28 + Math.random() * 0.2); m.position.set(x, y, z); scene.add(m); parts.push({ m, vx: (Math.random() - 0.5) * 2.4, vy: 2 + Math.random() * 2.4, vz: (Math.random() - 0.5) * 2.4, life: 0.7 }); }
     }
-    function fx(kind, sfi, tx, ty, opts) { const fv = sfiView(sfi); if (!fv) return; const [x, z] = tileWorld(fv, tx, ty); burst(opts && opts.gold ? 'gold' : kind, x, 0.6, z); }
+    function fx(kind, sfi, tx, ty, opts) { const fv = sfiView(sfi); if (!fv) return; const [x, z] = tileWorld(fv, tx, ty); if (kind === 'fell' && opts && opts.sp) fellAnim(fv, tx, ty, opts.sp); burst(opts && opts.gold ? 'gold' : kind, x, kind === 'fell' || kind === 'chop' ? 1.6 : 0.6, z); }
     function tileScreen(sfi, tx, ty) { const fv = sfiView(sfi); if (!fv) return { x: 0, y: 0 }; const [x, z] = tileWorld(fv, tx, ty); const v = new T.Vector3(x, 0.6, z).project(camera), r = canvas.getBoundingClientRect(); return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top }; }
     function vehScreen(k) { const v = vehs[k]; if (!v) return { x: 0, y: 0 }; const p = v.g.position.clone(); p.y = 1.2; p.project(camera); const r = canvas.getBoundingClientRect(); return { x: (p.x * 0.5 + 0.5) * r.width + r.left, y: (-p.y * 0.5 + 0.5) * r.height + r.top }; }
 
@@ -818,7 +904,8 @@
         if (keys.q || keys['й']) cam.yaw += dt * 1.3; if (keys.e || keys['у']) cam.yaw -= dt * 1.3;
       }
       cam.tx += (cam.gx - cam.tx) * Math.min(1, dt * 8); cam.tz += (cam.gz - cam.tz) * Math.min(1, dt * 8); cam.dist += (cam.gd - cam.dist) * Math.min(1, dt * 8);
-      syncViews(S); syncVehicles(S); syncTrips(S);
+      syncViews(S); syncVehicles(S); syncTrips(S); syncSites(S);
+      for (let i = falling.length - 1; i >= 0; i--) { const f = falling[i]; f.t += dt; const k = Math.min(1, f.t / 1.1), a = k * k * 1.45; f.piv.rotation.set(Math.cos(f.dir) * a, 0, Math.sin(f.dir) * a); if (k >= 1) { f.piv.scale.multiplyScalar(0.94); if (f.t > 1.7) { world.remove(f.piv); disposeObj(f.piv); falling.splice(i, 1); } } }
       lighting(S.clock / L.DAY_MS, S.weather.type);
       rain.visible = S.weather.type === 'rain';
       if (rain.visible) { const a = rain.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - dt * 22; if (y < 0) y = 50; a.setY(i, y); } a.needsUpdate = true; rain.position.set(cam.tx, 0, cam.tz); }
@@ -853,13 +940,17 @@
         l.el.style.display = ''; l.el.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * r.width}px,${(-v3.y * 0.5 + 0.5) * r.height}px)`;
       }
     }
+    function focusWild() { focus(-106, -140, 110); }
+    function focusForest() { focus(75, -140, 100); }
+    function focusSites() { focus(198, -135, 95); }
+    function focusSawmill() { focus(-28, -125, 80); }
     function focusHome() { focus(-138, -24, 92); }
     function focusTown() { focus(0, 84, 150); }
     function focusFarm(id) { const s = SLOT[id]; if (s) focus(s[0] - 6, s[1] + (s[1] < 0 ? 8 : -8), 92); }
     function focusAll() { focus(0, 30, 620); }
     window.addEventListener('resize', resize);
     resize(); cam.gx = cam.tx = -138; cam.gz = cam.tz = -24; cam.gd = cam.dist = 92;
-    Object.assign(W, { update, fx, highlight, resize, tileScreen, vehScreen, workAnim, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
+    Object.assign(W, { update, fx, highlight, resize, tileScreen, vehScreen, workAnim, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
     return W;
   }
 
