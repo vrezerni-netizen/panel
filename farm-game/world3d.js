@@ -353,7 +353,8 @@
   const ROAD_N = -100; // северная дорога вдоль леса и целины
   const SITE_POS = [[165, -135], [198, -135], [231, -135]]; // три стройплощадки
   const SAWMILL_POS = [-28, -128];
-  const MODEL = (kind, name, opts, fb, sc) => { const FM = root.FarmModels; let m = FM && FM.has(kind, name) ? FM.make(kind, name, opts) : null; if (!m) { m = fb ? fb() : new T.Group(); if (sc) m.scale.multiplyScalar(sc); } return m; };
+  const MODEL = (kind, name, opts, fb, sc) => { const FM = root.FarmModels; let m = null; if (FM && FM.has(kind, name)) { try { m = FM.make(kind, name, opts); } catch (err) { m = null; if (!MODEL.bad[kind + ':' + name]) { MODEL.bad[kind + ':' + name] = 1; console.warn('модель сломана, взята простая:', kind, name, err && err.message); } } } if (!m) { m = fb ? fb() : new T.Group(); if (sc) m.scale.multiplyScalar(sc); } return m; };
+  MODEL.bad = {};
   const hasModel = (kind, name) => !!(root.FarmModels && root.FarmModels.has(kind, name));
   const disposeObj = (o) => o.traverse((c) => { if (c.geometry && c.geometry.dispose) c.geometry.dispose(); });
   /** Забор из столбов и перекладин по ломаной точек (x,z). */
@@ -756,7 +757,7 @@
     function workAnim(k) { const v = vehs[k]; if (v) v.anim = { t: 0, x: v.g.position.x, z: v.g.position.z }; }
 
     // --- волки в северном лесу: живут своей жизнью (гуляют, сидят, лежат, воют), ничего не портят
-    const wolves = [], WOLF_AREAS = [[-150, -240, 38, 3], [95, -245, 40, 3], [-70, -310, 40, 2], [160, -300, 40, 2]]; // чаща к северу от лесных ферм, мимо деревни
+    const wolves = [], WOLF_AREAS = []; // волков в игре нет: владелец их не просил // чаща к северу от лесных ферм, мимо деревни
     function wolfPose(w, v) { if (w.pose === v) return; w.pose = v; w.poses.forEach((m, i) => { m.visible = i === v; }); }
     function initWolves() {
       let i = 0;

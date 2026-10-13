@@ -242,7 +242,14 @@
       for (const sp of [0, 1, 2, 4]) { const e = $('sp' + sp); if (e) e.classList.toggle('on', ui.speed === sp); }
     }
   }
-  function fitBar() { const h = $('bar').offsetHeight; if (h && h !== ui.barh) { ui.barh = h; document.documentElement.style.setProperty('--barh', h + 'px'); } }
+  const isTouch = () => matchMedia('(hover:none) and (pointer:coarse)').matches;
+  /** Панель с кнопками: сверху или снизу. Выбор запоминается; на телефоне по умолчанию сверху. */
+  function fitBar() {
+    const h = $('bar').offsetHeight, root = document.documentElement.style, pad = isTouch() ? 96 : 0; // на телефоне сверху шапка приложения
+    if (h && h !== ui.barh) { ui.barh = h; root.setProperty('--barh', h + 'px'); }
+    root.setProperty('--ht', (ui.barTop ? pad + (ui.barh || 60) + 4 : pad) + 'px'); root.setProperty('--bartop', pad + 'px');
+  }
+  function applyBarPos() { $('app').classList.toggle('bartop', !!ui.barTop); fitBar(); }
   window.addEventListener('resize', fitBar);
   function renderBar() {
     let html = `<div class="tip" id="b-tip"></div><div class="bstats"><div class="bst" id="b-up" title="Товар, который сейчас дорожает на рынке"></div><div class="bst" id="b-dn" title="Товар, который сейчас дешевеет"></div><div class="bst" id="b-stock" data-act="modal" data-id="barn" title="Склад"></div></div><div class="tools">`;
@@ -599,7 +606,7 @@
       const t = (ic, name, sub, act, data, badge, cls) => `<button class="tile ${cls || ''}" data-act="${act}" ${Object.entries(data || {}).map(([k, v]) => `data-${k}="${v}"`).join(' ')}><i>${ic}</i><b>${name}</b><small>${sub}</small>${badge ? `<span class="tb">${badge}</span>` : ''}</button>`;
       const unread = S.log.filter((l) => l.n > (ui.logSeen || 0)).length;
       const sec = (title, body) => `<div class="hubh">${title}</div><div class="tiles">${body}</div>`;
-      return sec('Куда посмотреть на карте', t('🏡', 'Моя ферма', 'грядки и двор', 'hubcam', { v: 'home' }) + t('🏙️', 'Город', 'рынок, магазины, банк', 'hubcam', { v: 'town' }) + t('🗺️', 'Вся карта', 'всё сразу сверху', 'hubcam', { v: 'all' }) + t('🌲', 'Лес и целина', 'на севере: рубка и волки', 'hubcam', { v: 'wild' }) + t('🚧', 'Стройплощадки', 'посмотреть на карте', 'hubcam', { v: 'sites' }))
+      return sec('Куда посмотреть на карте', t('🏡', 'Моя ферма', 'грядки и двор', 'hubcam', { v: 'home' }) + t('🏙️', 'Город', 'рынок, магазины, банк', 'hubcam', { v: 'town' }) + t('🗺️', 'Вся карта', 'всё сразу сверху', 'hubcam', { v: 'all' }) + t('🌲', 'Лес и целина', 'на севере: рубка леса', 'hubcam', { v: 'wild' }) + t('🚧', 'Стройплощадки', 'посмотреть на карте', 'hubcam', { v: 'sites' }))
         + sec('Здания и магазины', t('📦', 'Склад', 'отправить урожай на рынок', 'modal', { id: 'barn' }) + t('🏪', 'Рынок', 'цены и прилавок', 'modal', { id: 'market' }, Object.keys(S.stall).length ? '•' : '') + t('🐄', 'Загон и сараи', 'животные и корм', 'modal', { id: 'animals' }) + t('🪚', 'Лесопилка', 'брёвна в доски', 'modal', { id: 'sawmill' }, S.goods.log || '') + t('🏗️', 'Стройка', 'дома из досок на продажу', 'modal', { id: 'sites' }, S.sites.some((x) => x.done) ? '!' : '') + t('🛍️', 'Магазин семян', 'купить семена', 'modal', { id: 'seeds' }) + t('🚜', 'Техцентр', 'тракторы и автоматика', 'modal', { id: 'tech' }) + t('🏦', 'Банк', 'обмен монет и кристаллов', 'modal', { id: 'bank' }) + t('🎰', 'Колесо удачи', 'крутить за билеты', 'modal', { id: 'casino' }))
         + sec('Игра', t('📋', 'Заказы', 'жители платят больше', 'modal', { id: 'orders' }, S.orders.length || '') + t('🏘️', 'Мои фермы', 'участки и покупка', 'modal', { id: 'farms' }) + t('📜', 'Журнал', 'что произошло', 'modal', { id: 'log' }, unread || '') + t('⭐', 'Уровни', 'награды за уровни', 'modal', { id: 'levels' }) + t('❓', 'Как играть', 'правила и подсказки', 'modal', { id: 'help' }) + t('⚙️', 'Настройки', 'звук и сохранение', 'modal', { id: 'menu' }) + t('📷', 'Снимок', 'картинка игры (на компьютере)', 'photo', {}, '', 'dto'));
     },
@@ -608,6 +615,7 @@
     title: '⚙️ Настройки',
     render() {
       let h = card('🔊', 'Звук', ui.sound ? 'Включён' : 'Выключен', btn('snd', {}, ui.sound ? 'Выключить' : 'Включить', 'y'));
+      h += card('📍', 'Панель с кнопками', ui.barTop ? 'Сейчас сверху' : 'Сейчас снизу', btn('barpos', {}, ui.barTop ? 'Перенести вниз' : 'Перенести вверх', 'y'));
       h += card('❓', 'Как играть', 'Правила и подсказки', btn('modal', { id: 'help' }, 'Открыть', 'b'));
       h += card('🌍', 'Мои фермы', S.farms.map((f, i) => (i === S.cur ? '▶ ' : '') + L.FARM_DEFS.find((d) => d.id === f.id).name).join(' · '), '');
       h += card('🗑️', 'Начать заново', 'Весь прогресс будет удалён', btn('reset', {}, ui.confirm === 'reset' ? 'Точно? Нажми ещё раз' : 'Сбросить', 'r'));
@@ -624,13 +632,14 @@
         <b>4.</b> На рынке цены меняются — продавай, когда выгодно. Выполняй 📋 заказы — они платят в разы больше.<br>
         <b>5.</b> Копи монеты 🪙 → покупай животных, 🚜 трактор и 🌾 комбайн, машины побольше, новые фермы.<br>
         <b>6.</b> Билеты 🎟️ крутят 🎰 колесо: можно рискнуть и удвоить приз! 💎 кристаллы дают ускорение ×2.<br>
-        Нажми на здание в городе — откроется магазин. 🐺 В северном лесу живут волки: они просто гуляют и воют.<br><br><span class="dto"><b>Клавиши:</b> <span class="kbd">1</span>–<span class="kbd">9</span> инструменты · <span class="kbd">Tab</span> ферма/город · <span class="kbd">B</span> склад · <span class="kbd">M</span> рынок · <span class="kbd">Esc</span> закрыть · колесо мыши — приближение. Можно вести мышью с зажатой кнопкой по грядкам, чтобы копать, сеять или собирать сразу много.</span></div>${btn('close', {}, 'Поехали!', 'y')}`;
+        Нажми на здание в городе — откроется магазин.<br><br><span class="dto"><b>Клавиши:</b> <span class="kbd">1</span>–<span class="kbd">9</span> инструменты · <span class="kbd">Tab</span> ферма/город · <span class="kbd">B</span> склад · <span class="kbd">M</span> рынок · <span class="kbd">Esc</span> закрыть · колесо мыши — приближение. Можно вести мышью с зажатой кнопкой по грядкам, чтобы копать, сеять или собирать сразу много.</span></div>${btn('close', {}, 'Поехали!', 'y')}`;
     },
   };
 
   // ---------------------------------------------------------------- обработчики
   const A = {
     close: closeModal,
+    barpos: () => { ui.barTop = !ui.barTop; store.set('farm2.bartop', ui.barTop ? '1' : '0'); applyBarPos(); },
     hubcam: (d) => { closeModal(); goCam(d.v); },
     run: (d) => {
       const k = d.k, m = L.MACHINES[k], on = !L.isRun(S, k);
@@ -757,8 +766,9 @@
     S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(Object.keys(S.run || {}).length ? `С возвращением! Тебя не было ${Math.round(away / 60000)} мин — включённая техника работала 🌾` : `С возвращением! Тебя не было ${Math.round(away / 60000)} мин 🌾`, 'good'); } }
     ui.lastLog = S.logN || 0; ui.lvl = S.level; L.drainFx();
+    { const bp = store.get('farm2.bartop'); ui.barTop = bp == null ? isTouch() : bp === '1'; applyBarPos(); }
     try {
-      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => { const t = performance.now(); if (t - (ui.wolfAt || 0) < 4000) return; ui.wolfAt = t; toast('🐺 Волки живут в северном лесу и обходят людей стороной: они ничего не портят', ''); sfx.howl(0.6); }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal) openModal('animals'); } });
+      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => {  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal) openModal('animals'); } });
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }
     pickSeed(); if (window.__boot) window.__boot.tc = performance.now();
     window.__world = world;

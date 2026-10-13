@@ -195,3 +195,12 @@ html,body,#app,#stage{touch-action:none;-webkit-touch-callout:none}
 @media (min-width:900px) and (max-width:1199px){.bstats{display:none}}
 .tip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .place{width:62px}
+
+/* положение панели: --ht = где кончается панель сверху (на телефоне под шапкой приложения), остальное сдвигается от неё */
+@media (hover:none) and (pointer:coarse){:root{--ht:96px;--bartop:96px}}
+.topbar{top:var(--ht,0px)}.avatar{top:calc(var(--ht,0px) + 34px)}.lcol{top:calc(var(--ht,0px) + 14px)}.topr{top:calc(var(--ht,0px) + 12px)}#toasts{top:calc(var(--ht,0px) + 112px)}
+@media (max-width:899px),(hover:none) and (pointer:coarse){.avatar{top:calc(var(--ht,96px) + 30px)}.lcol{top:calc(var(--ht,96px) + 42px)}.topr{top:calc(var(--ht,96px) + 4px)}#toasts{top:calc(var(--ht,96px) + 96px)}}
+#app.bartop #bar{top:var(--bartop,0px);bottom:auto;border-top:0;border-bottom:1px solid var(--line);border-radius:0 0 12px 12px}
+#app.bartop .tip{order:99}
+#app.bartop #seedbar{bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
+#app.bartop .lcol2{bottom:calc(env(safe-area-inset-bottom,0px) + 86px)}
