@@ -85,17 +85,17 @@
   const autoEvery = (k, lv) => Math.round(MACHINES[k].every * Math.pow(0.82, lv - 1) * 10) / 10;
   const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1, sawmill: lv * 4 }[k]);
   const speedOf = (lv) => 1 + 0.08 * lv, doubleOf = (lv) => 0.04 * lv, feedUseOf = (lv) => Math.max(0.4, 1 - 0.06 * lv);
-  const plotsOf = (c, first) => ({ plots: [first || [8, 6], [10, 7], [12, 8], [14, 9]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900] });
+  const plotsOf = (c, first) => ({ plots: [first || [12, 8], [16, 10], [20, 12], [24, 14]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900] });
   const FARM_DEFS = [  // фермы открываются с уровнем; новые участки пустые
     Object.assign({ id: 'home', name: 'Моя ферма', icon: '🏡', level: 1, cost: 0, bonus: 1 }, plotsOf(0)),
     Object.assign({ id: 'meadow', name: 'Цветочный луг', icon: '🌼', level: 3, cost: 500, bonus: 1.05 }, plotsOf(500)),
     Object.assign({ id: 'grove', name: 'Тихая роща', icon: '🌳', level: 6, cost: 2000, bonus: 1.1 }, plotsOf(2000)),
     Object.assign({ id: 'valley', name: 'Долина', icon: '🌄', level: 8, cost: 4000, bonus: 1.2 }, plotsOf(4000)),
     Object.assign({ id: 'lake', name: 'Берег озера', icon: '🏞️', level: 11, cost: 9000, bonus: 1.3 }, plotsOf(9000)),
-    Object.assign({ id: 'hills', name: 'Горные террасы', icon: '⛰️', level: 16, cost: 15000, bonus: 1.4 }, plotsOf(15000, [10, 7])),
+    Object.assign({ id: 'hills', name: 'Горные террасы', icon: '⛰️', level: 16, cost: 15000, bonus: 1.4 }, plotsOf(15000, [14, 9])),
     Object.assign({ id: 'wild', name: 'Целина с лесом', icon: '🌲', level: 2, cost: 600, bonus: 1.0, wild: true }, { plots: [[22, 15], [26, 17], [30, 19], [34, 21]], plotCost: [0, 900, 2600, 6500] }),
     Object.assign({ id: 'forest', name: 'Лесной участок', icon: '🪵', level: 5, cost: 3500, bonus: 1.0, forestry: true }, { plots: [[18, 12], [22, 14], [26, 16]], plotCost: [0, 1800, 5200] }),
-    Object.assign({ id: 'orchard', name: 'Королевский сад', icon: '🍎', level: 20, cost: 40000, bonus: 1.6 }, plotsOf(40000, [10, 7])),
+    Object.assign({ id: 'orchard', name: 'Королевский сад', icon: '🍎', level: 20, cost: 40000, bonus: 1.6 }, plotsOf(40000, [14, 9])),
   ];
   const WATER_MS = [60000, 90000, 150000, 240000], CAN_COSTS = [0, 150, 400, 1000];
   const BARN_CAP = [200, 500, 1200, 3000], BARN_COSTS = [0, 400, 1500, 5000];
@@ -169,6 +169,10 @@
     // работа техники: только по команде игрока. Старые сохранения: уже купленная автоматика продолжает работать, как раньше.
     if (!s.run) { s.run = {}; for (const k of AUTO_KEYS) if (s.up[k] > 0) s.run[k] = true; }
     s.job = s.job || {}; s.runIdle = s.runIdle || {}; s.runWhy = s.runWhy || {}; s.jobN = s.jobN || 0; if (s.runSeed === undefined) s.runSeed = null;
+    for (const f of s.farms) { // поля стали больше: старые маленькие участки подрастают до размера своего уровня
+      const d = FARM_DEFS.find((x) => x.id === f.id), p = d && d.plots[f.plot || 0];
+      if (d && !d.wild && !d.forestry && p && (f.w < p[0] || f.h < p[1])) growFarm(f, Math.max(f.w, p[0]), Math.max(f.h, p[1]), d);
+    }
     s.sites = s.sites || []; s.nextSiteId = s.nextSiteId || 1; s.stats.logs = s.stats.logs || 0; s.stats.built = s.stats.built || 0; if (s.market && s.market.prop == null) s.market.prop = 1;
     return s;
   }
@@ -681,6 +685,12 @@
     if (s.crystals < c.gems) return fail('Не хватает кристаллов 💎');
     s.coins -= c.coins; s.crystals -= c.gems; s.barns[k] = (s.barns[k] || 0) + 1; return { ok: true, spent: c.coins };
   }
+  /** Увеличить участок, сохранив всё, что на нём уже растёт. */
+  function growFarm(f, w2, h2, def) {
+    const t2 = newTiles(w2, h2);
+    for (let y = 0; y < Math.min(f.h, h2); y++) for (let x = 0; x < Math.min(f.w, w2); x++) t2[y * w2 + x] = f.tiles[y * f.w + x];
+    const ow = f.w, oh = f.h; f.w = w2; f.h = h2; f.tiles = t2; if (def && (def.wild || def.forestry)) fillWild(f, def, ow, oh);
+  }
   function buyUpgrade(s, kind) {
     if (MACHINES[kind]) return buyMachine(s, kind);
     const cost = upgradeCost(s, kind);
@@ -688,9 +698,7 @@
     if (s.coins < cost) return fail('Не хватает монет');
     s.coins -= cost;
     if (kind === 'plot') {
-      const f = farm(s); f.plot++; const [w2, h2] = farmDef(s).plots[f.plot], t2 = newTiles(w2, h2);
-      for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) t2[y * w2 + x] = f.tiles[y * f.w + x];
-      const ow = f.w, oh = f.h; f.w = w2; f.h = h2; f.tiles = t2; { const dd = farmDef(s); if (dd.wild || dd.forestry) fillWild(f, dd, ow, oh); }
+      const f = farm(s); f.plot++; const [w2, h2] = farmDef(s).plots[f.plot]; growFarm(f, w2, h2, farmDef(s));
     } else s.up[kind]++;
     return { ok: true, spent: cost };
   }

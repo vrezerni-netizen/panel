@@ -102,7 +102,7 @@ test('покупка новой фермы и переключение', () => {
 });
 test('расширение участка сохраняет грядки', () => {
   const s = fresh(); s.coins = 1000; L.act(s, 'seed', 2, 2, 'wheat'); assert.ok(L.buyUpgrade(s, 'plot').ok);
-  assert.equal(L.farm(s).w, 10); assert.equal(L.tileAt(s, 2, 2).crop, 'wheat');
+  assert.equal(L.farm(s).w, 16); assert.equal(L.farm(s).h, 10); assert.equal(L.tileAt(s, 2, 2).crop, 'wheat');
 });
 test('оффлайн догоняет, но не бесконечно', () => {
   const s = fresh(); L.act(s, 'seed', 2, 2, 'wheat'); L.catchUp(s, 3600000); assert.ok(L.isRipe(L.tileAt(s, 2, 2)));
@@ -264,7 +264,7 @@ test('трактор сам вспахивает всё поле и платит
   const s = owned(['tractor'], 3); const f = L.farm(s), grass = () => f.tiles.filter((t) => t.k === 'grass').length, g0 = grass(), c0 = s.coins; L.drainFx();
   assert.ok(L.setRun(s, 'tractor', true).ok);
   runUntil(s, 2000); assert.ok(s.job.tractor, 'выехал'); assert.equal(grass(), g0, 'пока едет, поле не меняется');
-  runUntil(s, 240000); assert.equal(grass(), 0, 'всё поле вспахано'); assert.ok(s.coins < c0);
+  runUntil(s, 480000); assert.equal(grass(), 0, 'всё поле вспахано'); assert.ok(s.coins < c0);
   const ev = L.drainFx(); assert.ok(ev.length >= 2); assert.equal(ev[0].key, 'tractor'); assert.ok(ev[0].cells.length > 0 && ev[0].cells[0][2] === 'grass');
   L.setRun(s, 'tractor', false); const c = s.coins; runUntil(s, 60000); assert.equal(s.coins, c);
 });
@@ -310,4 +310,12 @@ test('топливо проверяется и при приезде: без м�
 test('выключили на полпути: выезд отменяется и поле не меняется', () => {
   const s = owned(['tractor'], 2); L.setRun(s, 'tractor', true); runUntil(s, 2500); assert.ok(s.job.tractor);
   const before = JSON.stringify(s.farms); L.setRun(s, 'tractor', false); assert.equal(s.job.tractor, undefined); runUntil(s, 30000); assert.equal(JSON.stringify(s.farms), before);
+});
+
+test('старые маленькие участки подрастают до нового размера и ничего не теряют', () => {
+  const s = fresh(); const f = L.farm(s); L.act(s, 'seed', 2, 2, 'wheat');
+  // старое сохранение: поле 8x6
+  const old = []; for (let y = 0; y < 6; y++) for (let x = 0; x < 8; x++) old.push(f.tiles[y * f.w + x]); f.w = 8; f.h = 6; f.tiles = old;
+  L.migrate(s); assert.equal(f.w, 12); assert.equal(f.h, 8); assert.equal(f.tiles.length, 96); assert.equal(L.tileAt(s, 2, 2).crop, 'wheat');
+  assert.deepEqual(L.FARM_DEFS.filter((d) => !d.wild && !d.forestry).map((d) => d.plots[3]), Array(7).fill([24, 14]));
 });
