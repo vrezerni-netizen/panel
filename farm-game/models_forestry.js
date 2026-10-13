@@ -305,6 +305,7 @@
     return {
       body: C.paint(o.body, { roughness: 0.3, metalness: 0.4, envMapIntensity: 0.75 }),
       accent: C.paint(o.accent, { roughness: 0.34, metalness: 0.35, envMapIntensity: 0.7 }),
+      rim: o.rimSteel ? C.metal(0xaab0b8) : C.paint(o.rim == null ? o.accent : o.rim, { roughness: 0.34, metalness: 0.35, envMapIntensity: 0.7 }),
       dark: C.pmat(o.dark || 0x30343a, { metalness: 0.5, roughness: 0.55, envMapIntensity: 0.5 }),
       black: C.pmat(0x131416, { metalness: 0.0, roughness: 0.6, envMapIntensity: 0.45 }),
       rubber: C.rubberM(), steel: C.metal(0xaab0b8), chrome: C.chromeM(), lamp: C.lightM(0xfff4d0), amber: C.lightM(0xff9d12), red: C.lightM(0xff2a1a),
@@ -313,12 +314,14 @@
   }
 
   // ====================================================================== шины и колёса
+  /** Box without the bottom face (10 triangles): for tyre lugs. */
+  function lugBox(w, h, d) { const g = new T.BoxGeometry(w, h, d).toNonIndexed(), p = g.attributes.position, n = g.attributes.normal, keep = []; for (let f = 0; f < p.count; f += 3) if (n.getY(f) > -0.5) keep.push(f); const np = [], nn = []; for (const f of keep) for (let k = 0; k < 3; k++) { np.push(p.getX(f + k), p.getY(f + k), p.getZ(f + k)); nn.push(n.getX(f + k), n.getY(f + k), n.getZ(f + k)); } const o = new T.BufferGeometry(); o.setAttribute('position', new T.Float32BufferAttribute(np, 3)); o.setAttribute('normal', new T.Float32BufferAttribute(nn, 3)); return o; }
   const _tg = new Map();
   /** Шина (ось X, центр в нуле): покрышка с профилем + грунтозацепы «ёлочкой». o: R, W, rimR, lugs, lugH, N, chev. */
   function tyreGeo(o) {
     const key = [o.R, o.W, o.rimR, o.lugs, o.lugH, o.N, o.chev].join('|'); if (_tg.has(key)) return _tg.get(key);
-    const R = o.R, W = o.W, rr = o.rimR, lugs = o.lugs || 0, lh = lugs ? (o.lugH || 0) : 0, Rb = R - lh, H = Rb - rr, N = o.N || 32;
-    const half = [[0, 0.43], [0.32, 0.5], [0.78, 0.48], [0.95, 0.43], [0.995, 0.34], [1, 0.22], [1, 0]];
+    const R = o.R, W = o.W, rr = o.rimR, lugs = o.lugs || 0, lh = lugs ? (o.lugH || 0) : 0, Rb = R - lh, H = Rb - rr, N = o.N || 26;
+    const half = [[0, 0.43], [0.34, 0.5], [0.84, 0.47], [0.985, 0.37], [1, 0.2], [1, 0]];
     const prof = []; for (const p of half) prof.push([p[0], -p[1]]); for (let i = half.length - 2; i >= 0; i--) prof.push([half[i][0], half[i][1]]);
     const pos = [], nr = prof.length;
     for (let i = 0; i < N; i++) {
@@ -331,7 +334,7 @@
     if (g.attributes.normal.getY(((nr - 1) >> 1)) < 0) { for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; } g.setIndex(idx); g.computeVertexNormals(); }
     const parts = [g.toNonIndexed()];
     if (lugs) {
-      const psi = (o.chev == null ? 32 : o.chev) * PI / 180, thick = TAU * Rb / lugs * 0.36, lenA = W * 0.44 / Math.cos(psi), la = W * 0.22, bg = new T.BoxGeometry(lenA, lh + 0.008, thick), q = new T.Quaternion(), m4 = new T.Matrix4(), mb = new T.Matrix4(), one = V3(1, 1, 1);
+      const psi = (o.chev == null ? 32 : o.chev) * PI / 180, thick = TAU * Rb / lugs * 0.36, lenA = W * 0.44 / Math.cos(psi), la = W * 0.22, bg = lugBox(lenA, lh + 0.008, thick), q = new T.Quaternion(), m4 = new T.Matrix4(), mb = new T.Matrix4(), one = V3(1, 1, 1);
       for (let i = 0; i < lugs; i++) for (const sd of [-1, 1]) {
         const tt = (i + 0.5) / lugs * TAU + (sd < 0 ? PI / lugs : 0), c = Math.cos(tt), s = Math.sin(tt), rho = Rb - 0.008 + (lh + 0.008) / 2;
         mb.makeBasis(V3(1, 0, 0), V3(0, c, s), V3(0, -s, c)); q.setFromRotationMatrix(mb); q.multiply(new T.Quaternion().setFromAxisAngle(V3(0, 1, 0), sd * psi));
@@ -345,20 +348,19 @@
   function rimGeo(rr, W, axis) {
     const key = [rr, W, axis].join('|'); if (_rg.has(key)) return _rg.get(key);
     const hw = W * 0.5, p = [[0, -0.8 * hw], [rr * 0.94, -0.8 * hw], [rr * 0.99, 0.72 * hw], [rr * 1.03, 0.86 * hw], [rr * 0.97, 0.9 * hw], [rr * 0.86, 0.66 * hw], [rr * 0.45, 0.62 * hw], [rr * 0.24, 0.9 * hw], [0, 1.0 * hw]];
-    const g = crease(lathe(p, 18, axis), 50); _rg.set(key, g); return g;
+    const g = crease(lathe(p, 14, axis), 50); _rg.set(key, g); return g;
   }
   function hubGeo(rr, W, side, nb) {
     const key = ['h', rr, W, side, nb].join('|'); if (_rg.has(key)) return _rg.get(key);
     const ax = side > 0 ? 'x' : 'nx', parts = [lathe([[0, 0], [rr * 0.17, 0], [rr * 0.14, 0.05 * rr], [0, 0.07 * rr]], 12, ax)];
-    for (let i = 0; i < nb; i++) { const a = i / nb * TAU, c = new T.CylinderGeometry(rr * 0.045, rr * 0.045, 0.03, 6); c.rotateZ(PI / 2); c.translate(side * 0.005, Math.cos(a) * rr * 0.3, Math.sin(a) * rr * 0.3); parts.push(c); }
+    for (let i = 0; i < nb; i++) { const a = i / nb * TAU, c = new T.CylinderGeometry(rr * 0.045, rr * 0.045, 0.03, 5); c.rotateZ(PI / 2); c.translate(side * 0.005, Math.cos(a) * rr * 0.3, Math.sin(a) * rr * 0.3); parts.push(c); }
     const out = mergeGeos(parts); _rg.set(key, out); return out;
   }
   /** Колесо: шина + обод + ступица. side: +1 наружу к +X, -1 к -X. */
   function wheel(g, P, x, y, z, side, o) {
     put(g, tyreGeo(o), P.rubber, x, y, z);
     put(g, rimGeo(o.rimR, o.W, side > 0 ? 'x' : 'nx'), o.rimMat || P.accent, x, y, z);
-    put(g, hubGeo(o.rimR, o.W, side, o.bolts || 8), P.steel, x + side * o.W * 0.45, y, z);
-    cy(g, P.dark, o.rimR * 0.3, o.W * 0.5, x - side * o.W * 0.28, y, z, 'x', 12);
+    put(g, hubGeo(o.rimR, o.W, side, o.bolts || 6), P.steel, x + side * o.W * 0.45, y, z);
   }
   /** Крыло-арка вокруг оси X: радиус Rf, ширина w, полу-угол a (от верха), вид сверху. */
   const _fg = {};
@@ -494,7 +496,7 @@
   function carrier(g, P, o) {
     const { R, Wt, rimR, xw, axF, axR, zB, zE, zP } = o;
     tag('wheels');
-    const wo = { R, W: Wt, rimR, lugs: o.lugs || 16, lugH: o.lugH || 0.08, N: 32, chev: 30, bolts: 8 };
+    const wo = { R, W: Wt, rimR, lugs: o.lugs || 13, lugH: o.lugH || 0.08, N: 26, chev: 30, bolts: 6, rimMat: P.rim };
     for (const z of axF.concat(axR)) for (const s of [-1, 1]) wheel(g, P, s * xw, R, z, s, wo);
     tag('chassis');
     const fy = 1.17, fh = 0.52, zFa = zB - 0.3, zFb = zP + 0.3, zRa = zP - 0.3, zRb = zE + 0.3, hubX = xw - Wt / 2;
@@ -610,7 +612,7 @@
   function buildHarvester(opts) {
     const lv = lvOf(opts), tier = lv <= 3 ? 0 : lv <= 6 ? 1 : 2, eight = lv >= 7, t10 = (lv - 1) / 9;
     const SC = [0.80, 0.84, 0.88, 0.90, 0.94, 0.98, 0.98, 1.02, 1.05, 1.08][lv - 1];
-    const P = palette(tier === 2 ? { body: 0xee6a14, accent: 0x18191c, dark: 0x2c2f35 } : tier === 1 ? { body: 0x1f7a3b, accent: 0xf3c418 } : { body: 0x34963f, accent: 0xf1c40f });
+    const P = palette(tier === 2 ? { body: 0xee6a14, accent: 0x18191c, dark: 0x2c2f35, rimSteel: true } : tier === 1 ? { body: 0x1f7a3b, accent: 0xf3c418 } : { body: 0x34963f, accent: 0xf1c40f });
     const g = new T.Group(), gl = [], rnd = lcg(1000 + lv * 31 + (opts.seed | 0) * 7);
     const R = tier === 2 ? 0.76 : 0.70, Wt = tier === 2 ? 0.72 : 0.64, rimR = tier === 2 ? 0.4 : 0.37, xw = 1.2;
     const axF = eight ? [3.25, 1.65] : [2.5], axR = eight ? [-1.75, -3.35] : [-1.55, -3.15];
