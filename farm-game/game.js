@@ -766,7 +766,7 @@
     S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(Object.keys(S.run || {}).length ? `С возвращением! Тебя не было ${Math.round(away / 60000)} мин — включённая техника работала 🌾` : `С возвращением! Тебя не было ${Math.round(away / 60000)} мин 🌾`, 'good'); } }
     ui.lastLog = S.logN || 0; ui.lvl = S.level; L.drainFx();
-    { const bp = store.get('farm2.bartop'); ui.barTop = bp == null ? isTouch() : bp === '1'; applyBarPos(); }
+    { const bp = store.get('farm2.bartop'); ui.barTop = bp === '1'; applyBarPos(); }
     try {
       world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => {  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal) openModal('animals'); } });
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }

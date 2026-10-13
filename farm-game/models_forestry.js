@@ -660,5 +660,97 @@
   }
   reg('vehicle', 'logger', buildHarvester);
 
+  // ====================================================================== грейфер, стойки, коники (форвардер, лесовоз)
+  /** Грейфер на роторе: начало = конец стрелы, центр колец челюстей на y = -1.12*s. ld — держит пачку брёвен. */
+  function grapple(P, s, rnd, hm, ld) {
+    const H = new T.Group(), S = (v) => v * s, yc = S(-1.12);
+    tag('grapple');
+    cy(H, P.steel, S(0.15), S(0.34), 0, S(-0.14), 0, 'y', 18); cy(H, P.dark, S(0.2), S(0.07), 0, S(0.05), 0, 'y', 18);
+    rbx(H, hm, S(0.46), S(0.28), S(0.5), 0, S(-0.4), 0, S(0.07));
+    cy(H, P.steel, S(0.045), S(0.78), 0, S(-0.47), 0, 'x', 10);
+    const R = S(0.52), tb = S(0.05), tg = new T.TorusGeometry(R, tb, 7, 15, 2.97);
+    for (const sd of [-1, 1]) {
+      for (const z of [-S(0.34), S(0.34)]) put(H, tg, hm, 0, yc, z, 0, 0, sd > 0 ? -1.83 : 2.0);
+      for (const z of [-S(0.34), S(0.34)]) { rod(H, P.dark, V3(sd * S(0.22), yc + S(0.47), z), V3(sd * S(0.34), S(-0.47), z * 0.55), S(0.035), 8); }
+      rod(H, hm, V3(sd * S(0.36), S(-0.47), -S(0.34)), V3(sd * S(0.36), S(-0.47), S(0.34)), S(0.05), 8);
+      hyd(H, P, V3(sd * S(0.12), S(-0.5), 0), V3(sd * S(0.4), yc + S(0.36), 0), S(0.03), 0.5);
+      for (const z of [-S(0.34), S(0.34)]) { cy(H, P.steel, S(0.06), S(0.06), sd * R * Math.cos(-1.83 + 0.0) * 0 + sd * S(0.4) * 0, yc - R + S(0.0), z, 'x', 8); }
+    }
+    if (ld) {
+      const spec = [[-0.28, -0.12, 0.16], [0.28, -0.12, 0.16], [0, -0.15, 0.15], [-0.15, 0.16, 0.14], [0.15, 0.16, 0.15]];
+      for (const [x, y, r] of spec) { const L = S(2.2 + rnd() * 0.9); put(H, logGeo(S(r) * 1.05, S(r) * 0.95, L, 10, (rnd() * 4) | 0, (rnd() * 4) | 0, (rnd() * 4) | 0), P.log, S(x), yc + S(y), (rnd() - 0.5) * S(0.5)).rotation.z = rnd() * TAU; }
+    }
+    return H;
+  }
+  /** Стойка коника: гнездо + наклонённая вовне труба-стойка + колпачок. */
+  function stake(g, P, x, y0, z, h, side, mat) {
+    const tilt = 0.045;
+    rbx(g, P.dark, 0.2, 0.34, 0.22, x, y0 + 0.17, z, 0.05);
+    rbx(g, mat, 0.1, h, 0.15, x + side * h * 0.5 * tilt, y0 + h / 2, z, 0.04, 0, 0, -side * tilt);
+    rbx(g, P.dark, 0.15, 0.08, 0.19, x + side * h * tilt, y0 + h, z, 0.03);
+  }
+  /** Коник (грузовая платформа со стойками): z0 — перед, z1 — зад, y — верх пола, x — полуширина, n пар стоек, h — высота стоек, bulk — защитный щит спереди. */
+  function bunk(g, P, o) {
+    const L = o.z0 - o.z1, zc = (o.z0 + o.z1) / 2, x = o.x, mat = o.mat || P.accent;
+    rbx(g, P.dark, x * 2 + 0.5, 0.12, L + 0.2, 0, o.y - 0.06, zc, 0.04);
+    for (const sd of [-1, 1]) rbx(g, P.dark, 0.2, 0.22, L + 0.3, sd * (x + 0.12), o.y - 0.2, zc, 0.06);
+    for (let i = 0; i < o.n; i++) { const z = o.z0 - (i + 0.5) * L / o.n; for (const sd of [-1, 1]) stake(g, P, sd * (x + 0.12), o.y - 0.0, z, o.h, sd, mat); }
+    if (o.bulk) {
+      const zb = o.z0 + 0.02, hh = o.bulk;
+      for (const sd of [-1, 1]) rbx(g, mat, 0.12, hh, 0.14, sd * (x - 0.05), o.y + hh / 2, zb, 0.04);
+      for (const yy of [0.3, 0.8, 1.3, hh - 0.08]) if (yy < hh) rbx(g, mat, 2 * (x - 0.05), 0.09, 0.1, 0, o.y + yy, zb, 0.03);
+      for (let i = -3; i <= 3; i++) rod(g, P.dark, V3(i * x * 0.28, o.y + 0.1, zb), V3(i * x * 0.28, o.y + hh - 0.1, zb), 0.02, 6);
+    }
+  }
+  /** Нагрузка брёвнами между стойками. */
+  function loadLogs(g, P, rnd, o) { tag('logs'); return logPile(g, P, rnd, o); }
+
+  // ====================================================================== ФОРВАРДЕР (vehicle/forwarder)
+  function buildForwarder(opts) {
+    const lv = lvOf(opts), tier = lv <= 3 ? 0 : lv <= 6 ? 1 : 2, t10 = (lv - 1) / 9;
+    const SC = [0.80, 0.84, 0.88, 0.91, 0.95, 0.99, 1.0, 1.03, 1.06, 1.09][lv - 1];
+    const P = palette(tier === 2 ? { body: 0xee6a14, accent: 0x18191c, dark: 0x2c2f35, rimSteel: true } : tier === 1 ? { body: 0x1f7a3b, accent: 0xf3c418 } : { body: 0x34963f, accent: 0xf1c40f });
+    const g = new T.Group(), gl = [], rnd = lcg(2000 + lv * 37 + (opts.seed | 0) * 7);
+    const R = tier === 2 ? 0.78 : 0.72, Wt = tier === 2 ? 0.76 : 0.68, rimR = tier === 2 ? 0.42 : 0.38, xw = 1.22;
+    const bunkL = lerp(4.4, 5.9, t10), zP = -0.55, bz0 = -0.95, bz1 = bz0 - bunkL, zB = 4.55, zE = bz1 - 0.5;
+    const axF = [3.15, 1.55], axR = [zE + 3.35, zE + 1.75], fenderMat = tier === 2 ? P.accent : P.body;
+    carrier(g, P, { R, Wt, rimR, xw, axF, axR, zB, zE, zP, fenderMat });
+    tag('deck');
+    rbx(g, P.dark, 2.3, 0.07, (zB - 0.12) - (zP + 0.16), 0, 1.585, ((zB - 0.12) + (zP + 0.16)) / 2, 0.03);
+    // баки, ступени
+    tag('tanks');
+    rbx(g, P.accent, 0.5, 0.7, 1.3, 1.04, 1.17, -1.05, 0.12); cy(g, P.steel, 0.07, 0.06, 1.04, 1.55, -0.7, 'y', 12); decalX(g, 'warn', 0.3, 0.3, 1.294, 1.17, -1.05, 1);
+    rbx(g, P.accent, 0.5, 0.62, 1.1, -1.04, 1.13, -1.05, 0.12); cy(g, P.steel, 0.06, 0.06, -1.04, 1.47, -0.7, 'y', 12);
+    steps(g, P, -1.42, 0.12, 1.55, 0.3, 0.7, 3, true);
+    // кабина (впереди)
+    const cabD = 1.85, cabZ = 2.85;
+    cab(g, gl, P, { cz: cabZ, y0: 1.8, w: 1.8, d: cabD, h: tier === 0 ? 1.85 : 1.95, tier });
+    // капот двигателя за кабиной
+    tag('hood');
+    const hp = [[0.3, 1.62], [0.3, 2.45], [0.55, 2.75], [1.2, 2.75], [1.85, 2.4], [1.85, 1.62]], hz = 1.07;
+    put(g, ex(hp, 1.7, { plane: 'zy', r: [0.04, 0.26, 0.26, 0.34, 0.06, 0.04], b: 0.05, q: 2 }), P.body, 0, 0, 0);
+    for (const s of [-1, 1]) {
+      decalX(g, tier === 2 ? 'band1' : 'band2', 1.4, 0.14, s * 0.853, 1.98, hz, s); decalX(g, 'grid', 1.05, 0.48, s * 0.853, 2.38, hz, s);
+      if (tier >= 1) decalX(g, tier === 2 ? 'p2' : 'p4', 0.95, 0.24, s * 0.853, 1.74, hz + 0.1, s);
+    }
+    cy(g, P.steel, 0.16, 0.5, -0.55, 2.95, 0.7, 'y', 18); rod(g, P.chrome, V3(-0.55, 3.15, 0.7), V3(-0.55, 3.9, 0.7), 0.06, 14); cy(g, P.dark, 0.1, 0.05, -0.55, 3.92, 0.7, 'y', 14);
+    rod(g, P.black, V3(0.55, 2.7, 1.2), V3(0.55, 3.3, 1.2), 0.08, 12); cy(g, P.black, 0.12, 0.09, 0.55, 3.35, 1.2, 'y', 14, 0.06);
+    // кран на пьедестале + грейфер
+    const y0c = 2.0;
+    cy(g, P.dark, 0.5, y0c - 1.45, 0, (y0c + 1.45) / 2, -0.3, 'y', 24);
+    const cr = crane(g, P, { zT: -0.3, y0: y0c, dir: 1, k: lerp(0.95, 1.2, t10), reachJ: lerp(2.0, 3.0, t10), extL: lerp(1.2, 1.9, t10), tier });
+    const gs = lerp(0.88, 1.12, t10), gr = grapple(P, gs, rnd, tier === 2 ? P.body : P.accent, true); gr.position.copy(cr.J3); g.add(gr);
+    // коник с брёвнами
+    const bx0 = 1.3, hmax = lerp(1.35, 2.1, t10), bY = 1.82, nst = tier === 0 ? 3 : 4;
+    tag('bunk'); bunk(g, P, { z0: bz0, z1: bz1, y: bY, x: bx0, n: nst, h: hmax + 0.4, mat: P.accent, bulk: tier >= 1 ? hmax + 0.6 : 0 });
+    loadLogs(g, P, rnd, { x0: -bx0 + 0.04, x1: bx0 - 0.04, y0: bY, hmax, zc: (bz0 + bz1) / 2 - 0.05, len: bunkL * 0.96, rmin: lerp(0.12, 0.15, t10), rmax: lerp(0.2, 0.26, t10), seg: 10, ragged: true });
+    // передний бампер-крышка и фары
+    tag('front');
+    rbx(g, P.body, 1.9, 0.34, 0.8, 0, 1.78, zB - 0.5, 0.12); decalZ(g, 'p2', 0.8, 0.2, 0, 1.78, zB - 0.1 + 0.003, 1);
+    for (const s of [-1, 1]) lamp(g, P, s * 0.7, 1.9, zB - 0.09, 0.24, 0.1, 'z+');
+    return finish(g, gl, (zB + zE) / 2, SC);
+  }
+  reg('vehicle', 'forwarder', buildForwarder);
+
   // @@MODELS@@
 })();
