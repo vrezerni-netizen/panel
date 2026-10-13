@@ -147,10 +147,44 @@ html,body,#app,#stage{touch-action:none;-webkit-touch-callout:none}
 
 /* телефон: сверху находится шапка приложения (закрыть / поделиться), HUD опускаем */
 @media (hover:none) and (pointer:coarse){
-  .topbar{top:96px}.avatar{top:126px}.lcol{top:104px}.topr{top:100px}#toasts{top:192px}
+  .topbar{top:96px}.avatar{top:126px}.lcol{top:138px}.topr{top:100px}#toasts{top:192px}
 }
 
 .to{display:none}
 @media (hover:none) and (pointer:coarse){.to{display:inline}.dto{display:none}}
 
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.chips .btn{white-space:nowrap}
+
+/* подписи у значков, меню с крупными кнопками */
+.tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:52px;height:52px}
+.tool .te{font-style:normal;font-size:21px;line-height:1.1}
+.tool .tl{font-style:normal;font-size:10px;font-weight:700;color:#c3ccd1;line-height:1.1;white-space:nowrap}.tool.on .tl{color:#fff}
+.tool .cd{font-size:10px}
+.places{display:flex;gap:4px;align-items:center}
+.tip{display:none;width:100%;text-align:center;font-size:11.5px;font-weight:600;color:#c9d3d8;padding:1px 4px 0;min-height:15px;line-height:1.25}
+.em{font-style:normal;font-size:17px;line-height:1}
+.pill{position:relative;display:flex;align-items:center;gap:6px;height:38px;padding:0 13px 0 9px;border-radius:19px;border:2px solid rgba(255,255,255,.16);background:rgba(44,52,57,.84);color:#eef1f3;font-weight:800;font-size:13px;cursor:pointer;backdrop-filter:blur(4px);white-space:nowrap}
+.pill i{font-style:normal;font-size:18px;line-height:1}.pill b{font-weight:800}
+.pill:hover{background:rgba(70,82,89,.94)}
+.pill.on{background:var(--green);border-color:#fff}
+.pill.glow{animation:glow 1.3s infinite;border-color:var(--amber)}
+.pill .bd{position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;padding:0 4px}
+.pill .bd.g{background:var(--green)}
+.lcol{gap:8px}.lcol2{flex-direction:column;align-items:flex-start}
+.hubh{margin:12px 2px 6px;font-weight:800;font-size:13px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}.hubh:first-child{margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:9px 10px;border-radius:8px;border:1px solid var(--cline);background:var(--card);color:var(--ink);cursor:pointer;min-height:70px}
+.tile:active{background:#dfe9d8}.tile i{font-style:normal;font-size:26px;line-height:1.1}.tile b{font-size:14px}.tile small{font-size:11.5px;color:var(--ink2);line-height:1.2}
+.tile .tb{position:absolute;top:6px;right:8px;min-width:20px;height:20px;border-radius:10px;background:var(--red);color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;padding:0 5px}
+@media (max-width:899px),(hover:none) and (pointer:coarse){
+  .tip{display:block}
+  .places{display:none}.sep{display:none}
+  .tool{width:min(40px,calc((100vw - 40px)/9));height:46px;gap:0}.tool .te{font-size:19px}.tool .tl{font-size:9px;letter-spacing:-.2px}
+  .tiles{grid-template-columns:1fr 1fr}
+  .pill{height:36px;font-size:12.5px;padding:0 11px 0 8px}
+}
+
+.pill.touchonly{display:none}
+@media (hover:none) and (pointer:coarse){.pill.touchonly{display:flex}}
+
+.tool .n{top:0;right:1px;bottom:auto}

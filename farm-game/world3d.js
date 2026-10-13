@@ -755,6 +755,40 @@
     function arrive(k, sfi, tx, ty) { const v = vehs[k], fv = sfiView(sfi); if (!v || !fv) return; const [x, z] = tileWorld(fv, tx, ty); setVehPos(k, x, z, v.g.rotation.y); v.jobId = 0; v.to = null; }
     function workAnim(k) { const v = vehs[k]; if (v) v.anim = { t: 0, x: v.g.position.x, z: v.g.position.z }; }
 
+    // --- волки в северном лесу: живут своей жизнью (гуляют, сидят, лежат, воют), ничего не портят
+    const wolves = [], WOLF_AREAS = [[-150, -165, 58, 3], [40, -165, 58, 3], [-85, -238, 48, 2], [115, -238, 48, 2]];
+    function wolfPose(w, v) { if (w.pose === v) return; w.pose = v; w.poses.forEach((m, i) => { m.visible = i === v; }); }
+    function initWolves() {
+      let i = 0;
+      for (const [ax, az, ar, cnt] of WOLF_AREAS) for (let k = 0; k < cnt; k++, i++) {
+        const g = new T.Group(), poses = [0, 1, 2].map((v) => { const m = MODEL('animal', 'wolf', { seed: i, variant: v }, () => part('sph', 0x777777, 0, 0.5, 0, 1.2, 0.8, 0.6)); m.visible = v === 0; g.add(m); return m; });
+        const a = i * 2.4, rr = Math.sqrt(((i * 37) % 100) / 100) * ar * 0.9;
+        g.position.set(ax + Math.cos(a) * rr, 0, az + Math.sin(a) * rr); g.rotation.y = i * 1.3; g.scale.setScalar(3); g.traverse((o) => { o.userData.wolf = true; }); world.add(g); const lab = addLabel('map', '🐺 Волк', new T.Vector3(), 'vlbl'); lab.maxCam = 110;
+        wolves.push({ g, lab, poses, area: [ax, az, ar], st: 'idle', t: 1 + (i % 5), tx: g.position.x, tz: g.position.z, ph: i * 1.7, pose: 0, trot: false });
+      }
+    }
+    function updateWolves(dt) {
+      for (const w of wolves) {
+        w.t -= dt; const p = w.g.position; w.lab.pos.set(p.x, w.pose === 0 ? 4.4 : 3.6, p.z);
+        if (w.st === 'walk') {
+          const dx = w.tx - p.x, dz = w.tz - p.z, d = Math.hypot(dx, dz);
+          if (d < 1 || w.t <= 0) { w.st = 'idle'; w.t = 2 + Math.random() * 4; w.g.position.y = 0; w.g.rotation.z = 0; }
+          else {
+            const sp = w.trot ? 6.5 : 3.2; p.x += dx / d * sp * dt; p.z += dz / d * sp * dt;
+            let da = Math.atan2(dx, dz) - w.g.rotation.y; da = Math.atan2(Math.sin(da), Math.cos(da)); w.g.rotation.y += da * Math.min(1, dt * 4);
+            const f = W.time * (w.trot ? 11 : 7) + w.ph; p.y = Math.abs(Math.sin(f)) * (w.trot ? 0.2 : 0.1); w.g.rotation.z = Math.sin(f) * 0.04;
+          }
+        } else if (w.st === 'idle') {
+          if (w.t > 0) continue;
+          const r = Math.random();
+          if (r < 0.58) { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * w.area[2]; w.tx = w.area[0] + Math.cos(a) * rr; w.tz = w.area[1] + Math.sin(a) * rr; w.trot = Math.hypot(w.tx - p.x, w.tz - p.z) > 40; w.st = 'walk'; w.t = 40; }
+          else if (r < 0.82) { wolfPose(w, 1); w.st = 'sit'; w.t = 5 + Math.random() * 5; if (Math.random() < 0.5 && cb.onHowl) cb.onHowl(Math.max(0, 1 - camera.position.distanceTo(p) / 320)); }
+          else { wolfPose(w, 2); w.st = 'lie'; w.t = 7 + Math.random() * 8; }
+        } else if (w.t <= 0) { wolfPose(w, 0); w.st = 'idle'; w.t = 1.5 + Math.random() * 2; }
+      }
+    }
+    function pickWolf(ev) { if (!wolves.length) return false; setRay(ev); return ray.intersectObjects(wolves.map((w) => w.g), true).length > 0; }
+
     // --- рейсы
     const truckMeshes = {};
     function routePos(prog) {
@@ -893,11 +927,13 @@
       }
       if (paint && paint.touch && !paint.moved) {
         const h = paint.hit;
-        if (h && h.owned && !h.pen) cb.onTile(h.sfi, h.x, h.y, true);
+        if (pickWolf(ev)) cb.onWolf && cb.onWolf();
+        else if (h && h.owned && !h.pen) cb.onTile(h.sfi, h.x, h.y, true);
         else if (h && h.pen) cb.onPen();
         else { const b = pickBuilding(ev); if (b) cb.onBuilding(b); }
       } else if (paint && !paint.touch && !paint.moved && !paint.active) {
         const b = pickBuilding(ev); if (b) cb.onBuilding(b);
+        else if (pickWolf(ev)) cb.onWolf && cb.onWolf();
         else { const p = groundAt(ev), hit = p && pickFarm(p); if (hit && hit.pen) cb.onPen(); }
       }
       paint = null; lastTile = '';
@@ -960,6 +996,7 @@
         }
         if (fv.drone) { const a = W.time * 0.5; fv.drone.position.set(fv.cx - fv.sx + Math.cos(a) * fv.w * TS * 0.35, 6 + Math.sin(W.time * 2) * 0.3, fv.cz - fv.sz + Math.sin(a) * fv.h * TS * 0.3); fv.drone.rotation.y = -a; }
       }
+      updateWolves(dt);
       for (const k of Object.keys(vehs)) {
         const v = vehs[k], job = S.job && S.job[k];
         if (job) { // по команде игрока машина сама едет к месту работы: положение считаем по прогрессу выезда, поэтому скорость игры и пауза учитываются
@@ -1001,7 +1038,8 @@
     function focusAll() { focus(-10, 30, 640); }
     window.addEventListener('resize', resize);
     resize(); cam.gx = cam.tx = -194; cam.gz = cam.tz = -24; cam.gd = cam.dist = 92;
-    Object.assign(W, { update, fx, highlight, resize, tileScreen, vehScreen, workAnim, arrive, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
+    initWolves();
+    Object.assign(W, { wolves, update, fx, highlight, resize, tileScreen, vehScreen, workAnim, arrive, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
     return W;
   }
 
