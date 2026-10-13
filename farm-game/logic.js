@@ -370,7 +370,7 @@
 
   // ---------------------------------------------------------------- работа техники по команде игрока
   // Без команды ничего не меняется: машина стоит, пока игрок сам не включит «Работать самой» (или не перетащит её на грядку).
-  const RUN_TRAVEL_MS = 3500, RUN_IDLE_MS = 4000;
+  const RUN_TRAVEL_MS = 3500, RUN_IDLE_MS = 8000;
   const FUEL = { tractor: 3, combine: 4, waterer: 2, spreader: 3, logger: 5, grinder: 4 };   // монет за один выезд
   const FXQ = [];                                      // события для картинки: что машина только что сделала
   const drainFx = () => FXQ.splice(0, FXQ.length);
@@ -401,12 +401,13 @@
   /** Куда машине ехать: первая по порядку грядка с работой, а центр выбираем так, чтобы площадь захватила как можно больше нужных клеток. */
   function pickRunTarget(s, k, fi) {
     const f = s.farms[fi], d = FARM_DEFS.find((x) => x.id === f.id), seed = runSeedOf(s);
-    if ((k === 'combine' || k === 'logger') && barnCap(s) - total(s.goods) < 1) return { why: 'Склад полон: отправь товар на рынок' };
-    if (k === 'spreader' && !(s.items.fert > 0)) return { why: 'Нет удобрения: купи в магазине' };
-    if (s.coins < FUEL[k]) return { why: `Нет монет на топливо (${FUEL[k]}🪙)` };
+    if (k === 'tractor' && d.forestry) return { why: 'в лесу не пашут' };
+    if ((k === 'combine' || k === 'logger') && barnCap(s) - total(s.goods) < 1) return { why: 'склад полон: отправь товар на рынок' };
+    if (k === 'spreader' && !(s.items.fert > 0)) return { why: 'нет удобрения: купи в магазине' };
+    if (s.coins < FUEL[k]) return { why: `нет монет на топливо (${FUEL[k]}🪙)` };
     const can = (x, y) => x >= 0 && y >= 0 && x < f.w && y < f.h && runCan(s, k, d, f.tiles[y * f.w + x], seed), cells = areaOf(s.up[k]);
     let first = -1; for (let i = 0; i < f.tiles.length; i++) if (can(i % f.w, (i / f.w) | 0)) { first = i; break; }
-    if (first < 0) return { why: { tractor: 'Всё вспахано', combine: 'Пока нечего собирать', waterer: 'Всё полито', spreader: 'Нечего удобрять', logger: 'Деревьев нет', grinder: 'Пней и камней нет' }[k] };
+    if (first < 0) return { why: { tractor: 'всё вспахано', combine: 'пока нечего собирать', waterer: 'всё полито', spreader: 'нечего удобрять', logger: 'деревьев нет', grinder: 'пней и камней нет' }[k] };
     const fx = first % f.w, fy = (first / f.w) | 0; let best = [fx, fy], bs = -1;
     for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
       const cx = fx + dx, cy = fy + dy; if (cx < 0 || cy < 0 || cx >= f.w || cy >= f.h) continue;
@@ -431,11 +432,13 @@
       }
       job.t -= dt; if (job.t > 0) continue;
       delete s.job[k];
-      const prev = s.cur; s.cur = fi;
-      const cells = areaCells(s, k, job.x, job.y).map(([cx, cy]) => { const t = f_tile(s, cx, cy); return [cx, cy, t && t.k, t && t.sp]; });
-      const r = act(s, k, job.x, job.y, runSeedOf(s));
-      s.cur = prev;
-      if (r.ok) { s.coins = Math.max(0, s.coins - FUEL[k]); FXQ.push({ key: k, sfi: fi, x: job.x, y: job.y, cells, r }); if (FXQ.length > 200) FXQ.shift(); }
+      if (s.coins < FUEL[k]) { s.runWhy[k] = `нет монет на топливо (${FUEL[k]}🪙)`; s.runIdle[k] = RUN_IDLE_MS; continue; }
+      const prev = s.cur; s.cur = fi; let cells, r;
+      try {
+        cells = areaCells(s, k, job.x, job.y).map(([cx, cy]) => { const t = f_tile(s, cx, cy); return [cx, cy, t && t.k, t && t.sp]; });
+        r = act(s, k, job.x, job.y, runSeedOf(s));
+      } finally { s.cur = prev; }
+      if (r.ok) { s.coins -= FUEL[k]; FXQ.push({ key: k, sfi: fi, x: job.x, y: job.y, cells, r }); if (FXQ.length > 200) FXQ.shift(); }
       else { s.runWhy[k] = r.msg; s.runIdle[k] = RUN_IDLE_MS; }
     }
   }

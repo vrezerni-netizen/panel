@@ -246,13 +246,14 @@ const owned = (keys, lv) => { const s = fresh(); s.level = 14; s.coins = 1e6; s.
 const runUntil = (s, ms) => { for (let t = 0; t < ms; t += 500) L.tick(s, 500); };
 const snap = (s) => JSON.stringify([s.farms, s.goods, s.coins, s.items, s.seeds]);
 test('без команды техника и автоматика ничего не меняют', () => {
-  const s = owned(['tractor', 'combine', 'waterer', 'spreader', 'drone', 'collector', 'seeder', 'courier', 'sawmill']); s.autoSeed = 'wheat'; s.goods.log = 20; s.items.fert = 5;
-  L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 80000);
-  const before = JSON.stringify([s.farms[0].tiles.filter((t) => t.k !== 'crop'), s.goods, s.seeds, s.coins]);
-  runUntil(s, 120000);
-  assert.equal(L.isRun(s, 'tractor'), false); assert.equal(L.isRun(s, 'drone'), false);
-  assert.equal(JSON.stringify([s.farms[0].tiles.filter((t) => t.k !== 'crop'), s.goods, s.seeds, s.coins]), before);
-  assert.deepEqual(L.drainFx(), []);
+  const s = owned(['tractor', 'combine', 'waterer', 'spreader', 'logger', 'grinder', 'drone', 'collector', 'seeder', 'courier', 'sawmill']);
+  s.autoSeed = 'wheat'; s.goods.log = 20; s.goods.egg = 40; s.items.fert = 5; s.animals.chicken = 2; s.barns.chicken = 1; s.prod.chicken = { acc: 0, pending: 3 };
+  L.act(s, 'seed', 2, 2, 'wheat'); L.act(s, 'seed', 3, 2, 'wheat'); L.tick(s, 80000);
+  const snapAll = () => JSON.stringify([s.farms.map((f) => f.tiles.map((t) => (t.k === 'crop' ? ['crop', t.crop] : t.k))), s.goods, s.seeds, s.coins, s.items, s.trips, s.cool, s.xp]);
+  const before = snapAll(), p0 = s.prod.chicken.pending;
+  runUntil(s, 600000);
+  for (const k of Object.keys(L.MACHINES)) assert.equal(L.isRun(s, k), false, k);
+  assert.equal(snapAll(), before); assert.ok(s.prod.chicken.pending >= p0, 'робот-сборщик не забирал'); assert.deepEqual(L.drainFx(), []);
 });
 test('включить можно только купленное, животное оборудование не включается', () => {
   const s = owned([]); assert.equal(L.setRun(s, 'tractor', true).ok, false); assert.equal(L.setRun(s, 'feeder', true).ok, false);
@@ -280,7 +281,7 @@ test('комбайн собирает созревшее, водная и удо
 });
 test('комбайн ждёт, если склад полон, и говорит почему', () => {
   const s = owned(['combine']); L.act(s, 'seed', 2, 2, 'wheat'); L.tick(s, 80000); s.goods.wheat = L.barnCap(s); L.setRun(s, 'combine', true); runUntil(s, 10000);
-  assert.ok(/Склад полон/.test(L.runStatus(s, 'combine').why)); assert.ok(L.isRipe(L.tileAt(s, 2, 2)));
+  assert.ok(/склад полон/.test(L.runStatus(s, 'combine').why)); assert.ok(L.isRipe(L.tileAt(s, 2, 2)));
 });
 test('харвестер и корчеватель сами расчищают целину, ферма игрока не переключается', () => {
   const s = owned(['logger', 'grinder'], 6); s.up.barn = 3; assert.ok(L.unlockFarm(s, 'wild').ok); s.cur = 0; const f = s.farms[1], n = (k) => f.tiles.filter((t) => t.k === k).length;
@@ -300,4 +301,13 @@ test('автоматика включается по команде, стары�
 });
 test('выключенная ферма удалена или машина продана — работа сама гасится', () => {
   const s = owned(['tractor']); L.setRun(s, 'tractor', true); s.run.tractor = 'gone'; L.tick(s, 1000); assert.equal(L.isRun(s, 'tractor'), false);
+});
+
+test('топливо проверяется и при приезде: без монет машина не работает бесплатно', () => {
+  const s = owned(['tractor'], 2); L.setRun(s, 'tractor', true); runUntil(s, 2500); assert.ok(s.job.tractor); const grass = () => L.farm(s).tiles.filter((t) => t.k === 'grass').length, g0 = grass();
+  s.coins = 0; runUntil(s, 6000); assert.equal(grass(), g0); assert.ok(/топлив/.test(s.runWhy.tractor)); assert.equal(s.coins, 0);
+});
+test('выключили на полпути: выезд отменяется и поле не меняется', () => {
+  const s = owned(['tractor'], 2); L.setRun(s, 'tractor', true); runUntil(s, 2500); assert.ok(s.job.tractor);
+  const before = JSON.stringify(s.farms); L.setRun(s, 'tractor', false); assert.equal(s.job.tractor, undefined); runUntil(s, 30000); assert.equal(JSON.stringify(s.farms), before);
 });

@@ -188,3 +188,10 @@ html,body,#app,#stage{touch-action:none;-webkit-touch-callout:none}
 @media (hover:none) and (pointer:coarse){.pill.touchonly{display:flex}}
 
 .tool .n{top:0;right:1px;bottom:auto}
+
+/* настольный компьютер: нижняя панель не должна вылезать за экран */
+@media (min-width:900px) and (max-width:1899px){.places,.sep{display:none}}
+@media (min-width:900px) and (max-width:1399px){.dt{display:none}}
+@media (min-width:900px) and (max-width:1199px){.bstats{display:none}}
+.tip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.place{width:62px}

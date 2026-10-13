@@ -756,7 +756,7 @@
     function workAnim(k) { const v = vehs[k]; if (v) v.anim = { t: 0, x: v.g.position.x, z: v.g.position.z }; }
 
     // --- волки в северном лесу: живут своей жизнью (гуляют, сидят, лежат, воют), ничего не портят
-    const wolves = [], WOLF_AREAS = [[-150, -165, 58, 3], [40, -165, 58, 3], [-85, -238, 48, 2], [115, -238, 48, 2]];
+    const wolves = [], WOLF_AREAS = [[-150, -240, 38, 3], [95, -245, 40, 3], [-70, -310, 40, 2], [160, -300, 40, 2]]; // чаща к северу от лесных ферм, мимо деревни
     function wolfPose(w, v) { if (w.pose === v) return; w.pose = v; w.poses.forEach((m, i) => { m.visible = i === v; }); }
     function initWolves() {
       let i = 0;
@@ -787,7 +787,7 @@
         } else if (w.t <= 0) { wolfPose(w, 0); w.st = 'idle'; w.t = 1.5 + Math.random() * 2; }
       }
     }
-    function pickWolf(ev) { if (!wolves.length) return false; setRay(ev); return ray.intersectObjects(wolves.map((w) => w.g), true).length > 0; }
+    function pickWolf(ev) { if (!wolves.length) return false; setRay(ev); return ray.intersectObjects(wolves.map((w) => w.poses[w.pose]), true).length > 0; }
 
     // --- рейсы
     const truckMeshes = {};
@@ -895,7 +895,7 @@
         else { const k = cam.dist * 0.0017; panBy(-dx * k, -dy * k * 1.3); cam.tx = cam.gx; cam.tz = cam.gz; } return; }
       const S = W.S;
       if (drag) {
-        if (Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) > 4) drag.moved = true;
+        if (Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) > (ev.pointerType === 'touch' ? 10 : 4)) drag.moved = true;
         const p = groundAt(ev); if (p) { const v = vehs[drag.k], nx = p.x + drag.off[0], nz = p.z + drag.off[1]; const dxm = nx - v.g.position.x, dzm = nz - v.g.position.z; setVehPos(drag.k, nx, nz, Math.hypot(dxm, dzm) > 0.05 ? Math.atan2(dxm, dzm) : null); v.g.position.y = 0.35;
           highlight(vehCells(drag.k, pickFarm(p), S), 0xffc83d); } return; }
       if (paint && paint.touch) {
@@ -927,8 +927,8 @@
       }
       if (paint && paint.touch && !paint.moved) {
         const h = paint.hit;
-        if (pickWolf(ev)) cb.onWolf && cb.onWolf();
-        else if (h && h.owned && !h.pen) cb.onTile(h.sfi, h.x, h.y, true);
+        if (h && h.owned && !h.pen) cb.onTile(h.sfi, h.x, h.y, true);
+        else if (pickWolf(ev)) cb.onWolf && cb.onWolf();
         else if (h && h.pen) cb.onPen();
         else { const b = pickBuilding(ev); if (b) cb.onBuilding(b); }
       } else if (paint && !paint.touch && !paint.moved && !paint.active) {
@@ -999,11 +999,11 @@
       updateWolves(dt);
       for (const k of Object.keys(vehs)) {
         const v = vehs[k], job = S.job && S.job[k];
-        if (job) { // по команде игрока машина сама едет к месту работы: положение считаем по прогрессу выезда, поэтому скорость игры и пауза учитываются
+        if (job && !(drag && drag.k === k)) { // по команде игрока машина сама едет к месту работы: положение считаем по прогрессу выезда, поэтому скорость игры и пауза учитываются
           if (v.jobId !== job.id) { v.jobId = job.id; v.from = [v.g.position.x, v.g.position.z]; const jv = views.find((q) => q.id === job.farm); v.to = jv ? tileWorld(jv, job.x, job.y) : null; }
           if (v.to) {
             const u = Math.min(1, Math.max(0, 1 - job.t / job.total)), e = u * u * (3 - 2 * u), nx = lerp(v.from[0], v.to[0], e), nz = lerp(v.from[1], v.to[1], e), dx = v.to[0] - v.from[0], dz = v.to[1] - v.from[1];
-            v.g.position.set(nx, 0.1, nz);
+            const q = Math.min(1, dt * 12); v.g.position.set(v.g.position.x + (nx - v.g.position.x) * q, 0.1, v.g.position.z + (nz - v.g.position.z) * q); // игра считает 10 раз в секунду, глаже двигаем
             if (Math.hypot(dx, dz) > 0.5) { let da = Math.atan2(dx, dz) - v.g.rotation.y; da = Math.atan2(Math.sin(da), Math.cos(da)); v.g.rotation.y += da * Math.min(1, dt * 5); }
           }
         } else if (v.jobId) {
