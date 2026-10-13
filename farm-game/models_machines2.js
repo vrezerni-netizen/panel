@@ -498,7 +498,7 @@
   function buildCombine(lv) {
     const g = new T.Group(), gl = [], t = lv <= 3 ? 0 : lv <= 6 ? 1 : 2, tracks = lv >= 8;
     const P = palette({ body: [0x9b241f, 0xa81e19, 0xa5151a][t], rough: [0.46, 0.34, 0.22][t], dark: 0x3a3e44, grey: 0xaeb3b8 });
-    const zEnd = -(3.8 + 0.45 * t), tankL = [2.6, 3.2, 3.8][t], tankTop = [4.0, 4.18, 4.34][t], tankHW = [1.32, 1.4, 1.48][t], tankZ1 = 0.72, tankZ0 = tankZ1 - tankL, tcz = (tankZ0 + tankZ1) / 2;
+    const sub = t === 2 ? lv - 7 : (lv - 1) % 3, tankL = [2.6, 3.2, 3.8][t] + 0.1 * sub, tankTop = [4.0, 4.18, 4.34][t] + 0.03 * sub, tankHW = [1.32, 1.4, 1.48][t], tankZ1 = 0.72, tankZ0 = tankZ1 - tankL, tcz = (tankZ0 + tankZ1) / 2, zEnd = tankZ0 - [1.92, 1.77, 1.62][t];
     const fz = 1.55, fR = [0.86, 0.98, 1.1][t], fW = [0.62, 0.74, 0.9][t], fx = [1.37, 1.43, 1.5][t], rzA = zEnd + 0.8, rR = [0.55, 0.6, 0.66][t], rW = [0.38, 0.42, 0.5][t], rx = [1.0, 1.05, 1.1][t];
     const cabT = lv >= 3 ? Math.max(t, 1) : 0, cabW = [1.9, 1.98, 2.06][t];
     tag('lower body');
@@ -635,7 +635,7 @@
       truss(g, P, s * inner, s * hinge, ybot, ybot, zb, depth, { chord: P.body });
       truss(g, P, s * hinge, s * hinge2, ybot, ybot, zb, depth * 0.9, { chord: P.body });
       truss(g, P, s * hinge2, s * (half - 0.1), ybot, ybot + lift, zb, depth * 0.75, { chord: P.body });
-      for (const xh of [hinge, hinge2]) { put(g, rb(0.16, depth + 0.14, 0.5, 0.04, 0), P.dark, s * xh, ybot + depth / 2 - 0.02, zb); rod(g, P.steel, V3(s * xh, ybot + depth + 0.1, zb - 0.13), V3(s * xh, ybot - 0.08, zb - 0.13), 0.03, 6); }
+      for (const xh of [hinge, hinge2]) { put(g, rb(0.12, depth + 0.1, 0.34, 0.03, 0), P.dark, s * xh, ybot + depth / 2 - 0.02, zb); rod(g, P.steel, V3(s * xh, ybot + depth + 0.1, zb - 0.13), V3(s * xh, ybot - 0.08, zb - 0.13), 0.03, 6); }
       put(g, rb(0.1, 0.5, 0.4, 0.04, 0), P.dark, s * (half - 0.04), ybot + lift + 0.1, zb);
       // тросовые растяжки и гидроцилиндры складывания
       rod(g, P.black, V3(s * 0.62, 3.0, zb - 0.1), V3(s * hinge, ybot + depth, zb), 0.008, 4); if (t >= 1) rod(g, P.black, V3(s * 0.62, 3.0, zb - 0.1), V3(s * hinge2, ybot + depth * 0.9, zb), 0.008, 4);
@@ -649,7 +649,7 @@
     const half = 7 + (lv - 1) * 5 / 9;
     const P = palette({ body: t < 2 ? [0x1c5fae, 0x1a55a2][t] : 0xdfae0f, accent: 0xeef0f2, rough: [0.44, 0.33, 0.22][t], dark: t < 2 ? 0x353a42 : 0x2b2e33, grey: 0xc9ced2, metallic: 0.3 });
     const R = [0.85, 0.88, 0.9, 0.95, 0.98, 1.0, 1.03, 1.06, 1.09, 1.12][lv - 1], W = 0.36 + 0.012 * (lv - 1), wx = [1.28, 1.3, 1.32, 1.36, 1.38, 1.4, 1.42, 1.45, 1.47, 1.5][lv - 1];
-    const fz = 2.45, rz = [-1.9, -2.2, -2.5][t], tr = [0.88, 1.0, 1.12][t], tlen = [2.6, 3.2, 3.8][t], tz1 = 0.25, tcz = tz1 - tlen / 2, tyc = 1.95 + tr, zEnd = tz1 - tlen - 0.45, zb = zEnd - 0.1;
+    const fz = 2.45, rz = [-1.9, -2.2, -2.5][t], sub = t === 2 ? lv - 7 : (lv - 1) % 3, tr = [0.88, 1.0, 1.12][t] + 0.025 * sub, tlen = [2.6, 3.2, 3.8][t] + 0.12 * sub, tz1 = 0.25, tcz = tz1 - tlen / 2, tyc = 1.95 + tr, zEnd = tz1 - tlen - 0.45, zb = zEnd - 0.1;
     // --- колёса на высоких ногах
     tag('wheels');
     for (const s of [-1, 1]) for (const z of [fz, rz]) {

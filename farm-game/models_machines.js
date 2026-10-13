@@ -113,7 +113,7 @@
   const BOXC = (w, h, d) => { const k = 'b' + [w, h, d].map((v) => +(+v).toFixed(4)).join('_'); return RBC[k] || (RBC[k] = new T.BoxGeometry(w, h, d)); };
   const rb = (w, h, d, r) => { const k = [w, h, d, r].map((v) => v == null ? '' : +(+v).toFixed(4)).join('_'); return RBC[k] || (RBC[k] = Math.min(w, h, d) < 0.105 || r === 0 ? new T.BoxGeometry(w, h, d) : crease(rbox2(w, h, d, r == null ? 0.03 : r), 52)); };
   const cyg = (r1, r2, h, s) => { const k = [r1, r2, h, s].join('_'); return CYC[k] || (CYC[k] = new T.CylinderGeometry(r1, r2, h, s || 14)); };
-  const BALL = {}; const ball = (r) => BALL[r] || (BALL[r] = new T.SphereGeometry(r, 8, 6));
+
   /** Профиль в плоскости (z,y), выдавленный на ширину w по оси X (центр по X=0): крылья, борта, рамы. */
   function sx(pts, w, bev) { const g = ext(pts, w, bev == null ? 0.012 : bev, 1); g.rotateY(-PI / 2); return crease(g, 40); }
   const put = (g, geo, m, x, y, z, rx, ry, rz) => { const o = mesh(geo, m, x, y, z, rx, ry, rz); g.add(o); return o; };
@@ -134,7 +134,6 @@
   function hyd(g, mb, mc, a, b, r) {
     const A = new V3(a[0], a[1], a[2]), B = new V3(b[0], b[1], b[2]), D = B.clone().sub(A), L = D.length(), u = D.clone().normalize(), mid = A.clone().add(u.clone().multiplyScalar(L * 0.5));
     rod(g, mb, a, [mid.x, mid.y, mid.z], r, 12); rod(g, mc, [mid.x, mid.y, mid.z], b, r * 0.5, 10);
-    const e = A.clone().add(u.clone().multiplyScalar(L * 0.5)); void e;
     put(g, cyg(r * 0.9, r * 0.9, r * 1.6, 8), mb, a[0], a[1], a[2], 0, 0, PI / 2); put(g, cyg(r * 0.6, r * 0.6, r * 1.6, 8), mc, b[0], b[1], b[2], 0, 0, PI / 2);
   }
   /** Гибкий шланг/кабель по точкам (Catmull-Rom). */
@@ -142,7 +141,6 @@
     const curve = new T.CatmullRomCurve3(pts.map((p) => new V3(p[0], p[1], p[2])));
     return put(g, new T.TubeGeometry(curve, segs || Math.max(8, pts.length * 4), r, rs || 6, false), m, 0, 0, 0);
   }
-  const _nrm = new V3(); void _nrm;
 
   // ------------------------------------------------------------------ процедурные текстуры
   const canvasOf = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c; };
@@ -247,10 +245,6 @@
   const glassBox = (w, h, d, x, y, z, rx, ry, rz) => GLA.at(new T.BoxGeometry(w, h, d), x, y, z, rx, ry, rz);
   function begin() { GLA = new Acc(); return new T.Group(); }
   function finish(g, tint, gscale) {
-    if (window.__MM_DEBUG) { // отладка: самые тяжёлые детали до склейки
-      const L = []; g.traverse((o) => { if (o.isMesh) { const n = (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; L.push([n, o.geometry.type, o.material.color ? o.material.color.getHexString() : '', o.position.x.toFixed(1), o.position.y.toFixed(1), o.position.z.toFixed(1)]); } });
-      L.sort((a, b) => b[0] - a[0]); console.log('MMDBG ' + L.slice(0, 28).map((r) => r.join(' ')).join(' | ') + ' | total meshes ' + L.length + ' glass ' + GLA.p.length / 9);
-    }
     const out = C.bakeTex(g);
     if (!GLA.empty) { const gm = GLA.mesh(glassM(tint || 0x86aebd)); gm.castShadow = false; gm.receiveShadow = false; if (gscale && gscale !== 1) gm.scale.setScalar(gscale); out.add(gm); }
     // центрируем опору по оси Z, опускаем на землю
@@ -326,6 +320,7 @@
   }
 
   // ------------------------------------------------------------------ колёсный трактор (классический L1-3 и современный L4-6)
+  const sec6 = (z, y0, ym, y1, wB, wT, r) => ({ z, cx: 0, r, poly: [[-wB / 2, y0], [wB / 2, y0], [wT / 2, ym], [wT / 2, y1], [-wT / 2, y1], [-wT / 2, ym]] });
   const DIM = {
     A: { Rr: 0.90, Wr: 0.62, xr: 1.02, Rf: 0.56, Wf: 0.40, xf: 0.95, WB: 2.65, rimKr: 0.56, rimKf: 0.52,
       hood: { z0: 0.52, z1: 3.08, yb: 0.86, yt0: 1.98, yt1: 1.62, wb0: 1.02, wb1: 0.94, wt0: 0.86, wt1: 0.76, curve: 1.2 },
@@ -404,6 +399,7 @@
     if (modern && ex >= 1) {
       for (const s of [-1, 1]) { beam(g, mt.dark, [s * 0.34, 0.62, H.z1 - 0.2], [s * 0.42, 0.55, H.z1 + 0.65], 0.09, 0.08, 0); hyd(g, mt.dark, mt.chrome, [s * 0.6, 0.55, H.z1 - 0.1], [s * 0.45, 0.62, H.z1 + 0.4], 0.04); }
       put(g, rb(1.1, 0.12, 0.1, 0.03), mt.steel, 0, 0.58, H.z1 + 0.66);
+      if (ex >= 2) for (let i = 0; i < 3; i++) put(g, rb(0.95, 0.13, 0.3, 0.03), mt.steel, 0, 0.7 + i * 0.14, H.z1 + 0.7);
     }
     // задняя навеска, ВОМ, прицепная скоба
     const hz = D.hitchZ, hy = D.hitchY;
@@ -535,6 +531,17 @@
     put(g, rb(2.4, 0.46, 0.36, 0.09), mt.dark, 0, 1.0, H.z1 + 0.12); decalS(g, mt.sh, 'haz', 0.62, 0.4, -0.88, 1.0, H.z1 + 0.305, 0, 0); decalS(g, mt.sh, 'haz', 0.62, 0.4, 0.88, 1.0, H.z1 + 0.305, 0, 0);
     put(g, rb(1.1, 0.12, 0.22, 0.03), mt.steel, 0, 0.72, H.z1 + 0.18);
     if (ex >= 3) for (let i = 0; i < 3; i++) put(g, rb(0.9, 0.12, 0.3, 0.03), mt.steel, 0, 0.45 + i * 0.13, H.z1 + 0.4);
+    // L10: фронтальный бункер на передней навеске с катком-прикатывателем (второе орудие)
+    if (ex >= 4) {
+      const fz = H.z1 + 1.5, R1 = [0.05, 0.05, 0.1, 0.14, 0.14, 0.1], y0 = 0.98, ym = 1.42, y1 = 1.82;
+      for (const s of [-1, 1]) { beam(g, mt.frame, [s * 0.5, 0.82, H.z1 + 0.25], [s * 0.8, 0.9, fz - 0.4], 0.14, 0.14, 0); hyd(g, mt.dark, mt.chrome, [s * 0.9, 1.2, H.z1 + 0.2], [s * 0.82, 1.0, fz - 0.5], 0.05); }
+      put(g, loft([sec6(fz - 0.95, y0 + 0.2, ym + 0.1, y1 - 0.2, 0.8, 2.3, R1), sec6(fz - 0.8, y0, ym, y1, 1.0, 2.6, R1), sec6(fz + 0.8, y0, ym, y1 - 0.05, 1.0, 2.6, R1), sec6(fz + 0.95, y0 + 0.2, ym - 0.05, y1 - 0.3, 0.8, 2.3, R1)]), mt.body, 0, 0, 0);
+      for (const hx of [-0.8, 0, 0.8]) { put(g, cyg(0.26, 0.28, 0.06, 12), mt.dark, hx, y1 + 0.03, fz - 0.1); put(g, cyg(0.1, 0.1, 0.05, 8), mt.chrome, hx, y1 + 0.08, fz - 0.1); }
+      put(g, rb(1.5, 0.06, 0.1, 0.02), mt.trim, 0, y1 + 0.02, fz + 0.45);
+      const rz = fz - 0.1, RA = new Acc(); cylX(g, mt.dark, 0.28, 2.3, 0, 0.3, rz, 12); for (let i = 0; i < 6; i++) RA.at(cyg(0.32, 0.32, 0.08, 10), -1.0 + i * 0.4, 0.3, rz, 0, 0, PI / 2); g.add(RA.mesh(mt.steel));
+      for (const s of [-1, 1]) beam(g, mt.frame, [s * 1.05, 0.98, rz], [s * 1.12, 0.32, rz], 0.08, 0.1, 0);
+      for (const s of [-1, 1]) hose(g, mt.rubber, [[s * 0.2, 0.9, fz - 0.9], [s * 0.3, 1.0, H.z1 + 0.3], [s * 0.35, 1.3, H.z1 - 0.2], [s * 0.4, 1.6, 3.2]], 0.025, 10, 4);
+    }
     // крылья над гусеницами
     for (const s of [-1, 1]) for (const zc of [D.zf, D.zr])
       put(g, sx([[-1.42, 1.34], [-1.2, 1.62], [-0.6, 1.76], [0.6, 1.76], [1.2, 1.62], [1.42, 1.34], [1.3, 1.34], [1.1, 1.54], [0.55, 1.66], [-0.55, 1.66], [-1.1, 1.54], [-1.3, 1.34]], 0.95), mt.body, s * (D.xt + 0.03), 0, zc);
@@ -558,7 +565,6 @@
   }
 
   // ------------------------------------------------------------------ широкие орудия: сеялка-культиватор (L4-6) и сеялка с крыльями (L7-10)
-  const sec6 = (z, y0, ym, y1, wB, wT, r) => ({ z, cx: 0, r, poly: [[-wB / 2, y0], [wB / 2, y0], [wT / 2, ym], [wT / 2, y1], [-wT / 2, y1], [-wT / 2, ym]] });
   function buildBar(root, mt, P) {
     const { W, Wc, L1, hy, big, lv } = P, wl = (W - Wc) / 2, yb = big ? 1.1 : 1.0, ang = big ? 0.12 : 0.05, bw = big ? 0.28 : 0.2;
     const zA = -L1, zD = zA - (big ? 0.7 : 0.55), zM = zA - (big ? 1.7 : 1.4), zC = zM - 0.12, zB = zA - (big ? 2.9 : 2.4), zR = zA - (big ? 3.7 : 3.1), ry = big ? 0.34 : 0.29;
@@ -647,7 +653,7 @@
   /** Сборка L4-6: современный колёсный трактор + сеялка-культиватор ~9 м. */
   function tractorTier1(lv) {
     const root = begin(), t = tOf(lv), k = lerp(0.96, 1.06, t);
-    const w = buildWheeled({ modern: true, lv, extra: lv >= 5 ? 1 : 0, lights: lv >= 5 ? 2 : 1, label: 'M' + (200 + lv * 15), bar: 'SD ' + (80 + lv * 5), col: { body: 0x7cb518, trim: 0xc8201a, roof: 'dark' }, accent: '#c8201a', stripe: '#c8201a' });
+    const w = buildWheeled({ modern: true, lv, extra: lv >= 6 ? 2 : lv >= 5 ? 1 : 0, lights: lv >= 6 ? 3 : lv >= 5 ? 2 : 1, label: 'M' + (200 + lv * 15), bar: 'SD ' + (80 + lv * 5), col: { body: 0x7cb518, trim: 0xc8201a, roof: 'dark' }, accent: '#c8201a', stripe: '#c8201a' });
     w.g.scale.setScalar(k); root.add(w.g);
     const ig = new T.Group(); ig.position.set(0, 0, (w.hz + 0.18) * k); root.add(ig);
     buildBar(ig, w.mt, { W: 8.4 + 0.6 * (lv - 4), Wc: 3.2, L1: 3.0, hy: w.hy * k, big: false, lv });

@@ -336,13 +336,8 @@
   // ---------------------------------------------------------------- мир: одна большая карта
   const TS = 3; // размер одной клетки поля в единицах мира (1 единица ≈ 1 метр)
   const SLOT = { wild: [-150, -150], forest: [40, -150], home: [-200, -30], meadow: [-70, -30], grove: [60, -30], valley: [190, -30], lake: [-200, 30], hills: [-70, 30], orchard: [60, 30] };
-  // большие поля для красоты: далеко от домов и улиц (минимум ~40 м), у самого края обжитой части карты
-  const DECO = [
-    { cx: -355, cz: -80, w: 120, d: 60, kind: 'wheat_field' }, { cx: 355, cz: -80, w: 120, d: 60, kind: 'soil_plowed' },
-    { cx: -355, cz: 245, w: 120, d: 60, kind: 'grass' }, { cx: 355, cz: 240, w: 120, d: 60, kind: 'wheat_field' },
-    { cx: -230, cz: -272, w: 120, d: 60, kind: 'soil_plowed' }, { cx: 140, cz: -272, w: 120, d: 60, kind: 'wheat_field' },
-    { cx: -60, cz: 258, w: 120, d: 60, kind: 'grass' }, { cx: 210, cz: 258, w: 100, d: 60, kind: 'soil_plowed' },
-  ];
+  // декоративных «огородов» на карте больше нет: всё, что похоже на поле, можно обрабатывать. Список оставлен пустым на случай будущих лугов.
+  const DECO = [];
   const FIELD_LEFT = 8; // левый край поля от центра участка: поле растёт вправо
   const TOWN = { market: [-112, 82], seeds: [-76, 82], tech: [-40, 82], bank: [28, 82], casino: [64, 82] };
   const TOWN_MODEL = { market: 'market', seeds: 'seedshop', tech: 'techcenter', bank: 'bank', casino: 'casino' };
