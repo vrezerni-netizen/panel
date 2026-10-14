@@ -22,7 +22,7 @@ ${body}
 ${texJs}<script>${js('layout.js')}</script>
 <script>${js('world3d.js')}</script>
 <script>${js('editor.js')}</script>
-${['models_buildings.js', 'models_vehicles.js', 'models_props.js', 'models_crops.js', 'models_machines.js', 'models_machines2.js', 'models_trucks.js', 'models_forestry.js', 'models_forest.js', 'models_construct.js'].filter((f) => fs.existsSync(path.join(dir, f))).map((f) => `<script>${js(f)}</script>`).join('\n')}
+${['models_buildings.js', 'models_vehicles.js', 'models_props.js', 'models_crops.js', 'models_machines.js', 'models_machines2.js', 'models_trucks.js', 'models_forestry.js', 'models_forest.js', 'models_sawmill.js', 'models_construct.js'].filter((f) => fs.existsSync(path.join(dir, f))).map((f) => `<script>${js(f)}</script>`).join('\n')}
 <script>${js('game.js')}</script>
 `;
 fs.mkdirSync(path.dirname(out), { recursive: true });

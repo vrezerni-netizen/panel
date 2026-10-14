@@ -617,6 +617,7 @@
     render() {
       let h = card('🔊', 'Звук', ui.sound ? 'Включён' : 'Выключен', btn('snd', {}, ui.sound ? 'Выключить' : 'Включить', 'y'));
       h += card('📍', 'Панель с кнопками', ui.barTop ? 'Сейчас сверху' : 'Сейчас снизу', btn('barpos', {}, ui.barTop ? 'Перенести вниз' : 'Перенести вверх', 'y'));
+      if (!ui.owner && ui.maps && ui.maps.length > 1) h += card('🗺️', 'Карта', ui.maps.map((m) => (m.id === ui.mapId ? '▶ ' : '') + m.name).join(' · '), ui.maps.filter((m) => m.id !== ui.mapId).map((m) => btn('mappick', { id: m.id }, m.name, 'y')).join(''));
       h += card('❓', 'Как играть', 'Правила и подсказки', btn('modal', { id: 'help' }, 'Открыть', 'b'));
       h += card('🌍', 'Мои фермы', S.farms.map((f, i) => (i === S.cur ? '▶ ' : '') + L.FARM_DEFS.find((d) => d.id === f.id).name).join(' · '), '');
       h += card('🗑️', 'Начать заново', 'Весь прогресс будет удалён', btn('reset', {}, ui.confirm === 'reset' ? 'Точно? Нажми ещё раз' : 'Сбросить', 'r'));
@@ -641,10 +642,25 @@
   const A = {
     close: closeModal,
     edstart: () => startEditor(),
-    edtool: (d) => { ui.edTab = d.t; ui.edPick = null; const w = world.ed; if (d.t === 'move' || d.t === 'erase' || d.t === 'road') w.setTool(d.t); else { w.setTool('move'); } renderEd(); },
+    edtool: (d) => { ui.edTab = d.t; ui.edPick = null; ui.edRename = null; ui.confirm = null; const w = world.ed, t = d.t; if (t === 'move' || t === 'erase' || t === 'road' || t === 'select') w.setTool(t); else if (t === 'ground') w.setTool('patch'); else w.setTool('move'); renderEd(); },
     edpick: (d) => { ui.edPick = { g: d.g, i: +d.i }; const grp = world.palette.find((q) => q.id === d.g), a = grp.items[+d.i]; world.ed.setTool('place', { t: a[0], v: a[1] }); renderEd(); },
+    edpatch: (d) => { world.ed.setPatch(+d.k); world.ed.setTool('patch'); renderEd(); },
+    edroad: (d) => { world.ed.setRoadKind(+d.k); renderEd(); },
+    edbrush: () => { world.ed.setBrush(!world.ed.brush); renderEd(); },
+    edforest: () => { world.ed.forestAll(world.ed.hasForest()); renderEd(); },
+    edclr: () => { world.ed.clearSel(); },
+    edbigfocus: (d) => { world.ed.bigFocus(d.id); world.ed.selectBig(d.id); ui.edTab = 'move'; renderEd(); },
+    edbigtoggle: (d) => { world.ed.bigToggle(d.id); renderEd(); },
     edrot: () => world.ed.rotate(), edcopy: () => world.ed.copy(), edrem: () => world.ed.remove(), edundo: () => world.ed.undo(),
     edreset: () => { if (ui.confirm !== 'edreset') { ui.confirm = 'edreset'; renderEd(); return; } ui.confirm = null; world.ed.reset(); renderEd(); },
+    edclean: () => { if (ui.confirm !== 'edclean') { ui.confirm = 'edclean'; renderEd(); return; } ui.confirm = null; world.ed.clean(); renderEd(); },
+    mapopen: (d) => { openMap(d.id); },
+    mapnew: (d) => { newMap(d.k); },
+    mapdef: (d) => { ui.mapDef = d.id; saveIndex(); renderEd(); },
+    maprename: (d) => { ui.edRename = d.id; renderEd(); const e = $('mapname'); if (e) e.focus(); },
+    maprensave: (d) => { const e = $('mapname'), m = ui.maps.find((q) => q.id === d.id); if (m && e && e.value.trim()) m.name = e.value.trim().slice(0, 24); ui.edRename = null; saveIndex(); renderEd(); },
+    mapdel: (d) => { if (ui.confirm !== 'mapdel' + d.id) { ui.confirm = 'mapdel' + d.id; renderEd(); return; } ui.confirm = null; delMap(d.id); },
+    mappick: (d) => { store.set(MAPPICK, d.id); save(); location.reload(); },
     edsave: () => saveLayout(false),
     eddone: async () => { await saveLayout(true); stopEditor(true); },
     edcancel: () => { if (world.ed.changed && ui.confirm !== 'edcancel') { ui.confirm = 'edcancel'; renderEd(); return; } ui.confirm = null; stopEditor(false); },
@@ -751,11 +767,36 @@
   }
 
 
-  // ---------------------------------------------------------------- редактор карты (только владелец)
-  const LAYKEY = 'farm2.layout.draft';
-  /** Кто смотрит: владелец страницы видит редактор и свой черновик расстановки; клиенты — готовую карту из игры. */
+  // ---------------------------------------------------------------- редактор карты (только владелец) и несколько карт
+  // Карты владельца лежат в хранилище страницы (читает и пишет только он): map/index — список, map/draft — основная, map/m_<id> — остальные.
+  // Игроки видят только опубликованные карты (window.FARM_MAPS из layout.js) и выбирают одну в настройках.
+  const LAYKEY = 'farm2.layout.draft', MAPSKEY = 'farm2.maps.index', MAPCUR = 'farm2.map.cur', MAPPICK = 'farm2.map';
+  const mapKey = (id) => (id === 'main' ? LAYKEY : 'farm2.map.' + id);
+  const mapDoc = (id) => 'map/' + (id === 'main' ? 'draft' : 'm_' + id);
+  const okLayout = (v) => !!v && (v.v === 1 || v.v === 2) && Array.isArray(v.items);
+  const tmo = (ms) => new Promise((r) => setTimeout(() => r(null), ms));
+  const bakedMaps = () => {
+    const list = Array.isArray(window.FARM_MAPS) ? window.FARM_MAPS.filter((m) => m && m.id && okLayout(m.layout)) : [];
+    if (!list.length && okLayout(window.FARM_LAYOUT)) list.push({ id: 'main', name: 'Основная', layout: window.FARM_LAYOUT });
+    return list;
+  };
+  async function dbRead(path) {
+    try { if (!ui.db) return null; const d = await Promise.race([ui.db.doc(path).get(), tmo(3000)]); if (d && d.exists !== false) { const v = typeof d.data === 'function' ? d.data() : d; return v || null; } } catch (e) { /* нет ответа */ }
+    return null;
+  }
+  async function dbWrite(path, obj) { if (!ui.db) return false; try { await ui.db.doc(path).set(obj); return true; } catch (e) { return false; } }
+  /** Карта владельца: черновик из хранилища страницы или с телефона; если опубликованная версия новее — она. */
+  async function readMapLayout(id) {
+    let draft = null;
+    const v = await dbRead(mapDoc(id)); try { if (v && v.json) draft = JSON.parse(v.json); } catch (e) { draft = null; }
+    if (!okLayout(draft)) { draft = null; try { const r = store.get(mapKey(id)); if (r) draft = JSON.parse(r); } catch (e) { draft = null; } }
+    if (!okLayout(draft)) draft = null;
+    const b = (ui.baked || []).find((m) => m.id === id), bl = b ? b.layout : null;
+    if (draft && (!bl || (draft.rev || 0) >= (bl.rev || 0))) return draft;
+    return bl || draft || null;
+  }
+  /** Кто смотрит: владелец страницы видит редактор и свои карты; клиенты — готовые карты из игры. */
   async function ownerInit() {
-    const tmo = (ms) => new Promise((r) => setTimeout(() => r(null), ms));
     try {
       if (window.claude && window.claude.use) {
         const u = await Promise.race([window.claude.use('user'), tmo(3000)]);
@@ -763,42 +804,86 @@
         if (ui.owner) ui.db = await Promise.race([window.claude.use('db'), tmo(3000)]);
       } else if (location.hash === '#editor') ui.owner = true;    // для проверки вне платформы
     } catch (e) { ui.owner = false; }
-    ui.layout = window.FARM_LAYOUT || null;
-    if (ui.owner) {
-      let draft = null;
-      try { if (ui.db) { const d = await Promise.race([ui.db.doc('map/draft').get(), tmo(3000)]); if (d && d.exists !== false) { const v = typeof d.data === 'function' ? d.data() : d; if (v && v.json) draft = JSON.parse(v.json); } } } catch (e) { /* возьмём из памяти телефона */ }
-      if (!draft) { try { const r = store.get(LAYKEY); if (r) draft = JSON.parse(r); } catch (e) { draft = null; } }
-      if (draft && draft.v === 1 && Array.isArray(draft.items) && (!ui.layout || (draft.rev || 0) >= (ui.layout.rev || 0))) ui.layout = draft;
+    const bk = ui.baked = bakedMaps();
+    ui.mapDef = window.FARM_MAP_DEFAULT || (bk[0] && bk[0].id) || 'main';
+    ui.maps = bk.map((m) => ({ id: m.id, name: m.name || m.id }));
+    ui.layout = null; ui.mapId = ui.mapDef;
+    if (!ui.owner) {
+      const pick = store.get(MAPPICK), m = bk.find((x) => x.id === pick) || bk.find((x) => x.id === ui.mapDef) || bk[0];
+      if (m) { ui.mapId = m.id; ui.layout = m.layout; }
+      return;
     }
+    let idx = await dbRead('map/index');
+    if (!idx || !Array.isArray(idx.list)) { try { idx = JSON.parse(store.get(MAPSKEY) || 'null'); } catch (e) { idx = null; } }
+    let maps = idx && Array.isArray(idx.list) ? idx.list.filter((m) => m && m.id).map((m) => ({ id: String(m.id), name: String(m.name || m.id) })) : [];
+    if (!maps.length) maps = [{ id: 'main', name: 'Основная' }];
+    for (const m of ui.maps) if (!maps.some((x) => x.id === m.id)) maps.push(m);
+    ui.maps = maps; if (idx && idx.def && maps.some((m) => m.id === idx.def)) ui.mapDef = idx.def;
+    const cur = store.get(MAPCUR); ui.mapId = maps.some((m) => m.id === cur) ? cur : maps[0].id;
+    ui.layout = await readMapLayout(ui.mapId);
+  }
+  async function saveIndex() {
+    const idx = { list: ui.maps.map((m) => ({ id: m.id, name: m.name })), def: ui.mapDef, t: Date.now() };
+    try { store.set(MAPSKEY, JSON.stringify(idx)); } catch (e) { /* ничего */ }
+    return dbWrite('map/index', idx);
   }
   async function saveLayout(quiet) {
     const Ly = world.ed.layout(); Ly.rev = Math.floor(Date.now() / 1000); let where = 'на этом телефоне';
-    try { store.set(LAYKEY, JSON.stringify(Ly)); } catch (e) { /* ничего */ }
-    if (ui.db) { try { await ui.db.doc('map/draft').set({ json: JSON.stringify(Ly), rev: Ly.rev, t: Date.now() }); where = 'в хранилище страницы'; } catch (e) { where = 'на телефоне (хранилище страницы не ответило)'; } }
-    world.ed.changed = false; if (!quiet) toast(`💾 Расстановка сохранена ${where}. Чтобы клиенты её увидели, напиши мне: «опубликуй карту»`, 'good'); else toast(`💾 Сохранено ${where}`, 'good');
+    try { store.set(mapKey(ui.mapId), JSON.stringify(Ly)); store.set(MAPCUR, ui.mapId); } catch (e) { /* ничего */ }
+    if (ui.db) { const a = await dbWrite(mapDoc(ui.mapId), { json: JSON.stringify(Ly), rev: Ly.rev, t: Date.now() }); await saveIndex(); where = a ? 'в хранилище страницы' : 'на телефоне (хранилище страницы не ответило)'; }
+    else await saveIndex();
+    world.ed.markSaved();
+    const nm = (ui.maps.find((m) => m.id === ui.mapId) || {}).name || '';
+    if (!quiet) toast(`💾 Карта «${nm}» сохранена ${where}. Чтобы игроки её увидели, напиши мне: «опубликуй карту»`, 'good'); else toast(`💾 Сохранено ${where}`, 'good');
+  }
+  async function openMap(id) {
+    if (id === ui.mapId || !ui.maps.some((m) => m.id === id)) return;
+    if (world.ed.changed) await saveLayout(true);
+    const Ly = (await readMapLayout(id)) || world.defaultLayout();
+    ui.mapId = id; store.set(MAPCUR, id); world.ed.switchTo(Ly); renderEd();
+  }
+  async function newMap(kind) {
+    if (world.ed.changed) await saveLayout(true);
+    const id = 'm' + Date.now().toString(36);
+    const src = kind === 'copy' ? world.ed.layout() : kind === 'clean' ? world.cleanLayout() : world.defaultLayout(), Ly = JSON.parse(JSON.stringify(src));
+    let n = ui.maps.length + 1; while (ui.maps.some((m) => m.name === 'Карта ' + n)) n++;
+    ui.maps.push({ id, name: 'Карта ' + n }); ui.mapId = id; store.set(MAPCUR, id); world.ed.switchTo(Ly); await saveLayout(true); renderEd();
+    toast(`🗺️ Создана «Карта ${n}». Меняй её как хочешь`, 'good');
+  }
+  async function delMap(id) {
+    if (ui.maps.length < 2) return toast('Нельзя удалить единственную карту', 'bad');
+    ui.maps = ui.maps.filter((m) => m.id !== id); if (ui.mapDef === id) ui.mapDef = ui.maps[0].id;
+    store.del(mapKey(id)); if (ui.db) { try { await ui.db.doc(mapDoc(id)).delete(); } catch (e) { /* ничего */ } }
+    if (ui.mapId === id) { ui.mapId = ui.maps[0].id; store.set(MAPCUR, ui.mapId); world.ed.switchTo((await readMapLayout(ui.mapId)) || world.defaultLayout()); }
+    await saveIndex(); renderEd();
   }
   function startEditor() {
-    if (!ui.owner || !world.ed) return; closeModal(); ui.editing = true; ui.edSpeed = ui.speed; ui.speed = 0; ui.edTab = 'move'; ui.edPick = null; ui.confirm = null;
+    if (!ui.owner || !world.ed) return; closeModal(); ui.editing = true; ui.edSpeed = ui.speed; ui.speed = 0; ui.edTab = 'move'; ui.edPick = null; ui.confirm = null; ui.edRename = null;
     world.inputOn = false; $('app').classList.add('editing'); world.ed.onChange = () => renderEd(); world.ed.enter(); renderEd();
     toast('🛠️ Редактор: тапни предмет и тащи его. Двумя пальцами двигай и приближай карту', '');
   }
   function stopEditor(keep) {
     ui.editing = false; ui.speed = ui.edSpeed != null ? ui.edSpeed : 1; world.ed.exit(keep); world.ed.onChange = null; world.inputOn = true; $('app').classList.remove('editing');
-    for (const id of ['edtop', 'edsel', 'edbar']) { $(id).hidden = true; $(id).innerHTML = ''; } lastBar = ''; lastSeed = ''; renderBar();
+    for (const id of ['edtop', 'edsel', 'edbar']) { $(id).hidden = true; $(id).innerHTML = ''; $(id)._h = ''; } lastBar = ''; lastSeed = ''; renderBar();
   }
+  const ED_TABS = [['move', '✋', 'Двигать'], ['select', '⬚', 'Рамка'], ['houses', '🏠', 'Дома'], ['green', '🌳', 'Зелень'], ['decor', '🛋️', 'Декор'], ['ground', '🟫', 'Земля'], ['road', '🛣️', 'Дорога'], ['erase', '🧽', 'Ластик'], ['objects', '📋', 'Объекты'], ['maps', '🗺️', 'Карты']];
+  const escQ = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function renderEd() {
     if (!ui.editing) return; const w = world.ed, info = w.info(), cf = ui.confirm;
-    const tab = ui.edTab || 'move', tb = (id, ic, nm) => `<button class="edtab ${tab === id ? 'on' : ''}" data-act="edtool" data-t="${id}"><i>${ic}</i><b>${nm}</b></button>`;
-    let tabs = tb('move', '✋', 'Двигать') + world.palette.map((g) => tb(g.id, g.icon, g.name)).join('') + tb('road', '🛣️', 'Дорога') + tb('erase', '🧽', 'Ластик');
+    const tab = ui.edTab || 'move', tabs = ED_TABS.map(([id, ic, nm]) => `<button class="edtab ${tab === id ? 'on' : ''}" data-act="edtool" data-t="${id}"><i>${ic}</i><b>${nm}</b></button>`).join('');
     let body = '';
-    const grp = world.palette.find((g) => g.id === tab);
-    if (grp) body = `<div class="edpal">${grp.items.map((a, i) => `<button class="edit ${ui.edPick && ui.edPick.g === grp.id && ui.edPick.i === i ? 'on' : ''}" data-act="edpick" data-g="${grp.id}" data-i="${i}"><i>${a[3]}</i><span>${a[2]}</span></button>`).join('')}</div><div class="edhint">${ui.edPick ? 'Тапни по земле — предмет встанет. Потом тащи его пальцем' : 'Выбери предмет из списка'}</div>`;
-    else if (tab === 'road') body = `<div class="edhint">${w.roadStart ? '✅ Начало поставлено. Тапни, где дорога кончается' : 'Тапни, где дорога начинается, потом где кончается. Дорога пойдёт ровно по прямой'}</div>`;
-    else if (tab === 'erase') body = `<div class="edhint">Води пальцем: всё под красным кругом исчезнет (дома, деревья, дороги). Ошибся? Нажми ↩</div>`;
-    else body = `<div class="edhint">Тапни дом, здание, двор или поле, чтобы выбрать. Потом тащи его пальцем. Пустое место тащи, чтобы двигать карту</div>`;
+    const grp = world.palette.find((g) => g.id === tab), eb = (act, data, label, cls) => `<button class="edb ${cls || ''}" data-act="${act}" ${Object.entries(data || {}).map(([k, v]) => `data-${k}="${v}"`).join(' ')}>${label}</button>`;
+    if (grp) body = `<div class="edrow">${eb('edbrush', {}, w.brush ? '🖌 Кисть: ВКЛ (тащи — ставится много)' : '🖌 Кисть: выкл', w.brush ? 'ok' : '')}</div><div class="edpal">${grp.items.map((a, i) => `<button class="edit ${ui.edPick && ui.edPick.g === grp.id && ui.edPick.i === i ? 'on' : ''}" data-act="edpick" data-g="${grp.id}" data-i="${i}"><i>${a[3]}</i><span>${a[2]}</span></button>`).join('')}</div><div class="edhint">${ui.edPick ? (w.brush ? 'Води пальцем по земле — предметы будут ставиться вдоль пути' : 'Тапни по земле — предмет встанет. Потом тащи его пальцем') : 'Выбери предмет из списка'}</div>`;
+    else if (tab === 'ground') body = `<div class="edpal">${world.patches.map((p, i) => `<button class="edit ${w.patchKind === i ? 'on' : ''}" data-act="edpatch" data-k="${i}"><i>${['🟫', '🟤', '⬜', '⬛', '🟩', '🟨', '🟦', '🌾'][i]}</i><span>${p[0]}</span></button>`).join('')}</div><div class="edhint">Тащи пальцем по карте — нарисуется участок земли. Тап — квадрат 16×16 м. Потом его можно двигать, поворачивать и стирать</div>`;
+    else if (tab === 'road') body = `<div class="edrow">${eb('edroad', { k: 0 }, '🛣️ Шоссе', w.roadKind === 0 ? 'ok' : '')}${eb('edroad', { k: 1 }, '🏘️ Улица с тротуарами', w.roadKind === 1 ? 'ok' : '')}</div><div class="edhint">${w.roadStart ? '✅ Начало поставлено. Тапни, где дорога кончается' : 'Тапни, где дорога начинается, потом где кончается. Дорога пойдёт ровно по прямой'}</div>`;
+    else if (tab === 'erase') body = `<div class="edrow">${eb('edforest', {}, w.hasForest() ? '🌲 Убрать весь лес по краям' : '🌲 Вернуть лес по краям', w.hasForest() ? '' : 'ok')}</div><div class="edhint">Води пальцем: всё под красным кругом исчезнет (дома, деревья, лес, дороги, участки). Ошибся? Нажми ↩. Чтобы стереть много сразу — вкладка «Рамка»</div>`;
+    else if (tab === 'select') body = `<div class="edhint">Тащи пальцем (или мышкой) по карте — появится синяя рамка, всё внутри выделится. Тап по предмету — добавить или убрать из выделения. Потом нажми 🗑 Удалить</div>`;
+    else if (tab === 'objects') body = `<div class="edlist">${w.bigList().map((o) => `<div class="edrowi ${o.hidden ? 'dim' : ''}"><span>${escQ(o.name)}</span><button class="edb" data-act="edbigfocus" data-id="${escQ(o.id)}">👁 Найти</button>${o.hidable ? `<button class="edb ${o.hidden ? 'ok' : 'red'}" data-act="edbigtoggle" data-id="${escQ(o.id)}">${o.hidden ? '↺ Вернуть' : '🗑 Убрать'}</button>` : '<span class="edsm">нельзя убрать</span>'}</div>`).join('')}</div><div class="edhint">Здесь можно найти любое большое здание, убрать его или вернуть. Кнопки убранного здания остаются в меню «Город»</div>`;
+    else if (tab === 'maps') body = `<div class="edlist">${ui.maps.map((m) => ui.edRename === m.id ? `<div class="edrowi"><input id="mapname" maxlength="24" value="${escQ(m.name)}"><button class="edb ok" data-act="maprensave" data-id="${escQ(m.id)}">✓</button></div>` : `<div class="edrowi ${m.id === ui.mapId ? 'cur' : ''}"><span>${m.id === ui.mapId ? '▶ ' : ''}${escQ(m.name)}${m.id === ui.mapDef ? ' ★' : ''}</span>${m.id === ui.mapId ? '' : eb('mapopen', { id: m.id }, 'Открыть')}${eb('maprename', { id: m.id }, '✎')}${m.id === ui.mapDef ? '' : eb('mapdef', { id: m.id }, '★ Главная')}${eb('mapdel', { id: m.id }, cf === 'mapdel' + m.id ? 'Точно?' : '🗑', 'red')}</div>`).join('')}</div><div class="edrow">${eb('mapnew', { k: 'copy' }, '＋ Копия этой')}${eb('mapnew', { k: 'std' }, '＋ Стандартная')}${eb('mapnew', { k: 'clean' }, '＋ Чистая')}</div><div class="edrow">${eb('edreset', {}, cf === 'edreset' ? 'Точно? Тапни ещё раз' : '⟲ Сбросить эту карту к стандартной')}${eb('edclean', {}, cf === 'edclean' ? 'Точно? Тапни ещё раз' : '🧹 Убрать с этой карты дома и лес')}</div><div class="edhint">★ — карта, которую игроки видят сразу. Остальные игроки выбирают в настройках. «Опубликуй карты» — напиши мне</div>`;
+    else body = `<div class="edhint">Тапни предмет, дом, здание, двор, поле, дорогу или дерево леса — выбери. Потом тащи его пальцем. Пустое место тащи — двигаешь карту</div>`;
     const barHtml = `<div class="edtabs">${tabs}</div>${body}`;
-    const selHtml = info ? `<b>${info.name}</b>${info.rot ? '<button class="edb" data-act="edrot">↻ Повернуть</button>' : ''}${info.copy ? '<button class="edb" data-act="edcopy">⧉ Копия</button>' : ''}${info.del ? '<button class="edb red" data-act="edrem">🗑 Удалить</button>' : ''}` : '';
-    const topHtml = `<button class="edb ${w.canUndo ? '' : 'dis'}" data-act="edundo">↩ Шаг назад</button><button class="edb" data-act="edreset">${cf === 'edreset' ? 'Точно? Тапни ещё раз' : '⟲ Стандартная карта'}</button><button class="edb" data-act="edsave">💾 Сохранить</button><button class="edb ok" data-act="eddone">✓ Готово</button><button class="edb red" data-act="edcancel">${cf === 'edcancel' ? 'Выйти без сохранения?' : '✕'}</button>`;
+    const selHtml = info ? `<b>${escQ(info.name)}</b>${info.rot ? '<button class="edb" data-act="edrot">↻ Повернуть</button>' : ''}${info.copy ? '<button class="edb" data-act="edcopy">⧉ Копия</button>' : ''}${info.del ? `<button class="edb red" data-act="edrem">${info.multi ? '🗑 Удалить всё' : info.hide ? '🗑 Убрать' : '🗑 Удалить'}</button>` : ''}<button class="edb" data-act="edclr">✕ Снять</button>` : '';
+    const topHtml = `<button class="edb ${w.canUndo ? '' : 'dis'}" data-act="edundo">↩ Шаг назад</button><button class="edb" data-act="edsave">💾 Сохранить</button><button class="edb ok" data-act="eddone">✓ Готово</button><button class="edb red" data-act="edcancel">${cf === 'edcancel' ? 'Выйти без сохранения?' : '✕'}</button>`;
     const put = (id, html, show) => { const e = $(id); e.hidden = !show; if (e._h !== html) { e._h = html; e.innerHTML = html; } };
     put('edbar', barHtml, true); put('edsel', selHtml, !!info); put('edtop', topHtml, true);
     const h = $('edbar').offsetHeight; if (h) document.documentElement.style.setProperty('--edh', h + 'px');
@@ -831,8 +916,10 @@
     ui.lastLog = S.logN || 0; ui.lvl = S.level; L.drainFx();
     await ownerInit();
     { const bp = store.get('farm2.bartop'); ui.barTop = bp === '1'; applyBarPos(); }
+    const cbs = { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => { if (ui.editing) return;  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal && !ui.editing) openModal('animals'); } };
     try {
-      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => { if (ui.editing) return;  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal && !ui.editing) openModal('animals'); } }, ui.layout);
+      try { world = window.World3D.create($('gl'), $('labels'), cbs, ui.layout); }
+      catch (e1) { if (!ui.layout) throw e1; console.error('карта не загрузилась, беру стандартную', e1); ui.layout = null; world = window.World3D.create($('gl'), $('labels'), cbs, null); }
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }
     pickSeed(); if (window.__boot) window.__boot.tc = performance.now();
     window.__world = world;

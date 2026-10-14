@@ -411,7 +411,7 @@
     const world = new T.Group(); scene.add(world);
     const W = { mode: 'map', cb, renderer, scene, camera, time: 0, S: null, inputOn: true, lite: !!(root.matchMedia && root.matchMedia('(hover:none) and (pointer:coarse)').matches) };
     if (W.lite) { sun.shadow.mapSize.set(1024, 1024); }
-    const LAY0 = layout0 && layout0.v === 1 && Array.isArray(layout0.items) ? layout0 : null;   // готовая расстановка города или null = стандартная
+    const LAY0 = layout0 && (layout0.v === 1 || layout0.v === 2) && Array.isArray(layout0.items) ? layout0 : null;   // готовая расстановка города или null = стандартная
     if (LAY0) applyBigConsts(LAY0.big);
 
     // --- DOM-метки
@@ -428,11 +428,11 @@
     const hcol = [0xf4d6a0, 0xe8c0c0, 0xc9e0f0, 0xe0e8b0], rcol = [0xb23a2a, 0xa5402d, 0x7a2f23];
     const TREE_T = { oak: 1, pine: 1, birch: 1, fruit: 1, poplar: 1, oakLow: 1, pineLow: 1, bush: 1 };
     const BLD_T = { cottage: 1, farmhouse: 1, barn: 1, stable: 1, coop: 1, pigsty: 1, silo: 1, silos: 1, greenhouse: 1, shed: 1, garage: 1, haybarn: 1, windmill: 1, watertower: 1 };
-    const DEC_R = { cottage: 9, farmhouse: 10, barn: 13, stable: 10, coop: 6, pigsty: 6, silo: 4, silos: 8, greenhouse: 8, shed: 7, garage: 6, haybarn: 9, windmill: 7, watertower: 5, oak: 4, pine: 3.5, birch: 3.5, fruit: 3.5, poplar: 3, oakLow: 3, pineLow: 2.5, bush: 2, streetLamp: 1.6, powerPole: 1.8, fenceWhite: 5, fenceWood: 5, hedge: 5, flowerBed: 2.5, hayBales: 2.5, haystack: 3.5, well: 2.5, mailbox: 1.2, signpost: 1.4, crates: 2, barrels: 2, rock: 2.5, gate: 3.5 };
+    const DEC_R = { cottage: 9, farmhouse: 10, barn: 13, stable: 10, coop: 6, pigsty: 6, silo: 4, silos: 8, greenhouse: 8, shed: 7, garage: 6, haybarn: 9, windmill: 7, watertower: 5, oak: 4, pine: 3.5, birch: 3.5, fruit: 3.5, poplar: 3, oakLow: 3, pineLow: 2.5, bush: 2, streetLamp: 1.6, powerPole: 1.8, fenceWhite: 5, fenceWood: 5, hedge: 5, flowerBed: 2.5, hayBales: 2.5, haystack: 3.5, well: 2.5, mailbox: 1.2, signpost: 1.4, crates: 2, barrels: 2, rock: 2.5, gate: 3.5, tireStack: 2, waterTrough: 2.5, roundFeeder: 2.5, scarecrow: 1.2, manureTank: 5, patch: 6 };
     const PALETTE = [
       { id: 'houses', name: 'Дома', icon: '🏠', items: [['cottage', 0, 'Коттедж жёлтый', '🏡'], ['cottage', 1, 'Коттедж розовый', '🏡'], ['cottage', 2, 'Коттедж голубой', '🏡'], ['cottage', 3, 'Коттедж зелёный', '🏡'], ['farmhouse', 0, 'Дом фермера', '🏠'], ['barn', 0, 'Амбар', '🏚️'], ['stable', 0, 'Конюшня', '🐴'], ['shed', 0, 'Сарай', '🛖'], ['garage', 0, 'Гараж', '🚗'], ['greenhouse', 0, 'Теплица', '🌱'], ['haybarn', 0, 'Сеновал', '🌾'], ['coop', 0, 'Курятник', '🐔'], ['pigsty', 0, 'Свинарник', '🐖'], ['silos', 0, 'Силосы', '🛢️'], ['windmill', 0, 'Мельница', '🌬️'], ['watertower', 0, 'Водонапорка', '🗼']] },
       { id: 'green', name: 'Зелень', icon: '🌳', items: [['oak', 0, 'Дуб', '🌳'], ['pine', 0, 'Сосна', '🌲'], ['birch', 0, 'Берёза', '🌳'], ['fruit', 0, 'Яблоня', '🍎'], ['poplar', 0, 'Тополь', '🌳'], ['oakLow', 0, 'Деревце', '🌳'], ['pineLow', 0, 'Ёлочка', '🌲'], ['bush', 0, 'Куст', '🌿'], ['hedge', 0, 'Живая изгородь', '🟩'], ['flowerBed', 0, 'Клумба', '🌸']] },
-      { id: 'decor', name: 'Декор', icon: '🛋️', items: [['streetLamp', 0, 'Фонарь', '💡'], ['powerPole', 0, 'Столб', '⚡'], ['fenceWhite', 0, 'Забор белый', '🚧'], ['fenceWood', 0, 'Забор деревянный', '🪵'], ['gate', 0, 'Ворота', '🚪'], ['well', 0, 'Колодец', '⛲'], ['mailbox', 0, 'Почтовый ящик', '📮'], ['signpost', 0, 'Указатель', '🪧'], ['hayBales', 0, 'Тюки сена', '🌾'], ['haystack', 0, 'Стог', '🌾'], ['crates', 0, 'Ящики', '📦'], ['barrels', 0, 'Бочки', '🛢️'], ['rock', 0, 'Камень', '🪨']] },
+      { id: 'decor', name: 'Декор', icon: '🛋️', items: [['streetLamp', 0, 'Фонарь', '💡'], ['powerPole', 0, 'Столб', '⚡'], ['fenceWhite', 0, 'Забор белый', '🚧'], ['fenceWood', 0, 'Забор деревянный', '🪵'], ['gate', 0, 'Ворота', '🚪'], ['well', 0, 'Колодец', '⛲'], ['mailbox', 0, 'Почтовый ящик', '📮'], ['signpost', 0, 'Указатель', '🪧'], ['hayBales', 0, 'Тюки сена', '🌾'], ['haystack', 0, 'Стог', '🌾'], ['crates', 0, 'Ящики', '📦'], ['barrels', 0, 'Бочки', '🛢️'], ['rock', 0, 'Камень', '🪨'], ['tireStack', 0, 'Шины', '⚫'], ['waterTrough', 0, 'Поилка', '🚰'], ['roundFeeder', 0, 'Кормушка', '🍽️'], ['scarecrow', 0, 'Пугало', '🧑‍🌾'], ['manureTank', 0, 'Цистерна', '🛢️']] },
     ];
     /** Коттедж с палисадником: дом лицом к +z, белый заборчик спереди. */
     function cottageFull(v) {
@@ -445,10 +445,18 @@
       }
       return g;
     }
+    // участки земли: прямоугольные «заплатки» (вспаханная земля, гравий, бетон, асфальт, трава, песок, вода, пшеница)
+    const PATCH = [['Вспаханная земля', 'soil_plowed', 0x7a4e2b], ['Гравий', 'dirt_path', 0xb08d57], ['Бетон', 'concrete', 0xb9b6ac], ['Асфальт', 'asphalt', 0x4a4f57], ['Трава', 'grass', 0x74b84f], ['Песок', null, 0xd8c690], ['Вода', null, 0x2f8fc4], ['Пшеница', 'wheat_field', 0xe0b44a]];
+    function patchModel(it) {
+      const k = Math.max(0, Math.min(PATCH.length - 1, it.v | 0)), P = PATCH[k], w = Math.max(2, it.w || 20), d = Math.max(2, it.d || 20), g = new T.Group();
+      const material = k === 6 ? pmat(P[2], { roughness: 0.08, metalness: 0.05, envMapIntensity: 1.1 }) : P[1] && hasTex(P[1]) ? texMat(P[1], 1, 1, P[2]) : mat(P[2]);
+      const m = new T.Mesh(uvBox(w, 0.03, d, w / 8, d / 8), material); m.position.y = 0.02 + k * 0.003; m.receiveShadow = true; m.castShadow = false; g.add(m); return g;
+    }
     function decModel(it) {
       const t = it.t, v = Math.abs(Math.round(it.v || 0));
       let m;
       if (t === 'cottage') m = cottageFull(v);
+      else if (t === 'patch') m = patchModel(it);
       else if (TREE_T[t]) m = MODEL('tree', t, { seed: v % 3 }, () => (t === 'bush' ? part('sph', 0x3f6b2a, 0, 0.8, 0, 1.8, 1.4, 1.8) : tree(2.2, t.indexOf('pine') >= 0 ? 'pine' : 'oak')));
       else if (BLD_T[t]) m = MODEL('building', t, { variant: v % 3 }, () => part('box', 0xd9c8a0, 0, 3, 0, 9, 6, 7));
       else m = MODEL('prop', t, { variant: v % 3, seed: v % 3 }, () => part('box', 0x9aa0a6, 0, 0.8, 0, 1.6, 1.6, 1.6));
@@ -468,7 +476,8 @@
     function decDirty(key) { DEC.dirty.add(key); }
     function decFlush() { for (const k of DEC.dirty) decBake(k); DEC.dirty.clear(); }
     function decAdd(it) {
-      it = { t: it.t, v: it.v | 0, x: it.x, z: it.z, r: it.r || 0, s: it.s || 1 }; it.id = 'd' + (++DEC.seq); it.key = decKey(it.x, it.z);
+      const wd = it.t === 'patch' ? { w: Math.max(2, +it.w || 20), d: Math.max(2, +it.d || 20) } : {};
+      it = Object.assign({ t: it.t, v: it.v | 0, x: it.x, z: it.z, r: it.r || 0, s: it.s || 1 }, wd); it.id = 'd' + (++DEC.seq); it.key = decKey(it.x, it.z);
       DEC.items.set(it.id, it); let c = DEC.chunks.get(it.key); if (!c) { c = { ids: new Set(), mesh: null }; DEC.chunks.set(it.key, c); } c.ids.add(it.id); decDirty(it.key); return it;
     }
     function decRemove(id) { const it = DEC.items.get(id); if (!it) return; const c = DEC.chunks.get(it.key); if (c) c.ids.delete(id); DEC.items.delete(id); decDirty(it.key); }
@@ -481,48 +490,83 @@
     function decSetAll(list) {
       for (const c of DEC.chunks.values()) if (c.mesh) { DEC.root.remove(c.mesh); disposeObj(c.mesh); }
       DEC.chunks.clear(); DEC.items.clear(); DEC.dirty.clear();
-      for (const a of list) { const it = Array.isArray(a) ? { t: a[0], v: a[1], x: a[2], z: a[3], r: a[4], s: a[5] } : a; if (it && it.t && isFinite(it.x) && isFinite(it.z)) decAdd(it); }
+      for (const a of list) { const it = Array.isArray(a) ? { t: a[0], v: a[1], x: a[2], z: a[3], r: a[4], s: a[5], w: a[6], d: a[7] } : a; if (it && it.t && isFinite(it.x) && isFinite(it.z)) decAdd(it); }
       decFlush();
     }
-    const r1 = (n) => Math.round(n * 10) / 10;
-    const decExport = () => [...DEC.items.values()].map((it) => [it.t, it.v | 0, r1(it.x), r1(it.z), r1(it.r || 0), it.s && it.s !== 1 ? r1(it.s) : 1]);
+    const r1 = (n) => Math.round(n * 10) / 10, r3 = (n) => Math.round(n * 1000) / 1000;
+    const decExport = () => [...DEC.items.values()].map((it) => { const a = [it.t, it.v | 0, r1(it.x), r1(it.z), r3(it.r || 0), it.s && it.s !== 1 ? r1(it.s) : 1]; if (it.t === 'patch') a.push(r1(it.w), r1(it.d)); return a; });
     /** Ближайший предмет к точке (по размеру: маленькие выбираются легче больших). */
     function decNear(x, z) {
       let best = null, bs = 1e9;
-      for (const it of DEC.items.values()) { const rad = (DEC_R[it.t] || 3) * (it.s || 1), d = Math.hypot(it.x - x, it.z - z); if (d < rad) { const sc = d / rad + rad * 0.02; if (sc < bs) { bs = sc; best = it; } } }
+      for (const it of DEC.items.values()) {
+        if (it.t === 'patch') { const c = Math.cos(it.r || 0), sn = Math.sin(it.r || 0), dx = x - it.x, dz = z - it.z, lx = dx * c - dz * sn, lz = dx * sn + dz * c; if (Math.abs(lx) < it.w / 2 && Math.abs(lz) < it.d / 2) { const sc = 1000 + it.w * it.d * 0.001; if (sc < bs) { bs = sc; best = it; } } continue; }
+        const rad = (DEC_R[it.t] || 3) * (it.s || 1), d = Math.hypot(it.x - x, it.z - z); if (d < rad) { const sc = d / rad + rad * 0.02; if (sc < bs) { bs = sc; best = it; } }
+      }
       return best;
     }
 
-    // ============================================================ дороги, нарисованные владельцем
-    const roadsG = new T.Group(); world.add(roadsG); const ROADS = [];
-    function roadMesh(a) {
-      const [x0, z0, x1, z1] = a, g = new T.Group(), horiz = Math.abs(x1 - x0) >= Math.abs(z1 - z0), L = Math.max(4, horiz ? Math.abs(x1 - x0) : Math.abs(z1 - z0)), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-      const bd = part('box', 0x4a4f57, cx, 0.045, cz, horiz ? L : RW, 0.08, horiz ? RW : L); bd.material = texMat('asphalt', (horiz ? L : RW) / 6, (horiz ? RW : L) / 6, 0x4a4f57); bd.castShadow = false; g.add(bd);
-      for (let q = -L / 2 + 2.5; q < L / 2 - 2; q += 10) { const ln = part('box', 0xe2c64a, horiz ? cx + q : cx, 0.1, horiz ? cz : cz + q, horiz ? 5 : 0.35, 0.02, horiz ? 0.35 : 5); ln.castShadow = false; g.add(ln); }
-      return g;
+    // ============================================================ дороги (все дороги — одинаковые «куски», любой можно стереть или нарисовать новый)
+    // Кусок: {a:[x0,z0,x1,z1], k, key}; k=0 — шоссе (8 м, разметка по краям), k=1 — улица в деревне (7 м, тротуары). Куски склеены по квадратам 64 м.
+    const roadsG = new T.Group(); world.add(roadsG); const ROADS = [], ROADCH = new Map(), ROADDIRTY = new Set();
+    const RKW = [RW, 7];
+    let RAS = null, RCON = null;
+    const uvBox = (w, h, d, ru, rv) => { const g = new T.BoxGeometry(w, h, d), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv); return g; };
+    const rkey = (a) => decKey((a[0] + a[2]) / 2, (a[1] + a[3]) / 2);
+    function roadPieceInto(g, r) {
+      if (!RAS) { RAS = texMat('asphalt', 1, 1, 0x4a4f57); RCON = texMat('concrete', 1, 1, 0xb9b6ac); }
+      const [x0, z0, x1, z1] = r.a, horiz = Math.abs(x1 - x0) >= Math.abs(z1 - z0), w = RKW[r.k] || RW, L = Math.max(4, horiz ? Math.abs(x1 - x0) : Math.abs(z1 - z0)), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      const put = (m, x, y, z) => { m.position.set(x, y, z); m.castShadow = false; g.add(m); return m; };
+      put(new T.Mesh(uvBox(horiz ? L : w, 0.08, horiz ? w : L, (horiz ? L : w) / 6, (horiz ? w : L) / 6), RAS), cx, 0.045, cz).receiveShadow = true;
+      const d0 = -L / 2 + (r.k === 1 ? 3 : 2.5), dl = r.k === 1 ? 4 : 5, dw = r.k === 1 ? 0.3 : 0.35, step = r.k === 1 ? 9 : 10;
+      for (let q = d0; q < L / 2 - 1.5; q += step) g.add(put(part('box', 0xe2c64a, 0, 0, 0, horiz ? dl : dw, 0.02, horiz ? dw : dl), horiz ? cx + q : cx, 0.1, horiz ? cz : cz + q));
+      if (r.k === 0) for (const sd of [-1, 1]) g.add(put(part('box', 0xd9c35a, 0, 0, 0, horiz ? L : 0.3, 0.02, horiz ? 0.3 : L), horiz ? cx : cx + sd * (w / 2 - 0.5), 0.1, horiz ? cz + sd * (w / 2 - 0.5) : cz));
+      else for (const sd of [-1, 1]) { const sw = new T.Mesh(uvBox(horiz ? L : 3.2, 0.1, horiz ? 3.2 : L, (horiz ? L : 3.2) / 8, (horiz ? 3.2 : L) / 8), RCON); put(sw, horiz ? cx : cx + sd * 5.3, 0.05, horiz ? cz + sd * 5.3 : cz).receiveShadow = true; }
     }
-    function roadsAdd(a) { const m = roadMesh(a); roadsG.add(m); ROADS.push({ a, m }); return ROADS[ROADS.length - 1]; }
-    function roadsRemove(r) { const i = ROADS.indexOf(r); if (i < 0) return; roadsG.remove(r.m); disposeObj(r.m); ROADS.splice(i, 1); }
-    function roadsSetAll(list) { for (const r of [...ROADS]) roadsRemove(r); for (const a of list || []) if (a.length >= 4 && a.every(isFinite)) roadsAdd([+a[0], +a[1], +a[2], +a[3]]); }
-    const roadsExport = () => ROADS.map((r) => r.a.map(r1));
+    function roadBake(key) {
+      const c = ROADCH.get(key); if (!c) return;
+      if (c.mesh) { roadsG.remove(c.mesh); disposeObj(c.mesh); c.mesh = null; }
+      if (!c.list.size) { ROADCH.delete(key); return; }
+      const g = new T.Group(); for (const r of c.list) roadPieceInto(g, r);
+      c.mesh = bakeTex(g); roadsG.add(c.mesh);
+    }
+    function roadsFlush() { for (const k of ROADDIRTY) roadBake(k); ROADDIRTY.clear(); }
+    function roadsAdd(a, k) {
+      const r = { a: [+a[0], +a[1], +a[2], +a[3]], k: k === 1 ? 1 : 0 }; r.key = rkey(r.a); ROADS.push(r);
+      let c = ROADCH.get(r.key); if (!c) { c = { list: new Set(), mesh: null }; ROADCH.set(r.key, c); } c.list.add(r); ROADDIRTY.add(r.key); return r;
+    }
+    /** Дорога любой длины: режется на куски по ~31 м, чтобы стирать можно было по частям. */
+    function roadsAddLine(a, k) {
+      const [x0, z0, x1, z1] = a, horiz = Math.abs(x1 - x0) >= Math.abs(z1 - z0), len = horiz ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.max(1, Math.round(len / 31)), out = [];
+      for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n; out.push(roadsAdd([x0 + (x1 - x0) * t0, z0 + (z1 - z0) * t0, x0 + (x1 - x0) * t1, z0 + (z1 - z0) * t1], k)); }
+      return out;
+    }
+    function roadsRemove(r) { const i = ROADS.indexOf(r); if (i < 0) return; ROADS.splice(i, 1); const c = ROADCH.get(r.key); if (c) c.list.delete(r); ROADDIRTY.add(r.key); }
+    function roadsSetAll(list) {
+      for (const c of ROADCH.values()) if (c.mesh) { roadsG.remove(c.mesh); disposeObj(c.mesh); }
+      ROADCH.clear(); ROADS.length = 0; ROADDIRTY.clear();
+      for (const a of list || []) if (a.length >= 4 && a.slice(0, 4).every(isFinite)) roadsAdd(a, a[4]);
+      roadsFlush();
+    }
+    const roadsExport = () => ROADS.map((r) => [...r.a.map(r1), r.k]);
     function roadDist(r, x, z) { const [x0, z0, x1, z1] = r.a, dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2)); return Math.hypot(x - (x0 + dx * t), z - (z0 + dz * t)); }
+    const roadBox = (r) => { const [x0, z0, x1, z1] = r.a, hw = (RKW[r.k] || RW) / 2 + (r.k === 1 ? 3.2 : 0); const h = Math.abs(x1 - x0) >= Math.abs(z1 - z0); return h ? [Math.min(x0, x1), z0 - hw, Math.max(x0, x1), z0 + hw] : [x0 - hw, Math.min(z0, z1), x0 + hw, Math.max(z0, z1)]; };
+    const DEFROADS = [];   // стандартные дороги карты (заполняется при сборке)
 
     // --- статика: дороги, город, деревни, лес, холмы
-    const bMeshes = {}, clouds = [], cars = [], townLabels = {}, BIG = {}, bGroups = {};
+    const bMeshes = {}, clouds = [], townLabels = {}, BIG = {}, bGroups = {};
     let forestRebuild = null, defaultItemsRef = [];
+    // лес по краям карты: владелец может вырубить любые деревья. CUTS — круги [x,z,r] и прямоугольники [x0,z0,x1,z1], где лес не растёт; NOFOREST — весь лес убран.
+    const CUTS = [], NOFOREST = { v: false }, FOREST = { all: [], spots: [] };
+    const cutHit = (x, z) => CUTS.some((c) => c.length === 3 ? Math.hypot(x - c[0], z - c[1]) < c[2] : x >= c[0] && x <= c[2] && z >= c[1] && z <= c[3]);
+    const roadsSplit = (a, k) => { const [x0, z0, x1, z1] = a, h = Math.abs(x1 - x0) >= Math.abs(z1 - z0), len = h ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.max(1, Math.round(len / 31)), o = []; for (let i = 0; i < n; i++) o.push([x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n, x0 + (x1 - x0) * (i + 1) / n, z0 + (z1 - z0) * (i + 1) / n, k]); return o; };
     (function buildStatic() {
-      const road = (x, z, w, d) => { const m = part('box', 0x4a4f57, x, 0.04, z, w, 0.08, d); m.material = texMat('asphalt', w / 6, d / 6, 0x4a4f57); m.castShadow = false; world.add(m); };
-      const line = (x, z, w, d, col) => { const m = part('box', col || 0xe2c64a, x, 0.1, z, w, 0.02, d); m.castShadow = false; world.add(m); };
       const ZEND = ROAD_Z[ROAD_Z.length - 1], zTop = -100, zBot = ROAD_F + RW / 2, zMid = (zTop + zBot) / 2, zLen = zBot - zTop;
-      road(0, ROAD_N, 620, RW); for (let x = -300; x < 300; x += 10) line(x, ROAD_N, 5, 0.35); line(0, ROAD_N - RW / 2 + 0.5, 620, 0.3, 0xd9c35a); line(0, ROAD_N + RW / 2 - 0.5, 620, 0.3, 0xd9c35a);
-      for (const z of ROAD_Z) road(0, z, 620, RW);
-      road(0, ROAD_F, 620, RW); for (let x = -300; x < 300; x += 10) line(x, ROAD_F, 5, 0.35); line(0, ROAD_F - RW / 2 + 0.5, 620, 0.3, 0xd9c35a); line(0, ROAD_F + RW / 2 - 0.5, 620, 0.3, 0xd9c35a);
+      const defRoad = (x0, z0, x1, z1, k) => { const h = Math.abs(x1 - x0) >= Math.abs(z1 - z0), len = h ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.max(1, Math.round(len / 31)); for (let i = 0; i < n; i++) DEFROADS.push([r1(x0 + (x1 - x0) * i / n), r1(z0 + (z1 - z0) * i / n), r1(x0 + (x1 - x0) * (i + 1) / n), r1(z0 + (z1 - z0) * (i + 1) / n), k]); };
+      for (const z of [ROAD_N, ...ROAD_Z, ROAD_F]) defRoad(-310, z, 310, z, 0);
+      for (const x of ROAD_X) defRoad(x, zTop, x, zBot, 0);
       const bayG = new T.Group(); bayG.position.set(BAY[0], 0, BAY[1]); bayG.rotation.y = BIG_ROT.bay || 0; world.add(bayG); bGroups.bayG = bayG;   // стоянка техники рядом с полем
       { const bay = part('box', 0xb9b6ac, 0, 0.05, 0, 72, 0.1, 14); bay.material = texMat('concrete', 14, 3, 0xbdb9ad); bay.castShadow = false; bayG.add(bay);
         townLabels.bay = addLabel('map', '🚜 Стоянка техники', new T.Vector3(BAY[0], 9, BAY[1]), 'bld', () => cb.onBuilding('tech')); townLabels.bay.maxCam = 260; }
-      for (const x of ROAD_X) road(x, zMid, RW, zLen);
-      for (const z of ROAD_Z) { for (let x = -300; x < 300; x += 10) line(x, z, 5, 0.35); line(0, z - RW / 2 + 0.5, 620, 0.3, 0xd9c35a); line(0, z + RW / 2 - 0.5, 620, 0.3, 0xd9c35a); }
-      for (const x of ROAD_X) { for (let z = zTop; z < zBot; z += 10) line(x, z, 0.35, 5); line(x - RW / 2 + 0.5, zMid, 0.3, zLen, 0xd9c35a); line(x + RW / 2 - 0.5, zMid, 0.3, zLen, 0xd9c35a); }
       // город: ряд зданий у дороги
       for (const [id, [x, z]] of Object.entries(TOWN)) {
         const b = MODEL('building', TOWN_MODEL[id], {}, () => { const m = buildingModel(id); m.scale.setScalar(2.5); return m; });
@@ -544,7 +588,7 @@
       bGroups.siteG = siteG;
       // пруд с пирсом на свободном участке (в группе)
       const pondG = new T.Group(); pondG.position.set(POND[0], 0, POND[1]); pondG.rotation.y = BIG_ROT.pond || 0; world.add(pondG); bGroups.pondG = pondG;
-      { const pond = part('cyl', 0x3f9fd6, 0, 0.07, 0, 54, 0.1, 42); pond.castShadow = false; pondG.add(pond);
+      { const pond = MODEL('prop', 'pond', {}, () => { const q = part('cyl', 0x3f9fd6, 0, 0.07, 0, 54, 0.1, 42); q.castShadow = false; return q; }); pondG.add(pond);
         const d = MODEL('prop', 'dock', {}, () => new T.Group()); d.position.set(0, 0, -18); d.rotation.y = Math.PI; pondG.add(d); }
       // дома, деревни и деревья: сначала собираем СТАНДАРТНЫЙ список предметов; если у владельца есть своя расстановка, берём её
       const rng = (() => { let q = 5; return () => (q = (q * 16807) % 2147483647) / 2147483647; })();
@@ -553,8 +597,7 @@
       const VILLAGES = [[-330, 10], [330, 10], [-300, 150], [320, 140], [-40, -250], [-290, -170], [330, -170]]; // центры деревень (улица идёт по оси X)
       // улицы с домами: дома стоят ровными рядами лицом к улице, с палисадниками и деревьями
       const street = (x0, x1, zc, seed) => {
-        road((x0 + x1) / 2, zc, x1 - x0, 7); { for (let x = x0; x < x1; x += 9) line(x + 3, zc, 4, 0.3); }
-        for (const sd of [-1, 1]) { const sw = part('box', 0xb9b6ac, (x0 + x1) / 2, 0.05, zc + sd * 5.3, x1 - x0, 0.1, 3.2); sw.material = texMat('concrete', (x1 - x0) / 8, 0.5, 0xb9b6ac); sw.castShadow = false; world.add(sw); }
+        defRoad(x0, zc, x1, zc, 1);
         let n = 0;
         for (let x = x0 + 8; x <= x1 - 8; x += 15) {
           if (ROAD_X.some((rx) => Math.abs(x - rx) < 12)) continue;
@@ -605,7 +648,8 @@
       for (let x = -300; x <= 300; x += 30) for (const z of [-RW / 2 - 2.5, RW / 2 + 2.5, ROAD_Z[1] - RW / 2 - 2.5, ROAD_Z[1] + RW / 2 + 2.5, ROAD_Z[2] - RW / 2 - 2.5, ROAD_Z[2] + RW / 2 + 2.5])
         pushI((x / 30) % 2 === 0 ? 'powerPole' : 'streetLamp', 0, x, z, z < 30 ? (z < 0 ? 0 : Math.PI) : (z < ROAD_Z[1] ? 0 : Math.PI));
       defaultItemsRef = defItems; decSetAll(LAY0 ? LAY0.items : defItems);
-      if (LAY0 && LAY0.roads) roadsSetAll(LAY0.roads);
+      roadsSetAll(LAY0 && LAY0.rd ? LAY0.rd : DEFROADS.concat(((LAY0 && LAY0.roads) || []).flatMap((a) => roadsSplit(a, 0))));
+      if (LAY0) { CUTS.length = 0; for (const c of LAY0.cut || []) CUTS.push(c.map(Number)); NOFOREST.v = !!LAY0.nf; }
       // лес по краям карты (instancing): можно пересобрать после правок в редакторе, чтобы деревья не росли сквозь дома
       const deco = DECO.map((f) => [f.cx, f.cz, f.w, f.d]), forestMeshes = [];
       const nz = (x, z) => (Math.sin(x * 0.0113 + 1.3) + Math.sin(z * 0.0131 + 0.4) + Math.sin((x + z) * 0.0071 + 2.1) + Math.sin((x - z) * 0.0173 + 0.7) + 0.7 * Math.sin(x * 0.031 + z * 0.027)) / 4.7;
@@ -619,19 +663,24 @@
         for (const b of Object.values(BIG)) { const bb = b.bounds && b.bounds(); if (bb) mark(bb[0] - 9, bb[1] - 9, bb[2] + 9, bb[3] + 9); }
         for (const r of ROADS) { const [x0, z0, x1, z1] = r.a; mark(Math.min(x0, x1) - 10, Math.min(z0, z1) - 10, Math.max(x0, x1) + 10, Math.max(z0, z1) + 10); }
         const blocked = (x, z) => grid.has(Math.floor(x / 12) + ',' + Math.floor(z / 12));
-        const treeSpots = [], FS = W.lite ? 8 : 6;
+        const treeSpots = [], FS = W.lite ? 8 : 6; FOREST.all = [];
         for (let x = -560; x <= 560; x += FS) for (let z = -430; z <= 480; z += FS) {
-          const px = x + (frng() - 0.5) * (FS - 1), pz = z + (frng() - 0.5) * (FS - 1);
+          const rA = frng(), rB = frng(), rC = frng(), rD = frng(), rE = frng(), rF = frng();   // одинаковое число случайных чисел на клетку: лес не «перетасовывается» от правок
+          const px = x + (rA - 0.5) * (FS - 1), pz = z + (rB - 0.5) * (FS - 1);
+          if (NOFOREST.v) continue;
           const inCore = px > -300 && px < 290 && pz > -192 && pz < 190;
           if (deco.some(([cx, cz, w, d]) => Math.abs(px - cx) < w / 2 + 4 && Math.abs(pz - cz) < d / 2 + 4)) continue;
           if (VILLAGES.some(([vx, vz]) => Math.abs(px - vx) < 60 && Math.abs(pz - vz) < 28)) continue;
           if (inCore) continue;   // внутри обжитой части лес не растёт: там всё расставляет владелец
           if (blocked(px, pz)) continue;
           const dc = Math.hypot(Math.max(-300 - px, px - 290, 0), Math.max(-192 - pz, pz - 190, 0)); // расстояние до обжитой части карты
-          const p = sm(-0.12, 0.18, nz(px, pz) + 0.55 * sm(40, 200, dc) - 0.15 * (1 - sm(0, 40, dc))); if (frng() > p && frng() > 0.001) continue;
+          const p = sm(-0.12, 0.18, nz(px, pz) + 0.55 * sm(40, 200, dc) - 0.15 * (1 - sm(0, 40, dc))); if (rC > p && rD > 0.001) continue;
           const stand = nz(px * 0.6 + 90, pz * 0.6 - 40) > 0;
-          treeSpots.push([px, pz, 1.8 + frng() * 1.8, stand ? frng() * 0.62 : 0.4 + frng() * 0.6]);
+          const sp = [px, pz, 1.8 + rE * 1.8, stand ? rF * 0.62 : 0.4 + rF * 0.6]; FOREST.all.push(sp);
+          if (cutHit(px, pz)) continue;
+          treeSpots.push(sp);
         }
+        FOREST.spots = treeSpots;
         const pines = treeSpots.filter((t) => t[3] < 0.55), oaks = treeSpots.filter((t) => t[3] >= 0.55);
         const mk = (geoms, list, build) => {
           const m = new T.InstancedMesh(geoms, new T.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), Math.max(1, list.length)); m.castShadow = !W.lite; m.receiveShadow = true; m.count = list.length;
@@ -654,7 +703,6 @@
       // дальние холмы и облака
       for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2, r = 1050 + (i % 3) * 80; const h = part('sph', 0x3d7a3a, Math.cos(a) * r * 1.15, 0, Math.sin(a) * r * 0.8 + 40, 200 + (i % 4) * 40, 110 + (i % 5) * 30, 200 + (i % 4) * 40); h.castShadow = false; world.add(h); }
       // облаков нет: они висели над картой белыми пятнами
-      for (let i = 0; i < 8; i++) { const c = MODEL('car', i % 3 === 2 ? 'van' : 'sedan', { variant: i }, () => { const g = new T.Group(); const col = [0xef5350, 0x42a5f5, 0xffee58, 0x66bb6a, 0xab47bc, 0xff7043][i % 6]; g.add(part('box', col, 0, 0.7, 0, 1.8, 0.8, 4.2)); g.add(part('box', 0xcfe9ff, 0, 1.35, -0.2, 1.6, 0.6, 2.2)); return g; }); c.userData = { dir: i % 2 ? -1 : 1, off: i * 31, z: ROAD_Z[i % 3] }; cars.push(c); world.add(c); }
     })();
 
     // --- фермы
@@ -843,7 +891,7 @@
       }
     }
     // --- стройплощадки
-    const siteViews = SITE_POS.map(() => ({ sig: '', g: null, lab: null }));
+    const siteViews = SITE_POS.map(() => ({ sig: '', g: null, lab: null })), HIDE = new Set();
     function syncSites(S) {
       SITE_POS.forEach(([x, z], i) => {
         const v = siteViews[i], open = i < L.siteSlots(S), st = S.sites[i], stage = st ? L.siteStage(st) : -1;
@@ -856,6 +904,7 @@
         }
         if (!v.lab) v.lab = addLabel('map', '', new T.Vector3(x, 14, z), 'bld', () => cb.onBuilding('sites'));
         v.lab.pos.set(x, st && st.type === 'barn' ? 17 : 13, z);
+        { const hid = HIDE.has('site' + i); if (v.g) v.g.visible = !hid; v.lab.off = hid; }
         const txt = !open ? `🔒 Стройка · с ${L.SITE_SLOTS[i].level} ур.` : st ? (st.done ? `${L.SITE_TYPES[st.type].icon} ${L.SITE_TYPES[st.type].name} готов: продать` : `${L.SITE_TYPES[st.type].icon} ${L.SITE_TYPES[st.type].name} ${Math.floor(st.prog / st.total * 100)}%`) : `➕ Стройплощадка ${i + 1}`;
         if (v.lab.el.textContent !== txt) { v.lab.el.textContent = txt; v.lab.el.classList.toggle('locked', !open); v.lab.el.classList.toggle('ready', !!(st && st.done)); }
       });
@@ -942,7 +991,7 @@
 
     // --- камера: вращение, перемещение, масштаб
     const cam = { tx: -194, tz: -20, yaw: 0, pitch: 0.95, dist: 90, gx: -194, gz: -20, gd: 90 };
-    const keys = {};
+    const keys = {}, LIM = { big: false };
     function applyCamera() {
       const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), dd = cam.dist * (camera.aspect < 1 ? 1 + (1 - camera.aspect) * 1.4 : 1);
       camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * dd, sp * dd, cam.tz + Math.cos(cam.yaw) * cp * dd);
@@ -950,7 +999,8 @@
     }
     function panBy(dx, dz) { // в осях экрана (вправо, вперёд)
       const c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
-      cam.gx = Math.max(-520, Math.min(520, cam.gx + dx * c + dz * s)); cam.gz = Math.max(-360, Math.min(420, cam.gz - dx * s + dz * c));
+      const bx = LIM.big ? 1100 : 520, bz0 = LIM.big ? -900 : -360, bz1 = LIM.big ? 900 : 420;
+      cam.gx = Math.max(-bx, Math.min(bx, cam.gx + dx * c + dz * s)); cam.gz = Math.max(bz0, Math.min(bz1, cam.gz - dx * s + dz * c));
     }
     function focus(x, z, d) { cam.gx = x; cam.gz = z; if (d) cam.gd = d; }
     function resize() {
@@ -981,9 +1031,10 @@
       for (const h of hits) { let o = h.object; while (o && !o.userData.veh) o = o.parent; if (o && o.userData.veh) return o.userData.veh; if (h.object.userData.veh) return h.object.userData.veh; }
       return null;
     }
+    const visChain = (o) => { for (; o; o = o.parent) if (o.visible === false) return false; return true; };
     function pickBuilding(ev) {
       setRay(ev); const hits = ray.intersectObjects(world.children, true);
-      for (const h of hits) { if (h.object.userData.bid) return h.object.userData.bid; if (h.object.isInstancedMesh) return null; }
+      for (const h of hits) { if (!visChain(h.object)) continue; if (h.object.userData.bid) return h.object.userData.bid; if (h.object.isInstancedMesh) return null; }
       return null;
     }
     const hiPool = []; const hiMat = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false });
@@ -1119,7 +1170,6 @@
       if (rain.visible) { const a = rain.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - dt * 22; if (y < 0) y = 50; a.setY(i, y); } a.needsUpdate = true; rain.position.set(cam.tx, 0, cam.tz); }
       for (const cl of clouds) { cl.position.x += dt * 1.6; if (cl.position.x > 520) cl.position.x = -520; }
       for (const b of Object.values(bMeshes)) b.traverse((o) => { if (o.userData.spin) o.rotation.y += dt * 1.2; });
-      for (const c of cars) { const u = c.userData, len = 600, t = (W.time * 12 + u.off * 20) % len; c.position.set(u.dir > 0 ? -300 + t : 300 - t, 0.02, u.z + (u.dir > 0 ? 2 : -2)); c.rotation.y = u.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
       for (const fv of views) {
         for (const a of fv.animals) {
           a.wait -= dt; if (a.wait <= 0) { const p = fv.pen; a.tx = p.x + (Math.random() - 0.5) * (p.w - 3); a.tz = p.z + (Math.random() - 0.5) * (p.d - 3); a.wait = 2 + Math.random() * 4; }
@@ -1155,6 +1205,7 @@
       renderer.render(scene, camera);
       const r = canvas.getBoundingClientRect(), v3 = new T.Vector3();
       for (const l of labels) {
+        if (l.off) { l.el.style.display = 'none'; continue; }
         v3.copy(l.pos).project(camera); const dist = camera.position.distanceTo(l.pos);
         const far = (l.el.classList.contains('bld') ? 700 : l.el.classList.contains('penlbl') ? 170 : 150);
         if (v3.z > 1 || dist > far || (l.maxCam && cam.dist > l.maxCam)) { l.el.style.display = 'none'; continue; }
@@ -1163,10 +1214,10 @@
     }
     function focusWild() { focus(-106, -140, 110); }
     function focusForest() { focus(75, -140, 100); }
-    function focusSites() { focus(198, -135, 95); }
-    function focusSawmill() { focus(-28, -125, 80); }
+    function focusSites() { focus(SITE_POS[1][0], SITE_POS[1][1], 95); }
+    function focusSawmill() { focus(SAWMILL_POS[0], SAWMILL_POS[1] + 3, 80); }
     function focusHome() { focusFarm('home'); }
-    function focusTown() { focus(-22, 84, 170); }
+    function focusTown() { const t = Object.values(TOWN), mx = t.reduce((a, q) => a + q[0], 0) / t.length, mz = t.reduce((a, q) => a + q[1], 0) / t.length; focus(mx, mz, 170); }
     function focusFarm(id) {
       const FP = FIELD_POS[id]; if (FP) { const fv = views.find((q) => q.id === id); const w0 = fv && fv.w ? fv.w : 12, cx = FP[0] - FW_MAX * TS / 2 + w0 * TS / 2; focus(cx, FP[1] - 12, Math.max(125, w0 * TS * 1.9)); return; }
       const s = SLOT[id]; if (s) focus(s[0] - 6, s[1] + (s[1] < 0 ? 8 : -8), 92);
@@ -1197,6 +1248,15 @@
     regBig('bay', { name: 'Стоянка техники', canRot: true, area: 1000, get: () => [BAY[0], BAY[1], BIG_ROT.bay || 0],
       set(x, z, r) { BAY[0] = x; BAY[1] = z; BIG_ROT.bay = r; bGroups.bayG.position.set(x, 0, z); bGroups.bayG.rotation.y = r; townLabels.bay.pos.set(x, 9, z); },
       bounds: () => rectB(BAY[0], BAY[1], 36, 7), hit(x, z) { return inRect(this, x, z); } });
+    // «удалить» большой объект = спрятать (его кнопки остаются в меню «Город»); вернуть можно в списке «Объекты»
+    const HIDEF = {};
+    for (const id of Object.keys(TOWN)) HIDEF[id] = (v) => { bMeshes[id].visible = v; townLabels[id].off = !v; };
+    HIDEF.sawmill = (v) => { bGroups.sawmillG.visible = v; townLabels.sawmill.off = !v; };
+    SITE_POS.forEach((p, i) => { HIDEF['site' + i] = (v) => { if (siteViews[i].g) siteViews[i].g.visible = v; if (siteViews[i].lab) siteViews[i].lab.off = !v; bGroups.siteG[i].visible = v; }; });
+    HIDEF.pond = (v) => { bGroups.pondG.visible = v; };
+    HIDEF.bay = (v) => { bGroups.bayG.visible = v; townLabels.bay.off = !v; };
+    function bigVis(id, vis) { if (vis) HIDE.delete(id); else HIDE.add(id); const f = HIDEF[id]; if (f) f(vis); if (BIG[id]) BIG[id].hidden = !vis; }
+    for (const id of Object.keys(HIDEF)) if (BIG[id]) { BIG[id].hidable = true; BIG[id].hidden = false; }
     function regFarmBigs() {
     for (const fv of views) {
       const id = fv.id;
@@ -1211,17 +1271,33 @@
     }
     }
     const layRev = { n: (LAY0 && LAY0.rev) || 0 };
-    function exportLayout() { const big = {}; for (const b of Object.values(BIG)) big[b.id] = b.get().map(r1); return { v: 1, rev: layRev.n, items: decExport(), roads: roadsExport(), big }; }
+    for (const id of (LAY0 && LAY0.hide) || []) if (HIDEF[id]) bigVis(id, false);
+    if (LAY0 && BIG.market && BIG.market.commit) BIG.market.commit();
+    // расстановка карты целиком: v:2 — rd (все дороги), cut/nf (вырубленный лес), hide (спрятанные большие объекты)
+    function exportLayout() {
+      const big = {}; for (const b of Object.values(BIG)) { const g = b.get(); big[b.id] = [r1(g[0]), r1(g[1]), r3(g[2] || 0)]; }
+      return { v: 2, rev: layRev.n, items: decExport(), rd: roadsExport(), big, cut: CUTS.map((c) => c.map(r1)), nf: NOFOREST.v ? 1 : 0, hide: [...HIDE] };
+    }
     function applyLayout(Ly) {
       if (!Ly) return;
       for (const [id, a] of Object.entries(Ly.big || {})) { const b = BIG[id]; if (b) { b.set(+a[0], +a[1], +a[2] || 0); b.commit && b.commit(); } }
-      decSetAll(Ly.items || []); roadsSetAll(Ly.roads || []); layRev.n = Ly.rev || layRev.n; if (forestRebuild) forestRebuild();
+      decSetAll(Ly.items || []);
+      roadsSetAll(Ly.rd ? Ly.rd : DEFROADS.concat((Ly.roads || []).flatMap((a) => roadsSplit(a, 0))));
+      CUTS.length = 0; for (const c of Ly.cut || []) CUTS.push(c.map(Number)); NOFOREST.v = !!Ly.nf;
+      for (const id of Object.keys(HIDEF)) bigVis(id, !(Ly.hide || []).includes(id));
+      layRev.n = Ly.rev || layRev.n; if (forestRebuild) forestRebuild();
     }
-    const defaultLayout = () => ({ v: 1, rev: 0, items: defaultItemsRef.map((i) => [i.t, i.v, i.x, i.z, i.r, i.s]), roads: [], big: JSON.parse(JSON.stringify(DEF_BIG)) });
-    const edApi = { T, scene, camera, canvas, cam, groundAt, panPx, BIG, DEC, DEC_R, PALETTE, TS, decAdd, decRemove, decSet, decFlush, decNear, decModel, roadsAdd, roadsRemove, ROADS, roadDist, roadMesh, exportLayout, applyLayout, defaultLayout, forestRebuild, world, W, bumpRev: () => { layRev.n++; } };
+    const defaultLayout = () => ({ v: 2, rev: 0, items: defaultItemsRef.map((i) => [i.t, i.v, i.x, i.z, i.r, i.s]), rd: DEFROADS.map((a) => a.slice()), big: JSON.parse(JSON.stringify(DEF_BIG)), cut: [], nf: 0, hide: [] });
+    /** Пустая карта: дороги и большие объекты на местах, но без домов, деревьев, леса. */
+    const cleanLayout = () => Object.assign(defaultLayout(), { items: [], nf: 1 });
+    // лес: поиск и вырубка (круг или прямоугольник)
+    const forestNear = (x, z, r) => { let b = null, bd = r; for (const t of FOREST.spots) { const d = Math.hypot(t[0] - x, t[1] - z); if (d < bd) { bd = d; b = t; } } return b; };
+    const forestIn = (x0, z0, x1, z1) => FOREST.spots.filter((t) => t[0] >= Math.min(x0, x1) && t[0] <= Math.max(x0, x1) && t[1] >= Math.min(z0, z1) && t[1] <= Math.max(z0, z1));
+    const cutAdd = (c) => { CUTS.push(c.map(Number)); };
+    const edApi = { T, scene, camera, canvas, cam, groundAt, panPx, BIG, DEC, DEC_R, PALETTE, TS, PATCH, decAdd, decRemove, decSet, decFlush, decNear, decModel, roadsAdd, roadsAddLine, roadsRemove, roadsFlush, ROADS, roadDist, roadBox, exportLayout, applyLayout, defaultLayout, cleanLayout, forestRebuild: () => forestRebuild && forestRebuild(), forestNear, forestIn, cutAdd, bigVis, setNoForest: (v) => { NOFOREST.v = !!v; }, noForest: () => NOFOREST.v, world, W, bumpRev: () => { layRev.n++; }, setLimits: (big) => { LIM.big = !!big; } };
     W.ed = root.FarmEditor ? root.FarmEditor.create(edApi) : null;
     W.screenAt = (x, z, y) => { const v = new T.Vector3(x, y || 0.5, z).project(camera), r = canvas.getBoundingClientRect(); return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top }; };
-    W.palette = PALETTE; W.exportLayout = exportLayout; W.applyLayout = applyLayout; W.defaultLayout = defaultLayout;
+    W.palette = PALETTE; W.patches = PATCH; W.cleanLayout = cleanLayout; W.exportLayout = exportLayout; W.applyLayout = applyLayout; W.defaultLayout = defaultLayout;
     initWolves();
     Object.assign(W, { wolves, update, fx, highlight, resize, tileScreen, vehScreen, workAnim, arrive, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
     return W;

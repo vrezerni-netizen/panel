@@ -595,149 +595,405 @@
   const WINGM = new T.MeshLambertMaterial({ color: 0xdfeaf4, transparent: true, opacity: 0.52, side: T.DoubleSide, depthWrite: false });
 
   // ================================================================== ДЕРЕВЬЯ
-  const rdir = (r) => { const y = r() * 2 - 1, a = r() * TAU, q = Math.sqrt(1 - y * y); return [q * Math.cos(a), y, q * Math.sin(a)]; };
-  /** крона из комков: cfg {c:[x,y,z], rad:[rx,ry,rz], n, rmin, rmax, dark, light, nSmall, noise, detail, sq, pts(out)} */
-  function canopy(g, r, cfg) {
-    const [cx, cy, cz] = cfg.c, [rx, ry, rz] = cfg.rad, sd = Math.floor(r() * 1000), pts = cfg.pts || [];
-    // тёмная сердцевина, чтобы не было просветов
-    blob(g, mix(cfg.dark, 0x000000, 0.18), cx, cy - ry * 0.1, cz, rx * 0.5, ry * 0.58, rz * 0.5, sd, { detail: 1, noise: 0.12, grad: [0.7, 1.0] });
-    for (let i = 0; i < cfg.n; i++) {
-      const d = rdir(r), k = 0.4 + 0.6 * Math.sqrt(r()), sq = d[1] < 0 ? 1 + d[1] * (cfg.sq == null ? 0.25 : cfg.sq) : 1;
-      const x = cx + d[0] * rx * k, y = cy + d[1] * ry * k, z = cz + d[2] * rz * k;
-      const br = lerp(cfg.rmin, cfg.rmax, r()) * (0.78 + 0.3 * k) * sq;
-      const t = clamp(0.4 + 0.5 * d[1] * k + (r() - 0.5) * 0.5, 0, 1);
-      blob(g, mix(cfg.dark, cfg.light, t), x, y, z, br * (cfg.hx || 1), br * (cfg.hy || 0.88), br * (cfg.hx || 1), sd + i * 7 + 1, { detail: cfg.detail == null ? 1 : cfg.detail, flat: cfg.flat, noise: cfg.noise == null ? 0.2 : cfg.noise, grad: [0.55, 1.16], jit: 0.14 });
-      pts.push({ x, y, z, r: br, d });
-    }
-    for (let i = 0; i < (cfg.nSmall || 0); i++) {      // мелкие кластеры листвы по контуру
-      const d = rdir(r), k = 0.86 + 0.26 * r();
-      const t = clamp(0.5 + 0.5 * d[1] + (r() - 0.5) * 0.5, 0, 1), br = lerp(cfg.rmin, cfg.rmax, 0.4) * (0.55 + 0.25 * r());
-      const x = cx + d[0] * rx * k, y = cy + d[1] * ry * k, z = cz + d[2] * rz * k;
-      blob(g, mix(cfg.dark, cfg.light, t), x, y, z, br, br * 0.85, br, sd + i * 11 + 500, { detail: 0, flat: cfg.flat, noise: 0.28, grad: [0.6, 1.16], jit: 0.16 });
-      pts.push({ x, y, z, r: br, d });
-    }
-    return pts;
+  // Листва: карточки-кластеры с альфа-вырезом из ОБЩЕГО атласа (одна текстура на все деревья) + тёмные «ядра» (гладкие комки),
+  // стволы и ветви — конические трубки с корой и наплывами у корня. Каждое дерево = 2 меша (листва + кора), оба с текстурными материалами:
+  // InstancedMesh леса и склейка декора (C.bakeTex) их сохраняют. Освещение карточек — по «сферическим» нормалям кроны.
+  const TV = (x, y, z) => new T.Vector3(x, y, z);
+  const NRM = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
+  const rgbs = (c, k) => `rgb(${clamp(Math.round(c[0] * k), 0, 255)},${clamp(Math.round(c[1] * k), 0, 255)},${clamp(Math.round(c[2] * k), 0, 255)})`;
+  const lerpC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+
+  // ---------------------------------------------------------------- атлас листвы: 8x8 ячеек по 128 px (цвет + маска прозрачности)
+  const ATL = 1024, CELL = 128, GN = 8, LEVK = [0.6, 0.92, 1.2];     // LEVK: яркость ячеек «тень / середина / свет»
+  const SPEC = {      // n листьев, len/wid в px, wpos — где самая широкая часть, lo/hi — цвета тени и света, nc — число пучков в ячейке
+    oak:    { seed: 1, n: 230, len: 15, wid: 7.2, wpos: 0.55, nc: 7, lo: [40, 70, 28],  hi: [98, 138, 48],  yel: 0.06, lobes: 1 },
+    birch:  { seed: 2, n: 170, len: 13, wid: 7,   wpos: 0.38, nc: 8, lo: [80, 112, 44], hi: [150, 176, 74], yel: 0.12 },
+    fruit:  { seed: 3, n: 190, len: 17, wid: 7.5, wpos: 0.5,  nc: 7, lo: [46, 82, 32],  hi: [104, 146, 56], yel: 0.03 },
+    poplar: { seed: 4, n: 210, len: 14, wid: 7.5, wpos: 0.42, nc: 7, lo: [62, 96, 42],  hi: [136, 168, 84], yel: 0.05 },
+    bush:   { seed: 5, n: 230, len: 14, wid: 7,   wpos: 0.5,  nc: 6, lo: [32, 64, 26],  hi: [86, 128, 44],  yel: 0.02 },
+    pine:   { seed: 6, lo: [26, 54, 38], hi: [84, 122, 62] },
+  };
+  function leafPath(g, len, wid, wp) {
+    g.beginPath(); g.moveTo(0, 0);
+    g.bezierCurveTo(len * wp * 0.3, -wid * 1.05, len * (wp + 0.28), -wid * 0.95, len, 0);
+    g.bezierCurveTo(len * (wp + 0.28), wid * 0.95, len * wp * 0.3, wid * 1.05, 0, 0);
+    g.closePath();
   }
-  const BARK = (seed) => (x, y, z, nx, ny, nz, c) => { c.multiplyScalar(0.82 + 0.3 * noise3(x * 5 + seed, y * 1.3, z * 5)); };
+  function mkLeaves(P, variant) {
+    const r = lcg(P.seed * 977 + variant * 313 + 11), out = [], R = CELL / 2 - P.len * 0.5 - 2, cs = [];
+    for (let c = 0; c < P.nc; c++) { const a = r() * TAU, rho = Math.sqrt(r()) * R * 0.78; cs.push([CELL / 2 + Math.cos(a) * rho, CELL / 2 + Math.sin(a) * rho * 0.95, R * (0.3 + r() * 0.2)]); }
+    for (let i = 0; i < P.n; i++) {
+      const c = cs[i % P.nc]; let x = c[0] + (r() + r() + r() - 1.5) * c[2] * 1.5, y = c[1] + (r() + r() + r() - 1.5) * c[2] * 1.5;
+      const dx = x - CELL / 2, dy = y - CELL / 2, d = Math.hypot(dx, dy); if (d > R) { x = CELL / 2 + dx / d * R * (0.9 + r() * 0.1); y = CELL / 2 + dy / d * R * (0.9 + r() * 0.1); }
+      x = CELL / 2 + (x - CELL / 2) * (variant ? 1.05 : 0.9); y = CELL / 2 + (y - CELL / 2) * (variant ? 0.9 : 1.05);
+      out.push({ x, y, a: Math.atan2(dy, dx) + (r() - 0.5) * 2.6, len: P.len * (0.8 + r() * 0.4), wid: P.wid * (0.8 + r() * 0.4), rho: Math.min(1, d / R), t: r(), under: i < P.n * 0.4, yel: r() < P.yel });
+    }
+    return out;
+  }
+  function paintLeaves(g, ox, oy, mask, P, leaves, level, dens) {
+    g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
+    g.fillStyle = mask ? '#000' : rgbs(P.lo, 0.5 * LEVK[level]); g.fillRect(ox, oy, CELL, CELL);
+    for (const l of leaves) {
+      const up = 1 - l.y / CELL, t = clamp(0.22 + 0.36 * l.rho + 0.4 * (up - 0.5) + (l.t - 0.5) * 0.55, 0, 1);
+      let c = lerpC(P.lo, P.hi, t); if (l.yel) c = lerpC(c, [150, 148, 54], 0.55);
+      g.save(); g.translate(ox + l.x, oy + l.y); g.rotate(l.a); g.translate(-l.len * 0.5, 0);
+      g.fillStyle = mask ? '#fff' : rgbs(c, LEVK[level] * (l.under ? 0.72 : 1));
+      leafPath(g, l.len, l.wid, P.wpos); g.fill();
+      if (P.lobes) { g.beginPath(); g.ellipse(l.len * 0.4, l.wid * 0.62, l.wid * 0.5, l.wid * 0.36, 0.5, 0, TAU); g.ellipse(l.len * 0.4, -l.wid * 0.62, l.wid * 0.5, l.wid * 0.36, -0.5, 0, TAU); g.ellipse(l.len * 0.68, l.wid * 0.38, l.wid * 0.36, l.wid * 0.28, 0.5, 0, TAU); g.ellipse(l.len * 0.68, -l.wid * 0.38, l.wid * 0.36, l.wid * 0.28, -0.5, 0, TAU); g.fill(); }
+      if (!mask) {
+        g.strokeStyle = 'rgba(8,18,4,0.32)'; g.lineWidth = 0.8; leafPath(g, l.len, l.wid, P.wpos); g.stroke();
+        g.strokeStyle = rgbs(lerpC(c, [210, 220, 150], 0.28), LEVK[level] * (l.under ? 0.72 : 1)); g.lineWidth = 0.7; g.beginPath(); g.moveTo(l.len * 0.1, 0); g.lineTo(l.len * 0.86, 0); g.stroke();
+      }
+      g.restore();
+    }
+    g.restore();
+  }
+  function paintCore(g, ox, oy, mask, P) {          // непрозрачный тёмный «внутренний слой листвы»
+    g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
+    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.6); g.fillRect(ox, oy, CELL, CELL);
+    if (!mask) { const r = lcg(P.seed * 53 + 7); for (let i = 0; i < 1100; i++) { g.save(); g.translate(ox + r() * CELL, oy + r() * CELL); g.rotate(r() * TAU); g.fillStyle = rgbs(lerpC(P.lo, P.hi, r() * 0.55), 0.55 + r() * 0.3); leafPath(g, 7, 3.4, 0.5); g.fill(); g.restore(); } }
+    g.restore();
+  }
+  function paintFrond(g, ox, oy, mask, level, variant) {    // ветка ели: стебель снизу вверх, хвоя «ёлочкой»
+    const P = SPEC.pine, r = lcg(991 + variant * 37), k = LEVK[level];
+    g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
+    g.fillStyle = mask ? '#000' : rgbs(P.lo, 0.45 * k); g.fillRect(ox, oy, CELL, CELL);
+    const cx = ox + CELL / 2, y0 = oy + CELL - 3, H = CELL - 8, bend = (r() - 0.5) * 12;
+    const fw = (t) => 0.47 * CELL * Math.pow(Math.sin(Math.PI * clamp(0.07 + 0.86 * Math.pow(t, 0.85), 0, 1)), 0.7);
+    const px = (t) => cx + bend * t * t, py = (t) => y0 - H * t;
+    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.8 * k); g.beginPath();
+    for (let t = 0; t <= 1.001; t += 0.05) g.lineTo(px(t) - fw(t) * 0.62, py(t));
+    for (let t = 1; t >= -0.001; t -= 0.05) g.lineTo(px(t) + fw(t) * 0.62, py(t));
+    g.closePath(); g.fill();
+    g.strokeStyle = mask ? '#fff' : rgbs([86, 62, 44], k); g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(px(0), py(0)); g.lineTo(px(0.95), py(0.95)); g.stroke();
+    const N = 36;
+    for (let i = 0; i < N; i++) {
+      const t = 0.03 + 0.97 * i / (N - 1), w = fw(t);
+      for (const s of [-1, 1]) for (let m = 0; m < 3; m++) {
+        const ang = -Math.PI / 2 + s * (0.7 + r() * 0.55), len = w * (0.55 + r() * 0.55) * (m === 2 ? 0.6 : 1), ex = px(t) + Math.cos(ang) * len, ey = py(t) + Math.sin(ang) * len;
+        const tt = clamp(0.2 + 0.5 * t + 0.35 * (len / (w + 1)) + (r() - 0.5) * 0.3, 0, 1);
+        g.strokeStyle = mask ? '#fff' : rgbs(lerpC(P.lo, P.hi, tt), k); g.lineWidth = 3.2 - 1.2 * t; g.beginPath(); g.moveTo(px(t), py(t)); g.lineTo(ex, ey); g.stroke();
+      }
+    }
+    g.restore();
+  }
+  function paintFruit(g, ox, oy, mask, kind, col) {         // плоды / ягоды / цветы среди листьев
+    g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
+    g.fillStyle = mask ? '#000' : 'rgb(30,52,24)'; g.fillRect(ox, oy, CELL, CELL);
+    const r = lcg(kind.length * 17 + col[0]);
+    for (let i = 0; i < 9; i++) { g.save(); g.translate(ox + CELL / 2 + (r() - 0.5) * 50, oy + CELL / 2 + (r() - 0.5) * 50); g.rotate(r() * TAU); g.fillStyle = mask ? '#fff' : rgbs([50 + r() * 20, 84 + r() * 24, 36], 0.9); leafPath(g, 30, 12, 0.5); g.fill(); g.restore(); }
+    const disc = (x, y, rad, c) => {
+      g.beginPath(); g.arc(ox + x, oy + y, rad, 0, TAU);
+      if (mask) { g.fillStyle = '#fff'; g.fill(); return; }
+      const gr = g.createRadialGradient(ox + x - rad * 0.35, oy + y - rad * 0.4, rad * 0.1, ox + x, oy + y, rad);
+      gr.addColorStop(0, rgbs(c, 1.35)); gr.addColorStop(0.55, rgbs(c, 1)); gr.addColorStop(1, rgbs(c, 0.55)); g.fillStyle = gr; g.fill();
+    };
+    if (kind === 'fruit') for (const [x, y] of [[46, 74], [80, 58], [64, 94]]) disc(x, y, 17, col);
+    else if (kind === 'berry') for (let i = 0; i < 8; i++) disc(34 + r() * 60, 34 + r() * 60, 7, col);
+    else for (let i = 0; i < 5; i++) {
+      const x = 30 + r() * 68, y = 30 + r() * 68;
+      for (let p = 0; p < 5; p++) { const a = p / 5 * TAU + i; g.beginPath(); g.ellipse(ox + x + Math.cos(a) * 8, oy + y + Math.sin(a) * 8, 8, 5, a, 0, TAU); g.fillStyle = mask ? '#fff' : rgbs(col, 0.95 + 0.1 * (p % 2)); g.fill(); }
+      g.beginPath(); g.arc(ox + x, oy + y, 4, 0, TAU); g.fillStyle = mask ? '#fff' : 'rgb(224,184,60)'; g.fill();
+    }
+    g.restore();
+  }
+  // ---------------------------------------------------------------- кора (бесшовные 256x256)
+  function barkTex(kind) {
+    const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s; const g = cv.getContext('2d'), r = lcg(kind === 'birch' ? 77 : 31);
+    const wrapX = (fn) => { for (const o of [-s, 0, s]) fn(o); };
+    if (kind === 'birch') {
+      g.fillStyle = '#e4e0d4'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 50; i++) { const x = r() * s; g.strokeStyle = `rgba(${90 + r() * 40},${84 + r() * 30},${70},${0.05 + r() * 0.1})`; g.lineWidth = 1 + r() * 3; wrapX((o) => { g.beginPath(); g.moveTo(x + o, 0); g.lineTo(x + o + (r() - 0.5) * 6, s); g.stroke(); }); }
+      for (let i = 0; i < 70; i++) {                              // тёмные поперечные отметины
+        const x = r() * s, y = r() * s, w = 10 + r() * 46, h = 3 + r() * 5;
+        wrapX((o) => { g.fillStyle = 'rgba(150,146,134,0.35)'; g.beginPath(); g.ellipse(x + o, y, w * 0.62, h * 1.6, 0, 0, TAU); g.fill(); g.fillStyle = `rgba(22,20,18,${0.7 + r() * 0.25})`; g.beginPath(); g.ellipse(x + o, y, w * 0.5, h * 0.5, 0, 0, TAU); g.fill(); });
+      }
+      for (let i = 0; i < 6; i++) { const x = r() * s, y = r() * s; wrapX((o) => { g.fillStyle = 'rgba(40,36,32,0.6)'; g.beginPath(); g.moveTo(x + o, y - 10); g.lineTo(x + o + 14, y + 4); g.lineTo(x + o - 12, y + 6); g.closePath(); g.fill(); }); }
+    } else {
+      g.fillStyle = '#756a5b'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 70; i++) { g.fillStyle = r() < 0.5 ? 'rgba(40,32,24,0.1)' : 'rgba(190,176,150,0.08)'; wrapX((o) => { g.beginPath(); g.ellipse(r() * s + o, r() * s, 12 + r() * 30, 6 + r() * 14, 0, 0, TAU); g.fill(); }); }
+      for (let i = 0; i < 28; i++) {
+        const x0 = r() * s, amp = 2 + r() * 5, kk = 1 + Math.floor(r() * 3), ph = r() * TAU, w = 2 + r() * 4;
+        wrapX((o) => {
+          g.strokeStyle = 'rgba(190,176,150,0.3)'; g.lineWidth = w * 0.9; g.beginPath();
+          for (let y = -8; y <= s + 8; y += 8) { const x = x0 + o + w * 1.1 + amp * Math.sin(TAU * kk * y / s + ph); y === -8 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke();
+          g.strokeStyle = 'rgba(26,20,14,0.78)'; g.lineWidth = w; g.beginPath();
+          for (let y = -8; y <= s + 8; y += 8) { const x = x0 + o + amp * Math.sin(TAU * kk * y / s + ph); y === -8 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke();
+        });
+      }
+      for (let i = 0; i < 40; i++) { const x = r() * s, y = r() * s; wrapX((o) => { g.strokeStyle = 'rgba(26,20,14,0.5)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x + o - 6, y); g.lineTo(x + o + 6, y + (r() - 0.5) * 3); g.stroke(); }); }
+    }
+    for (let i = 0; i < 2500; i++) { g.fillStyle = r() < 0.5 ? `rgba(0,0,0,${r() * 0.07})` : `rgba(255,250,235,${r() * 0.07})`; g.fillRect(r() * s, r() * s, 1 + r() * 2, 1 + r() * 2); }
+    const t = new T.CanvasTexture(cv); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; return t;
+  }
+  let _TR = null;
+  function treeKit() {
+    if (_TR) return _TR;
+    const cv = document.createElement('canvas'), mk = document.createElement('canvas'); cv.width = cv.height = mk.width = mk.height = ATL;
+    const cc = cv.getContext('2d'), mc = mk.getContext('2d'), cells = {}; let idx = 0;
+    cc.fillStyle = '#2a4222'; cc.fillRect(0, 0, ATL, ATL); mc.fillStyle = '#000'; mc.fillRect(0, 0, ATL, ATL);
+    const both = (key, fn) => { const c = idx % GN, rr = (idx / GN) | 0; idx++; cells[key] = [c, rr]; fn(cc, c * CELL, rr * CELL, false); fn(mc, c * CELL, rr * CELL, true); };
+    for (const sp of ['oak', 'birch', 'fruit', 'poplar', 'bush']) {
+      const P = SPEC[sp];
+      for (let v = 0; v < 2; v++) { const lv = mkLeaves(P, v); for (let l = 0; l < 3; l++) both(sp + v + l, (g, ox, oy, mask) => paintLeaves(g, ox, oy, mask, P, lv, l)); }
+      both('core' + sp, (g, ox, oy, mask) => paintCore(g, ox, oy, mask, P));
+    }
+    for (let v = 0; v < 2; v++) for (let l = 0; l < 3; l++) both('pine' + v + l, (g, ox, oy, mask) => paintFrond(g, ox, oy, mask, l, v));
+    both('corepine', (g, ox, oy, mask) => paintCore(g, ox, oy, mask, SPEC.pine));
+    [[196, 52, 42], [226, 142, 44], [176, 188, 72]].forEach((c, i) => both('fruit' + i, (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'fruit', c)));
+    both('berry', (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'berry', [120, 26, 44]));
+    both('flower0', (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'flower', [236, 150, 176]));
+    both('flower1', (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'flower', [244, 240, 228]));
+    const a = cc.getImageData(0, 0, ATL, ATL).data, m = mc.getImageData(0, 0, ATL, ATL).data, data = new Uint8Array(ATL * ATL * 4);
+    for (let y = 0; y < ATL; y++) { const sy = ATL - 1 - y; for (let x = 0; x < ATL; x++) { const o = (y * ATL + x) * 4, q = (sy * ATL + x) * 4; data[o] = a[q]; data[o + 1] = a[q + 1]; data[o + 2] = a[q + 2]; data[o + 3] = m[q]; } }
+    const tex = new T.DataTexture(data, ATL, ATL, T.RGBAFormat); tex.wrapS = tex.wrapT = T.ClampToEdgeWrapping; tex.magFilter = T.LinearFilter; tex.minFilter = T.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.anisotropy = 4; tex.needsUpdate = true;
+    const oakT = barkTex('oak'), birchT = barkTex('birch');
+    _TR = {
+      leaf: new T.MeshLambertMaterial({ map: tex, alphaTest: 0.4, side: T.DoubleSide }),
+      bark: new T.MeshLambertMaterial({ map: oakT, color: 0xd9ccb8 }), barkPine: new T.MeshLambertMaterial({ map: oakT, color: 0xd8a888 }), barkBirch: new T.MeshLambertMaterial({ map: birchT, color: 0xffffff }),
+      atlas: tex, uv(key) { const [c, rr] = cells[key], p = 1.5; return [(c * CELL + p) / ATL, 1 - ((rr + 1) * CELL - p) / ATL, ((c + 1) * CELL - p) / ATL, 1 - (rr * CELL + p) / ATL]; },
+    };
+    if (window.__dbgTrees) window.__dbgTrees = _TR; /*DBG*/
+    return _TR;
+  }
+
+  // ---------------------------------------------------------------- геометрия: накопитель, трубка, комок, карточка
+  function TB() {
+    const p = [], n = [], u = [], ix = [];
+    return {
+      p, n, u, ix,
+      vert(x, y, z, nx, ny, nz, uu, vv) { p.push(x, y, z); n.push(nx, ny, nz); u.push(uu, vv); return p.length / 3 - 1; },
+      tri(a, b, c) { ix.push(a, b, c); },
+      geo(S) {
+        const g = new T.BufferGeometry(), P = new Float32Array(p.length); for (let i = 0; i < p.length; i++) P[i] = p[i] * S;
+        g.setAttribute('position', new T.BufferAttribute(P, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(n, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(u, 2)); g.setIndex(ix); return g;
+      },
+    };
+  }
+  const crv = (ctrl, us) => { const c = new T.CatmullRomCurve3(ctrl.map((q) => TV(q[0], q[1], q[2])), false, 'centripetal'); return us.map((x) => c.getPoint(x)); };
+  /** Трубка по точкам pts (Vector3), радиус rf(t, s); flare {amp,k,n,ph} — наплывы корней; cap — закрыть конец */
+  function tube(B, pts, rf, seg, o) {
+    o = o || {};
+    const n = pts.length, len = [0], tan = [], fr = [], P = [], fl = o.flare;
+    for (let i = 1; i < n; i++) len[i] = len[i - 1] + pts[i].distanceTo(pts[i - 1]);
+    const total = len[n - 1] || 1e-4;
+    for (let i = 0; i < n; i++) tan.push(pts[Math.min(n - 1, i + 1)].clone().sub(pts[Math.max(0, i - 1)]).normalize());
+    let nm = Math.abs(tan[0].y) < 0.9 ? TV(0, 1, 0) : TV(1, 0, 0);
+    for (let i = 0; i < n; i++) { nm = nm.clone().sub(tan[i].clone().multiplyScalar(nm.dot(tan[i]))).normalize(); fr.push([nm, TV(0, 0, 0).crossVectors(tan[i], nm).normalize()]); }
+    for (let i = 0; i < n; i++) {
+      const row = [], rr = rf(len[i] / total, len[i]);
+      for (let j = 0; j < seg; j++) {
+        const th = j / seg * TAU; let k = rr;
+        if (fl) k *= 1 + fl.amp * Math.exp(-len[i] / fl.k) * Math.pow(0.5 + 0.5 * Math.cos(fl.n * th + fl.ph), 1.5);
+        row.push(pts[i].clone().addScaledVector(fr[i][0], Math.cos(th) * k).addScaledVector(fr[i][1], Math.sin(th) * k));
+      }
+      P.push(row);
+    }
+    const ur = o.ur || 2, vs = o.vs || 1.4, base = B.p.length / 3;
+    for (let i = 0; i < n; i++) for (let j = 0; j <= seg; j++) {
+      const a = P[i][j % seg], dth = P[i][(j + 1) % seg].clone().sub(P[i][(j + seg - 1) % seg]), dt = P[Math.min(n - 1, i + 1)][j % seg].clone().sub(P[Math.max(0, i - 1)][j % seg]);
+      const rad = a.clone().sub(pts[i]), nn = dth.cross(dt);
+      if (nn.lengthSq() < 1e-12) nn.copy(rad); else if (nn.dot(rad) < 0) nn.negate();
+      nn.normalize(); B.vert(a.x, a.y, a.z, nn.x, nn.y, nn.z, j / seg * ur + (o.u0 || 0), len[i] / vs + (o.v0 || 0));
+    }
+    for (let i = 0; i < n - 1; i++) for (let j = 0; j < seg; j++) { const a = base + i * (seg + 1) + j, b = a + 1, c = a + seg + 1, d = c + 1; B.tri(a, b, c); B.tri(b, d, c); }
+    if (o.cap) {
+      const e = pts[n - 1].clone().addScaledVector(tan[n - 1], rf(1, total) * 0.9 + 0.02), ap = B.vert(e.x, e.y, e.z, tan[n - 1].x, tan[n - 1].y, tan[n - 1].z, 0.5 * ur, len[n - 1] / vs + 0.1);
+      for (let j = 0; j < seg; j++) B.tri(base + (n - 1) * (seg + 1) + j, base + (n - 1) * (seg + 1) + j + 1, ap);
+    }
+  }
+  const _ico = {};
+  function icoBase(d) {
+    if (_ico[d]) return _ico[d];
+    const g = new T.IcosahedronGeometry(1, d), p = g.attributes.position, map = new Map(), v = [], ix = [];
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), key = Math.round(x * 1e4) + ',' + Math.round(y * 1e4) + ',' + Math.round(z * 1e4); let id = map.get(key);
+      if (id == null) { id = v.length / 3; map.set(key, id); v.push(x, y, z); } ix.push(id);
+    }
+    return (_ico[d] = { v, ix });
+  }
+  /** Гладкий комок с шумом (ядро кроны), uv — из ячейки core */
+  function blobTo(B, uv, cx, cy, cz, rx, ry, rz, seed, detail, noise) {
+    const b = icoBase(detail), nv = b.v.length / 3, base = B.p.length / 3, off = seed * 7.13 + 1.7, P = new Array(nv * 3), N = new Array(nv * 3).fill(0);
+    for (let i = 0; i < nv; i++) {
+      const x = b.v[i * 3], y = b.v[i * 3 + 1], z = b.v[i * 3 + 2];
+      const q = noise3(x * 1.4 + off, y * 1.4 + off * 0.5, z * 1.4 + off * 0.8) * 0.65 + noise3(x * 3.1 + off, y * 3.1, z * 3.1 + off) * 0.35, d = 1 + noise * (q * 2 - 1);
+      P[i * 3] = cx + x * rx * d; P[i * 3 + 1] = cy + y * ry * d; P[i * 3 + 2] = cz + z * rz * d;
+    }
+    const A = TV(0, 0, 0), Bv = TV(0, 0, 0), Cv = TV(0, 0, 0);
+    for (let f = 0; f < b.ix.length; f += 3) {
+      const ia = b.ix[f], ib = b.ix[f + 1], ic = b.ix[f + 2]; A.set(P[ia * 3], P[ia * 3 + 1], P[ia * 3 + 2]); Bv.set(P[ib * 3], P[ib * 3 + 1], P[ib * 3 + 2]); Cv.set(P[ic * 3], P[ic * 3 + 1], P[ic * 3 + 2]);
+      const nn = Bv.clone().sub(A).cross(Cv.clone().sub(A));
+      for (const id of [ia, ib, ic]) { N[id * 3] += nn.x; N[id * 3 + 1] += nn.y; N[id * 3 + 2] += nn.z; }
+    }
+    const uc = (uv[0] + uv[2]) / 2, vc = (uv[1] + uv[3]) / 2, hu = (uv[2] - uv[0]) * 0.32, hv = (uv[3] - uv[1]) * 0.32;
+    for (let i = 0; i < nv; i++) {
+      const dx = b.v[i * 3], dy = b.v[i * 3 + 1], dz = b.v[i * 3 + 2]; let nx = N[i * 3], ny = N[i * 3 + 1], nz = N[i * 3 + 2]; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      if (nx * dx + ny * dy + nz * dz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      B.vert(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], nx, ny, nz, uc + dx * hu, vc + dz * hv);
+    }
+    for (let f = 0; f < b.ix.length; f++) B.ix.push(base + b.ix[f]);
+  }
+  /** Карточка с центром c (массив), нормалью лица n, поворотом roll, размерами w x h; nfn(x,y,z) -> нормаль освещения */
+  function card(B, c, n, roll, w, h, uv, nfn, hint) {
+    let t1 = hint ? TV(0, 0, 0).crossVectors(TV(hint[0], hint[1], hint[2]), TV(n[0], n[1], n[2])) : TV(n[2], 0, -n[0]);                 // горизонталь, перпендикулярная лицу (cross(up, n))
+    if (t1.lengthSq() < 1e-6) t1.set(1, 0, 0); t1.normalize();
+    const nv = TV(n[0], n[1], n[2]), t2 = TV(0, 0, 0).crossVectors(nv, t1).normalize();
+    const cr = Math.cos(roll), sr = Math.sin(roll), rx = t1.clone().multiplyScalar(cr).addScaledVector(t2, sr), uy = t1.clone().multiplyScalar(-sr).addScaledVector(t2, cr);
+    const C0 = [[-1, -1, uv[0], uv[1]], [1, -1, uv[2], uv[1]], [1, 1, uv[2], uv[3]], [-1, 1, uv[0], uv[3]]], ids = [];
+    for (const [sx, sy, u, v] of C0) {
+      const x = c[0] + rx.x * sx * w / 2 + uy.x * sy * h / 2, y = c[1] + rx.y * sx * w / 2 + uy.y * sy * h / 2, z = c[2] + rx.z * sx * w / 2 + uy.z * sy * h / 2, q = nfn(x, y, z);
+      ids.push(B.vert(x, y, z, q[0], q[1], q[2], u, v));
+    }
+    B.tri(ids[0], ids[1], ids[2]); B.tri(ids[0], ids[2], ids[3]);
+  }
+  /** Облако карточек по поверхности эллипсоида-«доли» кроны. L {c, rad, n}; crown — центр кроны для сферических нормалей */
+  function lobeCards(B, r, K, sp, L, crown, o) {
+    const [cx, cy, cz] = L.c, [rx, ry, rz] = L.rad, ga = 2.399963, ph = r() * TAU, n = L.n, sz = o.size, asp = o.asp || 0.92;
+    for (let i = 0; i < n; i++) {
+      const yy = 1 - (i + 0.5) / n * 2, q = Math.sqrt(1 - yy * yy), a = ph + i * ga;
+      let dx = Math.cos(a) * q + (r() - 0.5) * 0.35, dy = yy + (r() - 0.5) * 0.35, dz = Math.sin(a) * q + (r() - 0.5) * 0.35;
+      const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
+      if (dy < -0.45 && r() < (o.skipBelow == null ? 0.45 : o.skipBelow)) continue;
+      const inner = r() < (o.inner == null ? 0.18 : o.inner), spike = !inner && r() < (o.spike == null ? 0.12 : o.spike);
+      const k = inner ? 0.45 + 0.25 * r() : spike ? 1.0 + 0.12 * r() : (o.k || 0.9) + 0.2 * r();
+      const px = cx + dx * rx * k, py = cy + dy * ry * k, pz = cz + dz * rz * k;
+      let nf, hint = null;
+      if (spike) {                                   // торчащая наружу веточка: плоскость содержит направление «наружу» (ломает силуэт кроны)
+        const tx = r() - 0.5, ty = r() - 0.5, tz = r() - 0.5, dd = tx * dx + ty * dy + tz * dz, tn = NRM(tx - dd * dx, ty - dd * dy, tz - dd * dz); nf = NRM(dx * 0.85 + tn[0] * 0.5, dy * 0.85 + tn[1] * 0.5, dz * 0.85 + tn[2] * 0.5); hint = [dx, dy, dz];
+      } else nf = NRM(dx + (r() - 0.5) * 0.3, dy + (r() - 0.5) * 0.3, dz + (r() - 0.5) * 0.3);
+      const t = 0.5 + 0.5 * dy + (r() - 0.5) * 0.55 + (o.lv || 0) - (inner ? 0.4 : 0), lv = t < 0.3 ? 0 : t < 0.64 ? 1 : 2, uv = K.uv(sp + (r() < 0.5 ? 0 : 1) + lv);
+      if (r() < 0.5) { const tmp = uv[0]; uv[0] = uv[2]; uv[2] = tmp; }
+      const sc = lerp(sz[0], sz[1], r()) * (spike ? 0.8 : 1), roll = hint ? (r() - 0.5) * 0.7 : Math.abs(nf[1]) > 0.8 ? r() * TAU : (r() - 0.5) * 2.2;
+      const nfn = (vx, vy, vz) => {                  // нормаль освещения: «шар» доли + шар кроны + нормаль карточки
+        const ax = (vx - cx) / rx, ay = (vy - cy) / ry, az = (vz - cz) / rz, al = Math.hypot(ax, ay, az) || 1, ex = vx - crown[0], ey = (vy - crown[1]) * (o.cy || 1), ez = vz - crown[2], el = Math.hypot(ex, ey, ez) || 1;
+        return NRM(ax / al * 0.46 + ex / el * 0.28 + nf[0] * 0.26, ay / al * 0.46 + ey / el * 0.28 + nf[1] * 0.26 + 0.14, az / al * 0.46 + ez / el * 0.28 + nf[2] * 0.26);
+      };
+      card(B, [px, py, pz], nf, roll, sc, sc * asp, uv, nfn, hint);
+      if (o.pts && !inner && dy > -0.4) o.pts.push({ p: [px, py, pz], d: [dx, dy, dz] });
+    }
+  }
+  function treeGroup(wood, leaf, S, K, barkMat) {
+    const g = new T.Group();
+    for (const [B, m] of [[wood, barkMat], [leaf, K.leaf]]) if (B.ix.length) { const mesh = new T.Mesh(B.geo(S), m); mesh.castShadow = mesh.receiveShadow = true; g.add(mesh); }
+    return g;
+  }
+  /** Ветка от точки a к b: дуга вверх, радиус r0 -> r1 */
+  function limb(W, a, b, r0, r1, seg, up, ur) {
+    const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + up, (a[2] + b[2]) / 2];
+    tube(W, crv([a, [lerp(a[0], b[0], 0.3), lerp(a[1], b[1], 0.3) + up * 0.6, lerp(a[2], b[2], 0.3)], m, b], [0, 0.35, 0.7, 1]), (t) => lerp(r0, r1, Math.pow(t, 0.9)), seg, { cap: true, ur: ur || 1, vs: 1.2 });
+  }
 
   // ---------------------------------------------------------------- дуб
-  function oak(o, low) {
-    const g = new T.Group(), r = lcg(o.seed * 211 + 5), S = 0.86 + r() * 0.28;
-    const bark = mix(0x5a4632, 0x4a392a, r());
-    if (low) {
-      bm(g, bark, [0, 0, 0], [0, 3.4, 0], 0.5, 0.34, { seg: 5, open: true, grad: [0.55, 1], jit: 0.04 });
-      const g2 = [mix(0x2d4e27, 0x35602c, r()), mix(0x4a7632, 0x58803a, r())];
-      blob(g, g2[0], 0, 6.4, 0, 3.7, 2.7, 3.7, o.seed, { detail: 1, noise: 0.18, grad: [0.62, 1.1] });
-      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + r(), up = i % 2; blob(g, mix(g2[0], g2[1], 0.3 + up * 0.5), Math.cos(a) * 2.4, 6.3 + up * 1.5, Math.sin(a) * 2.4, 1.9, 1.6, 1.9, o.seed + i + 3, { detail: 0, noise: 0.2, grad: [0.62, 1.12] }); }
-      g.scale.setScalar(S); return bake(g, { jit: 0.05, gao: 0.2 });
+  function oakBuild(o, low) {
+    const K = treeKit(), r = lcg(o.seed * 211 + 5), S = 0.86 + r() * 0.28, W = TB(), Lf = TB(), lean = [(r() - 0.5) * 0.8, (r() - 0.5) * 0.8], ft = low ? 3.2 : 3.6;
+    const fork = [lean[0], ft, lean[1]], crown = [lean[0], low ? 6.0 : 6.5, lean[1]];
+    tube(W, crv([[0, -0.05, 0], [lean[0] * 0.25, 1.1, lean[1] * 0.25], [lean[0] * 0.7, 2.4, lean[1] * 0.7], fork], low ? [0, 0.4, 1] : [0, 0.05, 0.12, 0.25, 0.42, 0.62, 0.82, 1]),
+      (t) => lerp(low ? 0.46 : 0.5, 0.3, Math.pow(t, 0.8)), low ? 5 : 10, { ur: 2, vs: 1.4, flare: low ? null : { amp: 0.7, k: 0.75, n: 5, ph: r() * TAU } });
+    const lobes = [], ring0 = r() * TAU, nr = low ? 4 : 5;
+    for (let i = 0; i < nr; i++) { const a = ring0 + i / nr * TAU + (r() - 0.5) * 0.7, d = low ? 1.5 + r() * 0.8 : 1.5 + r() * 0.8; lobes.push({ c: [Math.cos(a) * d + lean[0], (low ? 5.6 : 6.1) + r() * 1.0, Math.sin(a) * d + lean[1]], rad: low ? [2.2 + r() * 0.4, 1.7, 2.2 + r() * 0.4] : [2.0 + r() * 0.5, 1.7 + r() * 0.35, 2.0 + r() * 0.5], n: low ? 18 : 56, limb: 1 }); }
+    lobes.push({ c: [lean[0] * 1.1 + (r() - 0.5) * 0.8, (low ? 7.0 : 7.9) + r() * 0.4, lean[1] * 1.1 + (r() - 0.5) * 0.8], rad: low ? [2.3, 1.7, 2.3] : [2.3, 1.8, 2.3], n: low ? 20 : 60, top: 1 });
+    if (!low) for (let i = 0; i < 4; i++) { const a = ring0 + 0.6 + i / 4 * TAU + (r() - 0.5) * 0.5, d = 2.9 + r() * 0.7; lobes.push({ c: [Math.cos(a) * d + lean[0], 4.9 + r() * 0.5, Math.sin(a) * d + lean[1]], rad: [1.6, 1.15, 1.6], n: 30 }); }
+    const core = K.uv('coreoak');
+    blobTo(Lf, core, crown[0], crown[1] + 0.3, crown[2], low ? 2.6 : 2.5, low ? 1.6 : 1.3, low ? 2.6 : 2.5, o.seed + 1, 1, 0.12);
+    for (const L of lobes) {
+      if (L.limb || L.top) blobTo(Lf, core, L.c[0], L.c[1] - 0.1, L.c[2], L.rad[0] * 0.55, L.rad[1] * 0.6, L.rad[2] * 0.55, o.seed + 5, 0, 0.14);
+      if (L.limb && !low) limb(W, [fork[0], fork[1] - r() * 0.5, fork[2]], [lerp(fork[0], L.c[0], 0.85), L.c[1] - 0.8, lerp(fork[2], L.c[2], 0.85)], 0.26, 0.06, 6, 0.45);
+      lobeCards(Lf, r, K, 'oak', L, crown, { size: low ? [1.9, 2.5] : [1.15, 1.65], inner: low ? 0.2 : 0.3, k: 0.88, cy: 1.15, skipBelow: 0.15 });
     }
-    // ствол с наплывами у корня
-    bm(g, bark, [0, 0, 0], [0.12, 4.0, 0.05], 0.58, 0.34, { seg: 8, vc: BARK(o.seed), grad: [0.55, 1.05], jit: 0.04 });
-    for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + r() * 0.6; bm(g, bark, [Math.cos(a) * 1.15, 0.0, Math.sin(a) * 1.15], [Math.cos(a) * 0.28, 1.1, Math.sin(a) * 0.28], 0.07, 0.3, { seg: 5, grad: [0.5, 1], jit: 0.05 }); }
-    // толстые ветви и вершина
-    const tips = [];
-    for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + r() * 0.8, dist = 1.9 + r() * 0.9, hh = 5.6 + r() * 1.4; const tip = [Math.cos(a) * dist, hh, Math.sin(a) * dist]; tips.push(tip); bm(g, bark, [0.1, 3.2 + r() * 0.6, 0.05], tip, 0.27, 0.12, { seg: 6, grad: [0.7, 1], jit: 0.05 }); }
-    bm(g, bark, [0.1, 3.4, 0.05], [0.0, 7.4, 0.0], 0.3, 0.12, { seg: 6, jit: 0.05 });
-    const dk = mix(0x2a4a25, 0x2f5228, r()), lt = mix(0x58803a, 0x679046, r());
-    canopy(g, r, { c: [0, 7.1, 0], rad: [4.4, 2.5, 4.4], n: 44, rmin: 0.85, rmax: 1.45, dark: dk, light: lt, nSmall: 14, noise: 0.28, detail: 'o' });
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.2 });
+    if (!low) {
+      limb(W, fork, [lean[0] * 1.1, 7.6, lean[1] * 1.1], 0.28, 0.07, 6, 0.1);
+      for (let i = 0; i < 6; i++) { const L = lobes[Math.floor(r() * lobes.length)], a = r() * TAU, e = [L.c[0] + Math.cos(a) * L.rad[0] * 0.75, L.c[1] - 0.2 - r() * 0.8, L.c[2] + Math.sin(a) * L.rad[2] * 0.75]; limb(W, [L.c[0] * 0.55 + fork[0] * 0.45, L.c[1] - 1.0, L.c[2] * 0.55 + fork[2] * 0.45], e, 0.06, 0.015, 4, 0.1); }
+    }
+    return treeGroup(W, Lf, S, K, K.bark);
   }
-  reg('tree', 'oak', (o) => oak(o, false));
-  reg('tree', 'oakLow', (o) => oak(o, true));
+  reg('tree', 'oak', (o) => oakBuild(o, false));
+  reg('tree', 'oakLow', (o) => oakBuild(o, true));
 
-  // ---------------------------------------------------------------- ель/сосна: ярусы свисающих лап
-  function pineLayer(R, H, seg, rng) {
-    const P = [], rim = [], n = seg * 2;
-    for (let i = 0; i < n; i++) {
-      const a = i / n * TAU + (rng() - 0.5) * 0.12, big = i % 2 === 0, rr = R * (big ? 1 : 0.7) * (0.9 + rng() * 0.2), yy = big ? -0.04 * H : 0.2 * H + rng() * 0.05 * H;
-      rim.push([Math.cos(a) * rr, yy, Math.sin(a) * rr]);
-    }
-    const apex = [(rng() - 0.5) * 0.1 * R, H, (rng() - 0.5) * 0.1 * R], ctr = [0, 0.3 * H, 0];
-    for (let i = 0; i < n; i++) { const a = rim[i], b = rim[(i + 1) % n]; P.push(...apex, ...b, ...a); P.push(...ctr, ...a, ...b); }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.computeVertexNormals(); return g;
+  // ---------------------------------------------------------------- ель: ярусы свисающих лап из карточек с хвоей
+  function frond(B, ux, uz, y, L, Wd, drop, uv, tilt, nu) {
+    const sx = -uz, sz = ux, rows = [[0.1, y, 0.3 * Wd, 0], [L * 0.5, y - drop * 0.42, 0.95 * Wd, 0.5], [L, y - drop, 0.7 * Wd, 1]], nn = NRM(ux * nu, 1, uz * nu), ids = [];
+    for (const [d, yy, w, v] of rows) for (const s of [-1, 1]) ids.push(B.vert(ux * d + sx * s * w / 2, yy + s * tilt * w, uz * d + sz * s * w / 2, nn[0], nn[1], nn[2], s < 0 ? uv[0] : uv[2], lerp(uv[1], uv[3], v)));
+    B.tri(ids[0], ids[1], ids[2]); B.tri(ids[1], ids[3], ids[2]); B.tri(ids[2], ids[3], ids[4]); B.tri(ids[3], ids[5], ids[4]);
   }
-  function pine(o, low) {
-    const g = new T.Group(), r = lcg(o.seed * 157 + 9), S = 0.86 + r() * 0.28, bark = 0x4e3b2b;
-    const layers = low ? 6 : 13, seg = low ? 4 : 9, top = 11.6;
-    bm(g, bark, [0, 0, 0], [0, top - 0.5, 0], 0.4, 0.07, { seg: low ? 5 : 7, open: low, grad: [0.55, 1], jit: 0.04 });
-    const dark = mix(0x27472b, 0x2d502e, r()), light = mix(0x4a7a3c, 0x56853f, r());
-    for (let i = 0; i < layers; i++) {
-      const t = i / (layers - 1), y = lerp(1.5, top - 2.2, t), R = lerp(3.4, 0.55, Math.pow(t, 0.9)) * (0.94 + r() * 0.12), H = lerp(2.9, 1.9, t);
-      const m = add(g, pineLayer(R, H, seg, r), mix(dark, light, clamp(t * 0.9 + (r() - 0.5) * 0.3, 0, 1)), 0, y, 0, 1, 1, 1, { grad: [0.6, 1.1], jit: 0.1 });
-      m.rotation.y = r() * TAU;
+  function pineBuild(o, low) {
+    const K = treeKit(), r = lcg(o.seed * 157 + 9), S = 0.86 + r() * 0.28, W = TB(), Lf = TB(), top = 11.6, NW = low ? 9 : 14;
+    tube(W, crv([[0, -0.05, 0], [(r() - 0.5) * 0.3, top * 0.5, (r() - 0.5) * 0.3], [(r() - 0.5) * 0.2, top - 1.1, (r() - 0.5) * 0.2]], low ? [0, 0.4, 1] : [0, 0.06, 0.2, 0.45, 0.7, 1]), (t) => lerp(0.4, 0.05, Math.pow(t, 0.85)), low ? 5 : 7, { ur: 2, vs: 1.6, cap: true });
+    for (let i = 0; i < NW; i++) {
+      const t = i / (NW - 1), y = lerp(2.4, top - 1.5, Math.pow(t, 0.95)) + (r() - 0.5) * 0.25, Rr = lerp(3.4, 0.45, Math.pow(t, 0.9)) * (0.92 + r() * 0.18);
+      const n = Math.round(low ? lerp(7, 5, t) : lerp(9, 5, t)), a0 = r() * TAU;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + k / n * TAU + (r() - 0.5) * 0.5, L = Rr * (0.88 + r() * 0.24), lv = t < 0.3 ? (r() < 0.5 ? 0 : 1) : (r() < 0.4 ? 2 : 1), uv = K.uv('pine' + (r() < 0.5 ? 0 : 1) + lv);
+        frond(Lf, Math.cos(a), Math.sin(a), y, L, Math.max(0.55, L * 0.95), L * (0.3 + 0.08 * (1 - t)), uv, (r() - 0.5) * 0.12, 0.4);
+      }
     }
-    const m = add(g, pineLayer(0.4, 1.7, low ? 4 : 5, r), light, 0, top - 0.7, 0, 1, 1, 1, { grad: [0.8, 1.15], jit: 0.04 });
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.18 });
+    const core = K.uv('corepine'), seg = 8, r0 = low ? 1.3 : 1.45, P0 = [], P1 = [];
+    for (let j = 0; j < seg; j++) { const a = j / seg * TAU, q0 = r0 * (0.85 + r() * 0.3), q1 = 0.7 * (0.85 + r() * 0.3); P0.push([Math.cos(a) * q0, 2.2, Math.sin(a) * q0]); P1.push([Math.cos(a) * q1, 6.8, Math.sin(a) * q1]); }
+    const b0 = Lf.p.length / 3, uc = (core[0] + core[2]) / 2, vc = (core[1] + core[3]) / 2, hu = (core[2] - core[0]) * 0.4;
+    for (let j = 0; j <= seg; j++) { const p = P0[j % seg], a = j / seg * TAU; Lf.vert(p[0], p[1], p[2], Math.cos(a) * 0.92, 0.38, Math.sin(a) * 0.92, uc + Math.cos(a) * hu, vc + Math.sin(a) * hu); }
+    for (let j = 0; j <= seg; j++) { const p = P1[j % seg], a = j / seg * TAU; Lf.vert(p[0], p[1], p[2], Math.cos(a) * 0.92, 0.38, Math.sin(a) * 0.92, uc + Math.cos(a) * hu * 0.6, vc + Math.sin(a) * hu * 0.6); }
+    const apx = Lf.vert(0, top - 2.6, 0, 0, 1, 0, uc, vc);
+    for (let k = 0; k < (low ? 2 : 3); k++) { const a = k * PI / (low ? 2 : 3) + r(); card(Lf, [0, top - 1.0, 0], [Math.cos(a), 0, Math.sin(a)], 0, 1.3, 2.3, K.uv('pine' + (k & 1) + 2), () => NRM(0.3 * Math.cos(a), 1, 0.3 * Math.sin(a)), [0, 1, 0]); }
+    for (let j = 0; j < seg; j++) { const a = b0 + j, b = a + 1, c = b0 + seg + 1 + j, d = c + 1; Lf.tri(a, b, c); Lf.tri(b, d, c); Lf.tri(c, d, apx); }
+    return treeGroup(W, Lf, S, K, K.barkPine);
   }
-  reg('tree', 'pine', (o) => pine(o, false));
-  reg('tree', 'pineLow', (o) => pine(o, true));
+  reg('tree', 'pine', (o) => pineBuild(o, false));
+  reg('tree', 'pineLow', (o) => pineBuild(o, true));
 
   // ---------------------------------------------------------------- берёза
   reg('tree', 'birch', (o) => {
-    const g = new T.Group(), r = lcg(o.seed * 83 + 21), S = 0.88 + r() * 0.24, WHITE = 0xe9e5db, lean = (r() - 0.5) * 0.5;
-    const mark = (x, y, z, nx, ny, nz, c) => { c.multiplyScalar(0.9 + 0.2 * noise3(x * 4, y * 2, z * 4)); };
-    bm(g, WHITE, [0, 0, 0], [lean * 0.4, 3.0, 0.1], 0.25, 0.19, { seg: 7, vc: mark, jit: 0.03 });
-    bm(g, WHITE, [lean * 0.4, 3.0, 0.1], [lean, 5.2, 0.1], 0.19, 0.11, { seg: 7, vc: mark, jit: 0.03 });
-    bm(g, 0x3a332c, [0, -0.02, 0], [0, 0.5, 0], 0.3, 0.27, { seg: 7, jit: 0.04 });
-    const tips = [[1.1, 6.4, 0.4], [-0.9, 6.7, -0.6], [0.2, 7.0, 1.0], [-0.3, 6.2, -1.1]];
-    for (const t of tips) bm(g, WHITE, [lean * 0.8, 4.0 + r() * 1.0, 0.1], [t[0] + lean, t[1], t[2]], 0.09, 0.04, { seg: 5, jit: 0.03 });
-    for (let i = 0; i < 24; i++) {                     // тёмные поперечные отметины коры
-      const y = 0.4 + r() * 4.6, a = r() * TAU, rad = y < 3 ? lerp(0.25, 0.19, y / 3) : lerp(0.19, 0.11, (y - 3) / 2.2), cx = lean * 0.4 * (y / 3);
-      const w = 0.1 + r() * 0.1, bx0 = Math.cos(a) * rad * 0.98 + (y < 3 ? lean * 0.4 * y / 3 : lean * 0.4 + (lean * 0.6) * (y - 3) / 2.2), bz0 = Math.sin(a) * rad * 0.98 + 0.1 * (y / 5.2);
-      bx(g, 0x2a2521, bx0, y, bz0, w, 0.03 + r() * 0.05, 0.04, { r: [0, -a + PI / 2, 0], jit: 0.05 });
-    }
-    canopy(g, r, { c: [lean * 1.1, 6.6, 0.1], rad: [2.5, 2.6, 2.5], n: 26, rmin: 0.75, rmax: 1.2, dark: mix(0x56803a, 0x628c3e, r()), light: mix(0x7ea34a, 0x92b454, r()), nSmall: 12, noise: 0.28, hy: 0.95, detail: 'o' });
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.15 });
+    const K = treeKit(), r = lcg(o.seed * 83 + 21), S = 0.88 + r() * 0.24, lean = (r() - 0.5) * 0.5, W = TB(), Lf = TB(), crown = [lean, 6.5, 0.1];
+    tube(W, crv([[0, -0.02, 0], [lean * 0.3, 1.5, 0.05], [lean * 0.55, 3.2, 0.14], [lean * 0.9, 5.2, 0.08], [lean * 1.1, 7.3, 0.1]], [0, 0.04, 0.1, 0.2, 0.32, 0.46, 0.6, 0.74, 0.88, 1]), (t) => lerp(0.26, 0.05, Math.pow(t, 0.9)), 8, { ur: 1, vs: 1.6, cap: true });
+    const lobes = [], a0 = r() * TAU;
+    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.3 + r() * 0.6, L = { c: [lean + Math.cos(a) * d, 6.0 + r() * 0.9, 0.1 + Math.sin(a) * d], rad: [1.5, 1.35, 1.5], n: 46 }; lobes.push(L); limb(W, [lean * 0.8, 3.8 + r() * 1.0, 0.1], [lean + Math.cos(a) * d * 0.9, L.c[1] - 0.5, 0.1 + Math.sin(a) * d * 0.9], 0.085, 0.025, 5, 0.35); }
+    lobes.push({ c: [lean * 1.1, 7.7, 0.1], rad: [1.4, 1.3, 1.4], n: 44 }); lobes.push({ c: [lean * 0.9 + (r() - 0.5), 5.0 + r() * 0.3, (r() - 0.5)], rad: [1.3, 1.0, 1.3], n: 26 });
+    blobTo(Lf, K.uv('corebirch'), crown[0], crown[1] + 0.2, crown[2], 1.5, 1.4, 1.5, o.seed + 3, 0, 0.14);
+    for (const L of lobes) lobeCards(Lf, r, K, 'birch', L, crown, { size: [0.95, 1.35], inner: 0.35, k: 0.9, skipBelow: 0.2, asp: 0.95 });
+    for (let i = 0; i < 3; i++) { const a = r() * TAU; limb(W, [lean * 0.9, 5.0 + r(), 0.1], [lean + Math.cos(a) * 1.9, 6.4 + r() * 0.8, 0.1 + Math.sin(a) * 1.9], 0.05, 0.015, 4, 0.2); }
+    return treeGroup(W, Lf, S, K, K.barkBirch);
   });
 
   // ---------------------------------------------------------------- плодовое дерево (яблоня/апельсин/груша по seed)
   reg('tree', 'fruit', (o) => {
-    const g = new T.Group(), r = lcg(o.seed * 61 + 33), S = 0.9 + r() * 0.2, k = (o.variant ? o.variant : o.seed) % 3;
-    const bark = 0x5b4733, FR = [[0xc2392b, 0xd8503a, 0xa82e24], [0xe08a2a, 0xeb9d3a, 0xd47a1f], [0xb7c04a, 0xc9cf5c, 0xa3ae3d]][k];
-    bm(g, bark, [0, 0, 0], [0.05, 1.8, 0], 0.3, 0.22, { seg: 7, vc: BARK(o.seed), grad: [0.55, 1], jit: 0.04 });
-    for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + r() * 0.8; bm(g, bark, [0.05, 1.6, 0], [Math.cos(a) * 1.3, 3.3 + r() * 0.6, Math.sin(a) * 1.3], 0.17, 0.08, { seg: 5, jit: 0.05 }); }
-    const cfg = { c: [0, 4.0, 0], rad: [2.7, 1.8, 2.7], n: 24, rmin: 0.7, rmax: 1.15, dark: mix(0x436f2e, 0x4c7a33, r()), light: mix(0x6b9a3e, 0x79a845, r()), nSmall: 14, noise: 0.26, hy: 0.9, pts: [], detail: 'o' };
-    canopy(g, r, cfg);
-    for (let i = 0, n = 0; n < 30 && i < 200; i++) {   // плоды на внешней стороне комков
-      const p = cfg.pts[Math.floor(r() * cfg.pts.length)]; if (!p || p.d[1] < -0.35 || p.r < 0.6) continue;
-      const col = FR[Math.floor(r() * 3)]; n++;
-      sp(g, col, p.x + p.d[0] * p.r * 0.95, p.y + p.d[1] * p.r * 0.85, p.z + p.d[2] * p.r * 0.95, 0.27, 0.27, 0.27, { ws: 5, hs: 4, jit: 0.08, grad: [0.8, 1.1] });
+    const K = treeKit(), r = lcg(o.seed * 61 + 33), S = 0.9 + r() * 0.2, kf = (o.variant ? o.variant : o.seed) % 3, W = TB(), Lf = TB(), crown = [0, 4.2, 0], pts = [];
+    tube(W, crv([[0, -0.04, 0], [0.04, 0.8, 0.02], [0.06, 1.8, 0]], [0, 0.1, 0.25, 0.45, 0.7, 1]), (t) => lerp(0.3, 0.22, t), 9, { ur: 2, vs: 1.3, flare: { amp: 0.45, k: 0.5, n: 4, ph: r() * TAU } });
+    const lobes = [], a0 = r() * TAU;
+    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.45 + r() * 0.5, L = { c: [Math.cos(a) * d, 3.6 + r() * 0.5, Math.sin(a) * d], rad: [1.6, 1.3, 1.6], n: 44 }; lobes.push(L); limb(W, [0.05, 1.5 + r() * 0.3, 0], [Math.cos(a) * d * 0.85, L.c[1] - 0.6, Math.sin(a) * d * 0.85], 0.17, 0.05, 6, 0.4); }
+    lobes.push({ c: [(r() - 0.5) * 0.5, 4.3, (r() - 0.5) * 0.5], rad: [2.0, 1.6, 2.0], n: 46 }); lobes.push({ c: [0.2, 5.0, 0], rad: [1.3, 1.0, 1.3], n: 26 });
+    blobTo(Lf, K.uv('corefruit'), 0, 4.0, 0, 2.5, 1.7, 2.5, o.seed + 2, 1, 0.12);
+    for (const L of lobes) lobeCards(Lf, r, K, 'fruit', L, crown, { size: [1.0, 1.45], inner: 0.25, k: 0.9, cy: 1.2, pts });
+    for (let i = 0, n = 0; n < 30 && i < 300 && pts.length; i++) {
+      const q = pts[Math.floor(r() * pts.length)], nf = NRM(q.d[0], q.d[1] - 0.2, q.d[2]); n++;
+      card(Lf, [q.p[0] + q.d[0] * 0.25, q.p[1] + q.d[1] * 0.25 - 0.1, q.p[2] + q.d[2] * 0.25], nf, r() * TAU, 0.55, 0.55, K.uv('fruit' + kf), () => NRM(q.d[0], q.d[1] * 0.6, q.d[2]));
     }
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.15 });
+    return treeGroup(W, Lf, S, K, K.bark);
   });
 
   // ---------------------------------------------------------------- тополь (колонна)
   reg('tree', 'poplar', (o) => {
-    const g = new T.Group(), r = lcg(o.seed * 47 + 14), S = 0.9 + r() * 0.2, bark = 0x62513e;
-    bm(g, bark, [0, 0, 0], [0.04, 4.6, 0], 0.36, 0.2, { seg: 7, vc: BARK(o.seed), grad: [0.55, 1], jit: 0.04 });
-    bm(g, bark, [0.04, 4.6, 0], [0, 11, 0], 0.2, 0.06, { seg: 5, jit: 0.04 });
-    const dk = mix(0x44702d, 0x4e7a30, r()), lt = mix(0x6e9a3a, 0x7ba644, r()), sd = Math.floor(r() * 900), N = 26;
+    const K = treeKit(), r = lcg(o.seed * 47 + 14), S = 0.9 + r() * 0.2, W = TB(), Lf = TB(), crown = [0, 8.0, 0], core = K.uv('corepoplar');
+    tube(W, crv([[0, -0.03, 0], [0.04, 2.4, 0], [0.04, 4.6, 0], [0, 9.0, 0], [0, 12.4, 0]], [0, 0.05, 0.12, 0.22, 0.34, 0.5, 0.65, 0.8, 1]), (t) => lerp(0.36, 0.05, Math.pow(t, 0.75)), 8, { ur: 2, vs: 1.4, cap: true, flare: { amp: 0.35, k: 0.6, n: 5, ph: r() * TAU } });
+    const N = 9;
     for (let i = 0; i < N; i++) {
-      const t = i / (N - 1), y = 3.4 + t * 9.9, w = 0.5 + 1.0 * Math.pow(Math.sin(PI * clamp(0.1 + 0.9 * t, 0, 1)), 0.75), a = r() * TAU, off = 0.25 * (1 - t);
-      const br = w * (0.85 + r() * 0.15), cl = clamp(0.35 + 0.5 * t + (r() - 0.5) * 0.35, 0, 1);
-      blob(g, mix(dk, lt, cl), Math.cos(a) * off, y, Math.sin(a) * off, br, br * 1.3, br, sd + i * 5, { detail: 'o', noise: 0.26, grad: [0.62, 1.12], jit: 0.1 });
+      const t = i / (N - 1), y = 4.3 + t * 8.1, w = 0.55 + 0.95 * Math.pow(Math.sin(PI * clamp(0.12 + 0.88 * t, 0, 1)), 0.75), a = r() * TAU, off = 0.22 * (1 - t), L = { c: [Math.cos(a) * off, y, Math.sin(a) * off], rad: [w, 1.5, w], n: 28 };
+      if (i % 2 === 0) blobTo(Lf, core, L.c[0], y, L.c[2], w * 0.62, 1.5, w * 0.62, o.seed + i, 0, 0.14);
+      lobeCards(Lf, r, K, 'poplar', L, crown, { size: [0.8, 1.15], asp: 1.25, inner: 0.22, k: 0.92, skipBelow: 0.25, cy: 0.5 });
     }
-    for (let i = 0; i < 14; i++) { const t = r(), y = 3.6 + t * 9.4, w = 0.5 + 1.0 * Math.pow(Math.sin(PI * clamp(0.1 + 0.9 * t, 0, 1)), 0.75), a = r() * TAU, br = 0.4 + 0.25 * r(); blob(g, mix(dk, lt, 0.6 + 0.4 * r()), Math.cos(a) * w * 0.95, y, Math.sin(a) * w * 0.95, br, br * 1.1, br, sd + i * 3 + 200, { detail: 0, noise: 0.25, grad: [0.7, 1.12], jit: 0.12 }); }
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.15 });
+    return treeGroup(W, Lf, S, K, K.bark);
   });
 
   // ---------------------------------------------------------------- куст ~1.5 м
   reg('tree', 'bush', (o) => {
-    const g = new T.Group(), r = lcg(o.seed * 29 + 7), S = 0.85 + r() * 0.3, k = (o.variant ? o.variant : o.seed) % 3;
-    const cfg = { c: [0, 0.72, 0], rad: [0.95, 0.55, 0.95], n: 18, rmin: 0.3, rmax: 0.52, dark: mix(0x335c28, 0x3d6a2c, r()), light: mix(0x5c8c38, 0x6a9a40, r()), nSmall: 10, noise: 0.28, sq: 0.05, hy: 1.0, pts: [], detail: 'o' };
-    canopy(g, r, cfg);
-    if (k > 0) for (let i = 0, n = 0; n < 18 && i < 200; i++) {          // цветы или ягоды
-      const p = cfg.pts[Math.floor(r() * cfg.pts.length)]; if (!p || p.d[1] < 0.0) continue; n++;
-      const col = k === 1 ? [0xf0d8e0, 0xe58aa8, 0xf5f0e6][Math.floor(r() * 3)] : [0xb02a2a, 0x7a1f3a, 0xc9402a][Math.floor(r() * 3)];
-      sp(g, col, p.x + p.d[0] * p.r * 0.95, p.y + p.d[1] * p.r * 0.9, p.z + p.d[2] * p.r * 0.95, k === 1 ? 0.15 : 0.1, 0.1, k === 1 ? 0.15 : 0.1, { ws: 5, hs: 4, jit: 0.1 });
+    const K = treeKit(), r = lcg(o.seed * 29 + 7), S = 0.85 + r() * 0.3, kb = (o.variant ? o.variant : o.seed) % 3, Lf = TB(), pts = [], crown = [0, 0.55, 0];
+    const lobes = [{ c: [0, 0.78, 0], rad: [0.85, 0.65, 0.85], n: 34 }], a0 = r() * TAU;
+    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.5, d = 0.55 + r() * 0.15; lobes.push({ c: [Math.cos(a) * d, 0.55 + r() * 0.1, Math.sin(a) * d], rad: [0.58, 0.5, 0.58], n: 22 }); }
+    blobTo(Lf, K.uv('corebush'), 0, 0.62, 0, 0.95, 0.6, 0.95, o.seed + 4, 1, 0.12);
+    for (const L of lobes) lobeCards(Lf, r, K, 'bush', L, crown, { size: [0.55, 0.8], inner: 0.15, k: 0.9, skipBelow: 0.7, cy: 1.3, pts });
+    if (kb > 0) for (let i = 0, n = 0; n < 16 && i < 200 && pts.length; i++) {
+      const q = pts[Math.floor(r() * pts.length)]; if (q.d[1] < 0.0) continue; n++;
+      card(Lf, [q.p[0] + q.d[0] * 0.1, q.p[1] + q.d[1] * 0.1, q.p[2] + q.d[2] * 0.1], q.d, r() * TAU, 0.42, 0.42, K.uv(kb === 1 ? 'flower' + (o.seed & 1) : 'berry'), () => NRM(q.d[0], q.d[1], q.d[2]));
     }
-    g.scale.setScalar(S);
-    return bake(g, { jit: 0.05, gao: 0.25, floor: -0.03 });
+    return treeGroup(TB(), Lf, S, K, K.bark);
   });
 
   // ================================================================== РЕКВИЗИТ (1): заборы, столбы, камни, сено, корыта, ёмкости
