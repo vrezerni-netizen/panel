@@ -132,7 +132,7 @@
     pickSeed(); if (!quiet) lastBar = ''; renderBar();
   }
   function onTile(sfi, x, y, first) {
-    if (ui.modal) return;
+    if (ui.modal || ui.editing) return;
     pickSeed(); L.setFarm(S, sfi);
     const tool = ui.tool;
     if (tool === 'seed' && !ui.seed) { toastOnce('Нет семян — купи в магазине семян в городе', 'bad'); return; }
@@ -146,7 +146,7 @@
   }
   /** Машину отпустили над грядкой: она работает в этом месте. */
   function onVehicleDrop(key, sfi, x, y) {
-    if (ui.modal) return;
+    if (ui.modal || ui.editing) return;
     pickSeed(); L.setFarm(S, sfi);
     const had = S.level, cells = L.areaCells(S, key, x, y).map(([cx, cy]) => [cx, cy, (L.tileAt(S, cx, cy) || {}).k, (L.tileAt(S, cx, cy) || {}).sp]);
     const r = L.act(S, key, x, y, ui.seed);
@@ -156,7 +156,7 @@
     world.workAnim(key); afterAction(r, sfi, x, y, key, kind);
     if (S.level > had) onLevelUp();
   }
-  function onVehicleClick(key) { if (ui.modal) return; ui.vehKey = key; openModal('veh'); }
+  function onVehicleClick(key) { if (ui.modal || ui.editing) return; ui.vehKey = key; openModal('veh'); }
   /** Машина сама закончила выезд: показываем работу так же, как при ручном перетаскивании. */
   function runFx(ev) {
     const key = ev.key, kind = FXK[ev.r.fx] || 'dig';
@@ -169,7 +169,7 @@
     world.highlight([t.wx], 0xffffff);
   }
   function onFarmSign(id) {
-    const d = L.FARM_DEFS.find((x) => x.id === id); if (!d || ui.modal) return;
+    const d = L.FARM_DEFS.find((x) => x.id === id); if (!d || ui.modal || ui.editing) return;
     if (S.farms.some((f) => f.id === id)) { world.focusFarm(id); return; }
     if (S.level < d.level) return toast(`${d.name} откроется на ${d.level} уровне`, 'bad');
     ui.buyId = id; openModal('buyfarm');
@@ -608,6 +608,7 @@
       const sec = (title, body) => `<div class="hubh">${title}</div><div class="tiles">${body}</div>`;
       return sec('Куда посмотреть на карте', t('🌾', 'Моё поле', 'большое поле и стоянка техники', 'hubcam', { v: 'home' }) + t('🏙️', 'Город', 'рынок, магазины, банк', 'hubcam', { v: 'town' }) + t('🗺️', 'Вся карта', 'всё сразу сверху', 'hubcam', { v: 'all' }) + t('🌲', 'Лес и целина', 'на севере: рубка леса', 'hubcam', { v: 'wild' }) + t('🚧', 'Стройплощадки', 'посмотреть на карте', 'hubcam', { v: 'sites' }))
         + sec('Здания и магазины', t('📦', 'Склад', 'отправить урожай на рынок', 'modal', { id: 'barn' }) + t('🏪', 'Рынок', 'цены и прилавок', 'modal', { id: 'market' }, Object.keys(S.stall).length ? '•' : '') + t('🐄', 'Загон и сараи', 'животные и корм', 'modal', { id: 'animals' }) + t('🪚', 'Лесопилка', 'брёвна в доски', 'modal', { id: 'sawmill' }, S.goods.log || '') + t('🏗️', 'Стройка', 'дома из досок на продажу', 'modal', { id: 'sites' }, S.sites.some((x) => x.done) ? '!' : '') + t('🛍️', 'Магазин семян', 'купить семена', 'modal', { id: 'seeds' }) + t('🚜', 'Техцентр', 'тракторы и автоматика', 'modal', { id: 'tech' }) + t('🏦', 'Банк', 'обмен монет и кристаллов', 'modal', { id: 'bank' }) + t('🎰', 'Колесо удачи', 'крутить за билеты', 'modal', { id: 'casino' }))
+        + (ui.owner ? sec('Только для владельца', t('🛠️', 'Редактор карты', 'расставить город и фермы как хочешь', 'edstart')) : '')
         + sec('Игра', t('📋', 'Заказы', 'жители платят больше', 'modal', { id: 'orders' }, S.orders.length || '') + t('🏘️', 'Мои фермы', 'участки и покупка', 'modal', { id: 'farms' }) + t('📜', 'Журнал', 'что произошло', 'modal', { id: 'log' }, unread || '') + t('⭐', 'Уровни', 'награды за уровни', 'modal', { id: 'levels' }) + t('❓', 'Как играть', 'правила и подсказки', 'modal', { id: 'help' }) + t('⚙️', 'Настройки', 'звук и сохранение', 'modal', { id: 'menu' }) + t('📷', 'Снимок', 'картинка игры (на компьютере)', 'photo', {}, '', 'dto'));
     },
   };
@@ -639,6 +640,14 @@
   // ---------------------------------------------------------------- обработчики
   const A = {
     close: closeModal,
+    edstart: () => startEditor(),
+    edtool: (d) => { ui.edTab = d.t; ui.edPick = null; const w = world.ed; if (d.t === 'move' || d.t === 'erase' || d.t === 'road') w.setTool(d.t); else { w.setTool('move'); } renderEd(); },
+    edpick: (d) => { ui.edPick = { g: d.g, i: +d.i }; const grp = world.palette.find((q) => q.id === d.g), a = grp.items[+d.i]; world.ed.setTool('place', { t: a[0], v: a[1] }); renderEd(); },
+    edrot: () => world.ed.rotate(), edcopy: () => world.ed.copy(), edrem: () => world.ed.remove(), edundo: () => world.ed.undo(),
+    edreset: () => { if (ui.confirm !== 'edreset') { ui.confirm = 'edreset'; renderEd(); return; } ui.confirm = null; world.ed.reset(); renderEd(); },
+    edsave: () => saveLayout(false),
+    eddone: async () => { await saveLayout(true); stopEditor(true); },
+    edcancel: () => { if (world.ed.changed && ui.confirm !== 'edcancel') { ui.confirm = 'edcancel'; renderEd(); return; } ui.confirm = null; stopEditor(false); },
     barpos: () => { ui.barTop = !ui.barTop; store.set('farm2.bartop', ui.barTop ? '1' : '0'); applyBarPos(); },
     hubcam: (d) => { closeModal(); goCam(d.v); },
     run: (d) => {
@@ -727,7 +736,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === 'Escape') { if (ui.modal) closeModal(); return; }
-    if (ui.modal) return;
+    if (ui.modal || ui.editing) return;
     if (e.key === 'Tab') { e.preventDefault(); goCam(camAt === 'town' ? 'home' : 'town'); return; }
     const i = HOTKEYS.indexOf(e.key);
     if (i >= 0 && TOOLS[i]) A.tool({ t: TOOLS[i].id });
@@ -737,8 +746,62 @@
   $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
 
   function onBuilding(id) {
-    if (ui.modal) return;
+    if (ui.modal || ui.editing) return;
     openModal(id === 'warehouse' ? 'barn' : id);
+  }
+
+
+  // ---------------------------------------------------------------- редактор карты (только владелец)
+  const LAYKEY = 'farm2.layout.draft';
+  /** Кто смотрит: владелец страницы видит редактор и свой черновик расстановки; клиенты — готовую карту из игры. */
+  async function ownerInit() {
+    const tmo = (ms) => new Promise((r) => setTimeout(() => r(null), ms));
+    try {
+      if (window.claude && window.claude.use) {
+        const u = await Promise.race([window.claude.use('user'), tmo(3000)]);
+        ui.owner = !!(u && u.isOwner && (await u.isOwner()) === true);   // isOwner() отвечает не сразу: ждём ответ
+        if (ui.owner) ui.db = await Promise.race([window.claude.use('db'), tmo(3000)]);
+      } else if (location.hash === '#editor') ui.owner = true;    // для проверки вне платформы
+    } catch (e) { ui.owner = false; }
+    ui.layout = window.FARM_LAYOUT || null;
+    if (ui.owner) {
+      let draft = null;
+      try { if (ui.db) { const d = await Promise.race([ui.db.doc('map/draft').get(), tmo(3000)]); if (d && d.exists !== false) { const v = typeof d.data === 'function' ? d.data() : d; if (v && v.json) draft = JSON.parse(v.json); } } } catch (e) { /* возьмём из памяти телефона */ }
+      if (!draft) { try { const r = store.get(LAYKEY); if (r) draft = JSON.parse(r); } catch (e) { draft = null; } }
+      if (draft && draft.v === 1 && Array.isArray(draft.items) && (!ui.layout || (draft.rev || 0) >= (ui.layout.rev || 0))) ui.layout = draft;
+    }
+  }
+  async function saveLayout(quiet) {
+    const Ly = world.ed.layout(); Ly.rev = Math.floor(Date.now() / 1000); let where = 'на этом телефоне';
+    try { store.set(LAYKEY, JSON.stringify(Ly)); } catch (e) { /* ничего */ }
+    if (ui.db) { try { await ui.db.doc('map/draft').set({ json: JSON.stringify(Ly), rev: Ly.rev, t: Date.now() }); where = 'в хранилище страницы'; } catch (e) { where = 'на телефоне (хранилище страницы не ответило)'; } }
+    world.ed.changed = false; if (!quiet) toast(`💾 Расстановка сохранена ${where}. Чтобы клиенты её увидели, напиши мне: «опубликуй карту»`, 'good'); else toast(`💾 Сохранено ${where}`, 'good');
+  }
+  function startEditor() {
+    if (!ui.owner || !world.ed) return; closeModal(); ui.editing = true; ui.edSpeed = ui.speed; ui.speed = 0; ui.edTab = 'move'; ui.edPick = null; ui.confirm = null;
+    world.inputOn = false; $('app').classList.add('editing'); world.ed.onChange = () => renderEd(); world.ed.enter(); renderEd();
+    toast('🛠️ Редактор: тапни предмет и тащи его. Двумя пальцами двигай и приближай карту', '');
+  }
+  function stopEditor(keep) {
+    ui.editing = false; ui.speed = ui.edSpeed != null ? ui.edSpeed : 1; world.ed.exit(keep); world.ed.onChange = null; world.inputOn = true; $('app').classList.remove('editing');
+    for (const id of ['edtop', 'edsel', 'edbar']) { $(id).hidden = true; $(id).innerHTML = ''; } lastBar = ''; lastSeed = ''; renderBar();
+  }
+  function renderEd() {
+    if (!ui.editing) return; const w = world.ed, info = w.info(), cf = ui.confirm;
+    const tab = ui.edTab || 'move', tb = (id, ic, nm) => `<button class="edtab ${tab === id ? 'on' : ''}" data-act="edtool" data-t="${id}"><i>${ic}</i><b>${nm}</b></button>`;
+    let tabs = tb('move', '✋', 'Двигать') + world.palette.map((g) => tb(g.id, g.icon, g.name)).join('') + tb('road', '🛣️', 'Дорога') + tb('erase', '🧽', 'Ластик');
+    let body = '';
+    const grp = world.palette.find((g) => g.id === tab);
+    if (grp) body = `<div class="edpal">${grp.items.map((a, i) => `<button class="edit ${ui.edPick && ui.edPick.g === grp.id && ui.edPick.i === i ? 'on' : ''}" data-act="edpick" data-g="${grp.id}" data-i="${i}"><i>${a[3]}</i><span>${a[2]}</span></button>`).join('')}</div><div class="edhint">${ui.edPick ? 'Тапни по земле — предмет встанет. Потом тащи его пальцем' : 'Выбери предмет из списка'}</div>`;
+    else if (tab === 'road') body = `<div class="edhint">${w.roadStart ? '✅ Начало поставлено. Тапни, где дорога кончается' : 'Тапни, где дорога начинается, потом где кончается. Дорога пойдёт ровно по прямой'}</div>`;
+    else if (tab === 'erase') body = `<div class="edhint">Води пальцем: всё под красным кругом исчезнет (дома, деревья, дороги). Ошибся? Нажми ↩</div>`;
+    else body = `<div class="edhint">Тапни дом, здание, двор или поле, чтобы выбрать. Потом тащи его пальцем. Пустое место тащи, чтобы двигать карту</div>`;
+    const barHtml = `<div class="edtabs">${tabs}</div>${body}`;
+    const selHtml = info ? `<b>${info.name}</b>${info.rot ? '<button class="edb" data-act="edrot">↻ Повернуть</button>' : ''}${info.copy ? '<button class="edb" data-act="edcopy">⧉ Копия</button>' : ''}${info.del ? '<button class="edb red" data-act="edrem">🗑 Удалить</button>' : ''}` : '';
+    const topHtml = `<button class="edb ${w.canUndo ? '' : 'dis'}" data-act="edundo">↩ Шаг назад</button><button class="edb" data-act="edreset">${cf === 'edreset' ? 'Точно? Тапни ещё раз' : '⟲ Стандартная карта'}</button><button class="edb" data-act="edsave">💾 Сохранить</button><button class="edb ok" data-act="eddone">✓ Готово</button><button class="edb red" data-act="edcancel">${cf === 'edcancel' ? 'Выйти без сохранения?' : '✕'}</button>`;
+    const put = (id, html, show) => { const e = $(id); e.hidden = !show; if (e._h !== html) { e._h = html; e.innerHTML = html; } };
+    put('edbar', barHtml, true); put('edsel', selHtml, !!info); put('edtop', topHtml, true);
+    const h = $('edbar').offsetHeight; if (h) document.documentElement.style.setProperty('--edh', h + 'px');
   }
 
   // ---------------------------------------------------------------- главный цикл
@@ -758,7 +821,7 @@
     requestAnimationFrame(frame);
   }
 
-  function start() {
+  async function start() {
     { const sk = $('skipdesk'); if (sk) sk.onclick = () => $('desktop').classList.add('skip'); }
     if (matchMedia('(hover:none) and (pointer:coarse)').matches) $('desktop').classList.add('skip'); // на телефоне играем сразу, без предупреждения
     window.__boot = { t0: performance.now() };
@@ -766,9 +829,10 @@
     S = d ? L.migrate(d.s) : L.createState();
     if (d) { const away = Date.now() - d.t; if (away > 30000) { const before = { c: S.coins, g: L.total(S.goods) }; L.catchUp(S, away); toast(Object.keys(S.run || {}).length ? `С возвращением! Тебя не было ${Math.round(away / 60000)} мин — включённая техника работала 🌾` : `С возвращением! Тебя не было ${Math.round(away / 60000)} мин 🌾`, 'good'); } }
     ui.lastLog = S.logN || 0; ui.lvl = S.level; L.drainFx();
+    await ownerInit();
     { const bp = store.get('farm2.bartop'); ui.barTop = bp === '1'; applyBarPos(); }
     try {
-      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => {  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal) openModal('animals'); } });
+      world = window.World3D.create($('gl'), $('labels'), { onTile, onBuilding, onHover, onVehicleDrop, onVehicleClick, onFarmSign, onWolf: () => { if (ui.editing) return;  }, onHowl: (vol) => { const n = S.clock / L.DAY_MS; if (n > 0.72 || n < 0.28) sfx.howl(vol); }, onPen: () => { if (!ui.modal && !ui.editing) openModal('animals'); } }, ui.layout);
     } catch (err) { console.error(err); $('nogl').hidden = false; return; }
     pickSeed(); if (window.__boot) window.__boot.tc = performance.now();
     window.__world = world;

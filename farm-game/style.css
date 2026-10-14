@@ -204,3 +204,20 @@ html,body,#app,#stage{touch-action:none;-webkit-touch-callout:none}
 #app.bartop .tip{order:99}
 #app.bartop #seedbar{bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
 #app.bartop .lcol2{bottom:calc(env(safe-area-inset-bottom,0px) + 86px)}
+
+/* редактор карты (только у владельца) */
+#app.editing #hud,#app.editing #bar,#app.editing #seedbar,#app.editing #toasts{display:none}
+#app.editing #toasts{display:flex}
+#edbar{position:absolute;left:0;right:0;bottom:0;background:var(--bar);border-top:1px solid var(--line);padding:6px 6px calc(min(env(safe-area-inset-bottom),12px) + 6px);z-index:6}
+.edtabs{display:flex;gap:4px}
+.edtab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px;border-radius:8px;border:0;background:var(--bar2);color:#d9e0e4;cursor:pointer}
+.edtab i{font-style:normal;font-size:20px;line-height:1.1}.edtab b{font-size:10px;font-weight:700}.edtab.on{background:var(--green);color:#fff}
+.edpal{display:flex;gap:6px;overflow-x:auto;padding:8px 2px 4px;scrollbar-width:none;touch-action:pan-x}.edpal::-webkit-scrollbar{display:none}
+.edit{flex:none;width:84px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px;border:2px solid transparent;background:var(--bar2);color:#e8edf0;cursor:pointer}
+.edit i{font-style:normal;font-size:26px;line-height:1.1}.edit span{font-size:10.5px;font-weight:700;text-align:center;line-height:1.15}.edit.on{border-color:var(--green)}
+.edhint{font-size:12px;font-weight:600;color:#c9d3d8;text-align:center;padding:5px 6px 0}
+#edsel{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--edh,120px) + 8px);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;padding:6px 8px;background:var(--bar);border:1px solid var(--line);border-radius:10px;z-index:6;font-size:13px}
+#edsel b{padding:0 4px}
+#edtop{position:absolute;right:6px;top:calc(var(--ht,96px) + 6px);display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:92vw;z-index:6}
+.edb{border:0;border-radius:9px;padding:9px 12px;font-weight:800;font-size:13px;color:#fff;background:rgba(44,52,57,.92);cursor:pointer;border:1px solid var(--line);white-space:nowrap}
+.edb.ok{background:var(--green)}.edb.red{background:#a3332a}.edb.dis{opacity:.4}
