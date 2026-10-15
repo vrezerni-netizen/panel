@@ -1,0 +1,13 @@
+node_modules/
+*.db
+*.db-*
+deploy/data/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+spool/
+recordings/
+*.key
+bin/
+data/
