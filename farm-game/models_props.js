@@ -652,7 +652,7 @@
     br = br || 1;          // непрозрачный тёмный «внутренний слой листвы»
     g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
     g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.6 * br); g.fillRect(ox, oy, CELL, CELL);
-    if (!mask) { const r = lcg(P.seed * 53 + 7); for (let i = 0; i < 1100; i++) { g.save(); g.translate(ox + r() * CELL, oy + r() * CELL); g.rotate(r() * TAU); g.fillStyle = rgbs(lerpC(P.lo, P.hi, r() * 0.55), (0.55 + r() * 0.3) * br); leafPath(g, 7, 3.4, 0.5); g.fill(); g.restore(); } }
+    if (!mask) { const r = lcg(P.seed * 53 + 7); for (let i = 0; i < 800; i++) { g.save(); g.translate(ox + r() * CELL, oy + r() * CELL); g.rotate(r() * TAU); g.fillStyle = rgbs(lerpC(P.lo, P.hi, r() * 0.55), (0.55 + r() * 0.3) * br); leafPath(g, 7, 3.4, 0.5); g.fill(); g.restore(); } }
     g.restore();
   }
   function paintFrond(g, ox, oy, mask, level, variant) {    // ветка ели: стебель снизу вверх, хвоя «ёлочкой»
@@ -731,7 +731,7 @@
   function treeKit() {
     if (_TR) return _TR;
     const cv = document.createElement('canvas'), mk = document.createElement('canvas'); cv.width = cv.height = mk.width = mk.height = ATL;
-    const cc = cv.getContext('2d'), mc = mk.getContext('2d'), cells = {}; let idx = 0;
+    const cc = cv.getContext('2d', { willReadFrequently: true }), mc = mk.getContext('2d', { willReadFrequently: true }), cells = {}; let idx = 0;      // willReadFrequently: быстрое чтение пикселей (иначе getImageData с GPU-холста тормозит секундами)
     cc.fillStyle = '#2a4222'; cc.fillRect(0, 0, ATL, ATL); mc.fillStyle = '#000'; mc.fillRect(0, 0, ATL, ATL);
     const both = (key, fn) => { const c = idx % GN, rr = (idx / GN) | 0; idx++; cells[key] = [c, rr]; fn(cc, c * CELL, rr * CELL, false); fn(mc, c * CELL, rr * CELL, true); };
     for (const sp of ['oak', 'birch', 'fruit', 'poplar', 'bush']) {

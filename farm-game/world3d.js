@@ -665,7 +665,7 @@
       const deco = DECO.map((f) => [f.cx, f.cz, f.w, f.d]), forestMeshes = [];
       const nz = (x, z) => (Math.sin(x * 0.0113 + 1.3) + Math.sin(z * 0.0131 + 0.4) + Math.sin((x + z) * 0.0071 + 2.1) + Math.sin((x - z) * 0.0173 + 0.7) + 0.7 * Math.sin(x * 0.031 + z * 0.027)) / 4.7;
       const sm = (e0, e1, v) => { const q = Math.min(1, Math.max(0, (v - e0) / (e1 - e0))); return q * q * (3 - 2 * q); };
-      const trunkGeo = G.cyl(), coneGeo = G.cone(), sphGeo = new T.SphereGeometry(0.5, 7, 6);
+      const trunkGeo = G.cyl(), coneGeo = G.cone(), sphGeo = new T.SphereGeometry(0.5, 9, 7);
       forestRebuild = () => {
         for (const m of forestMeshes) { world.remove(m); m.dispose && m.dispose(); } forestMeshes.length = 0;
         let q = 4242; const frng = () => (q = (q * 16807) % 2147483647) / 2147483647;
@@ -687,22 +687,38 @@
           const dc = Math.hypot(Math.max(-300 - px, px - 290, 0), Math.max(-192 - pz, pz - 190, 0)); // расстояние до обжитой части карты
           const p = sm(-0.12, 0.18, nz(px, pz) + 0.55 * sm(40, 200, dc) - 0.15 * (1 - sm(0, 40, dc))); if (rC > p && rD > 0.001) continue;
           const stand = nz(px * 0.6 + 90, pz * 0.6 - 40) > 0;
-          const sp = [px, pz, 1.8 + rE * 1.8, stand ? rF * 0.62 : 0.4 + rF * 0.6]; FOREST.all.push(sp);
+          const sp = [px, pz, 1.8 + rE * 1.8, stand ? rF * 0.62 : 0.4 + rF * 0.6, dc]; FOREST.all.push(sp);
           if (cutHit(px, pz)) continue;
           treeSpots.push(sp);
         }
         FOREST.spots = treeSpots;
-        const pines = treeSpots.filter((t) => t[3] < 0.55), oaks = treeSpots.filter((t) => t[3] >= 0.55);
-        const mk = (geoms, list, build) => {
-          const m = new T.InstancedMesh(geoms, new T.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), Math.max(1, list.length)); m.castShadow = !W.lite; m.receiveShadow = true; m.count = list.length;
+        // деревья рядом с обжитой частью карты рисуются настоящими моделями (с листвой и корой), дальние — упрощённо: так хватает мощности телефона
+        const FMr = root.FarmModels, useModels = !!(FMr && FMr.has('tree', 'oakLow') && FMr.has('tree', 'pineLow')), nearR = W.lite ? 55 : 110;
+        const nearTrees = useModels ? treeSpots.filter((t) => t[4] < nearR) : [], farTrees = useModels ? treeSpots.filter((t) => t[4] >= nearR) : treeSpots;
+        const pines = farTrees.filter((t) => t[3] < 0.55), oaks = farTrees.filter((t) => t[3] >= 0.55);
+        // дальние деревья берут листву и кору у настоящих моделей, чтобы не было резкой границы
+        const leafOf = (name, rx, ry) => { try { if (!useModels) return null; const ps = treeParts(name, 0).slice().sort((a, b) => b.geo.attributes.position.count - a.geo.attributes.position.count); const src = ps[0] && ps[0].mat; if (!src || !src.map) return null; const mm = src.clone(); mm.map = src.map.clone(); mm.map.wrapS = mm.map.wrapT = T.RepeatWrapping; mm.map.repeat.set(rx, ry); mm.map.needsUpdate = true; mm.color = new T.Color(0xffffff); return mm; } catch (e) { return null; } };
+        const mk = (geoms, list, build, matX) => {
+          const m = new T.InstancedMesh(geoms, matX || new T.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, list.length)); m.castShadow = !W.lite; m.receiveShadow = true; m.count = list.length;
           const d = new T.Object3D(), c = new T.Color();
           list.forEach((t, i) => { build(d, t, c); d.updateMatrix(); m.setMatrixAt(i, d.matrix); m.setColorAt(i, c); }); m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; world.add(m); forestMeshes.push(m); return m;
         };
-        const green = (c, t) => c.setHSL(0.24 + (t[3] * 7 % 1) * 0.08, 0.36, 0.13 + (t[3] * 13 % 1) * 0.12);
-        mk(trunkGeo, treeSpots, (d, t, c) => { d.position.set(t[0], 0.5 * t[2], t[1]); d.scale.set(0.25 * t[2], 1.0 * t[2], 0.25 * t[2]); d.rotation.set(0, 0, 0); c.set(0x5d4037); });
-        mk(coneGeo, pines, (d, t, c) => { d.position.set(t[0], 1.8 * t[2], t[1]); d.scale.set(1.5 * t[2], 2.4 * t[2], 1.5 * t[2]); green(c, t); });
-        mk(coneGeo, pines, (d, t, c) => { d.position.set(t[0], 2.8 * t[2], t[1]); d.scale.set(1.1 * t[2], 1.8 * t[2], 1.1 * t[2]); green(c, t); });
-        mk(sphGeo, oaks, (d, t, c) => { d.position.set(t[0], 2.0 * t[2], t[1]); d.scale.set(2.3 * t[2], 1.9 * t[2], 2.3 * t[2]); green(c, t); c.offsetHSL(0.02, 0.05, 0.03); });
+        const green0 = (c, t) => c.setHSL(0.24 + (t[3] * 7 % 1) * 0.08, 0.36, 0.13 + (t[3] * 13 % 1) * 0.12);
+        const leafTint = (c, t) => { const v = 0.9 + (t[3] * 13 % 1) * 0.5; c.setRGB(v * 0.97, v, v * 0.88); };
+        mk(trunkGeo, farTrees, (d, t, c) => { d.position.set(t[0], 0.5 * t[2], t[1]); d.scale.set(0.25 * t[2], 1.0 * t[2], 0.25 * t[2]); d.rotation.set(0, 0, 0); c.set(0x5d4037); });
+        const pineM = leafOf('pineLow', 4, 3), oakM = leafOf('oakLow', 5, 4), gP = pineM ? leafTint : green0, gO = oakM ? leafTint : (c, t) => { green0(c, t); c.offsetHSL(0.02, 0.05, 0.03); }, green = green0;
+        mk(coneGeo, pines, (d, t, c) => { d.position.set(t[0], 1.8 * t[2], t[1]); d.scale.set(1.5 * t[2], 2.4 * t[2], 1.5 * t[2]); gP(c, t); }, pineM);
+        mk(coneGeo, pines, (d, t, c) => { d.position.set(t[0], 2.8 * t[2], t[1]); d.scale.set(1.1 * t[2], 1.8 * t[2], 1.1 * t[2]); gP(c, t); }, pineM);
+        mk(sphGeo, oaks, (d, t, c) => { d.position.set(t[0], 2.0 * t[2], t[1]); d.scale.set(2.3 * t[2], 1.9 * t[2], 2.3 * t[2]); gO(c, t); }, oakM);
+        if (nearTrees.length) {
+          const groups = {}; for (const t of nearTrees) { const sp2 = t[3] < 0.55 ? 'pineLow' : 'oakLow', v = Math.floor(((t[0] * 7.13 + t[1] * 3.7) % 1 + 1) % 1 * 3), k = sp2 + v; (groups[k] = groups[k] || { sp: sp2, v, list: [] }).list.push(t); }
+          for (const gp of Object.values(groups)) for (const pt of treeParts(gp.sp, gp.v)) {
+            const m = new T.InstancedMesh(pt.geo, pt.mat, gp.list.length); m.castShadow = !W.lite; m.receiveShadow = true; m.count = gp.list.length; m.frustumCulled = false;
+            const M = new T.Matrix4(), M2 = new T.Matrix4(), q = new T.Quaternion(), P = new T.Vector3(), Sc = new T.Vector3(), up = new T.Vector3(0, 1, 0);
+            gp.list.forEach((t, i) => { const sc = t[2] / 2.6; q.setFromAxisAngle(up, (t[3] * 977 % 1) * 6.283); P.set(t[0], 0, t[1]); Sc.set(sc, sc * (0.92 + (t[2] * 31 % 1) * 0.2), sc); M.compose(P, q, Sc); M2.multiplyMatrices(M, pt.mw); m.setMatrixAt(i, M2); });   // без цвета на экземпляр: материал общий с другими деревьями
+            m.instanceMatrix.needsUpdate = true; world.add(m); forestMeshes.push(m);
+          }
+        }
       };
       // большие поля по краям карты: просто для красоты, как на настоящей ферме
       DECO.forEach(({ cx, cz, w, d, kind }) => {

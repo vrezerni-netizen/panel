@@ -279,7 +279,7 @@
       for (let x = rx0 + 0.3; x < rx1; x += 1.05) bm(g, timberD, [x, y0 - 0.13, ZR], [x, ye - 0.13, ze], 0.07, 0.14);
       bx(g, galvM, XM, ye - 0.04, ZR + s * 5.45, rw + 0.06, 0.09, 0.14);                                      // водосточный жёлоб
       bx(g, steelM, XM, ye - 0.09, ZR + s * 5.0, rw, 0.07, 0.07);                                              // прогон
-      bx(g, galvM, rcx, y0 + 0.04, ZR + s * 0.17, rw + 0.04, 0.035, 0.36, s * -ANG, 0, 0);                    // коньковый элемент
+      bx(g, steelM, rcx, y0 - 0.15 * Math.sin(ANG) + 0.05, ZR + s * 0.15 * Math.cos(ANG), rw + 0.04, 0.04, 0.4, s * ANG, 0, 0);                    // коньковый элемент
     }
     for (const x of [rx0 + 0.02, rx1 - 0.02]) for (const s of [1, -1]) bm(g, galvM, [x, roofY(5.4) - 0.02, ZR + s * 5.4], [x, roofY(0) + 0.05, ZR], 0.05, 0.12);  // торцевые планки
     for (const [x, z] of [[SX0 - 0.55, SZ1 + 0.75], [SX1 + 0.55, SZ1 + 0.75]]) rod(g, galvM, [x, EH + 0.05, z], [x, 0.3, z], 0.05, 8);  // водосточные трубы
@@ -354,7 +354,7 @@
     const LX0 = SX1 + 0.1, LX1 = 10.85, LZ0 = -5.0, LZ1 = 2.6;
     bx(g, concM, (LX0 + LX1) / 2, FL / 2 - 0.02, (LZ0 + LZ1) / 2, LX1 - LX0, FL, LZ1 - LZ0);
     const lt = 15 * PI / 180, yH = 4.7, yL = yH - (LX1 - LX0) * Math.tan(lt);
-    bx(g, woodM, (LX0 + LX1) / 2, 2.2, LZ0 + 0.04, LX1 - LX0, 4.0, 0.08);       // задняя стенка из досок
+    add(g, polyG([[LX0, FL], [LX1 - 0.05, FL], [LX1 - 0.05, yL - 0.04], [LX0, yH - 0.04]], null, 0.08, woodM.userData.tile), woodM, 0, 0, LZ0);   // задняя стенка из досок
     for (const z of [LZ0 + 0.15, -1.9, 0.9, LZ1 - 0.15]) { bx(g, timber, LX1 - 0.12, (yL - 0.2 + FL) / 2, z, 0.2, yL - 0.2 - FL, 0.2); bx(g, timberD, LX1 - 0.12, yL - 0.28, z, 0.34, 0.12, 0.34); }
     bx(g, timber, LX1 - 0.12, yL - 0.14, (LZ0 + LZ1) / 2, 0.22, 0.24, LZ1 - LZ0 + 0.3);
     const lrl = (LX1 + 0.5 - LX0) / Math.cos(lt);
@@ -478,7 +478,8 @@
       }
       for (const [name, x] of [['west', xw], ['east', xe]]) {
         const gaps = OP[name].filter((o) => yS > o.y0 && yS < o.y1);
-        for (const [a, b] of runs(zb - ov, zf + ov, gaps)) { const rr = rk * (0.97 + R() * 0.06); logAt(g, hutLog, x, yS, (a + b) / 2, rr * (1 - 0.05 * flip), rr * (1 + 0.05 * flip), b - a, 'z', R, 9, 1); }
+        const ovs = k >= nC - 2 ? 0.1 : ov;
+        for (const [a, b] of runs(zb - ovs, zf + ovs, gaps)) { const rr = rk * (0.97 + R() * 0.06); logAt(g, hutLog, x, yS, (a + b) / 2, rr * (1 - 0.05 * flip), rr * (1 + 0.05 * flip), b - a, 'z', R, 9, 1); }
       }
     }
     // фронтоны из вертикальных досок
@@ -491,7 +492,7 @@
       const ye = yRidge - 2.75 * TP, cz = zc + s * 1.375 - s * 0.05 * Math.sin(RP), cyy = (yRidge + ye) / 2 - 0.05 * Math.cos(RP);
       slab(g, shingleM, [rcx, cyy, cz], [0, -Math.sin(RP), s * Math.cos(RP)], [1, 0, 0], rw, 0.1, slopeL);
       for (let x = rx0 + 0.35; x < rx1; x += 0.85) bm(g, brown, [x, yRidge - 0.22, zc], [x, ye - 0.2, zc + s * 2.75], 0.09, 0.12);
-      bx(g, brown, rcx, yRidge + 0.03, zc + s * 0.16, rw + 0.05, 0.05, 0.4, s * -RP, 0, 0);
+      bx(g, brown, rcx, yRidge - 0.15 * Math.sin(RP) + 0.05, zc + s * 0.15 * Math.cos(RP), rw + 0.05, 0.05, 0.42, s * RP, 0, 0);
       for (const x of [rx0 + 0.02, rx1 - 0.02]) bm(g, brown, [x, ye - 0.04, zc + s * 2.75], [x, yRidge + 0.03, zc + s * 0.05], 0.07, 0.2);
     }
     // дверь
@@ -527,14 +528,14 @@
     for (const s of [1, -1]) {
       slab(g, shingleM, [pX + s * 0.925 - s * 0.05 * Math.sin(PR), (pyRidge + pyEdge) / 2 - 0.05 * Math.cos(PR), (pzA + pzB) / 2], [s * Math.cos(PR), -Math.sin(PR), 0], [0, 0, 1], pzB - pzA, 0.1, pL);
       for (let z = pz0 + 0.1; z < pzB; z += 0.85) bm(g, brown, [pX, pyRidge - 0.18, z], [pX + s * 1.85, pyEdge - 0.16, z], 0.1, 0.1);
-      bx(g, brown, pX + s * 0.12, pyRidge + 0.03, (pzA + pzB) / 2, 0.4, 0.05, pzB - pzA + 0.05, 0, 0, s * PR);
+      bx(g, brown, pX + s * 0.15 * Math.cos(PR), pyRidge - 0.15 * Math.sin(PR) + 0.05, (pzA + 0.4 + pzB) / 2, 0.42, 0.05, pzB - pzA - 0.35, 0, 0, -s * PR);
     }
     add(g, polyG([[-1.78, 2.5], [1.78, 2.5], [0, pyRidge - 0.28]], null, 0.06, hutWood.userData.tile), hutWood, pX, 0, pz1 - 0.2, 0, 0, 0).scale.set(1, 1, 1);
     // дрова на крыльце
     for (let L = 0; L < 2; L++) for (let i = 0; i < 6; i++) logAt(g, logM, -0.98 + (L % 2) * 0.0 + (R() - 0.5) * 0.05, 0.27 + 0.07 + L * 0.14, pz0 + 0.25 + i * 0.2 + (L ? 0.1 : 0), 0.07, 0.065, 0.5, 'x', R, 6, 1);
     // дровница у восточной стены
-    bx(g, dark, xe + lr + 0.4, 0.5, -1.25, 0.6, 1.0, 2.0);
-    for (let L = 0; L < 3; L++) for (let i = 0; i < 7 - (L > 1 ? 1 : 0); i++) logAt(g, logM, xe + lr + 0.4 + (R() - 0.5) * 0.04, 0.1 + L * 0.16, -2.2 + i * 0.3 + (L % 2) * 0.15, 0.075 + R() * 0.02, 0.07, 0.62, 'x', R, 6, 1);
+    bx(g, dark, xe + lr + 0.4, 0.24, -1.3, 0.6, 0.46, 2.2);
+    for (let L = 0; L < 4; L++) for (let i = 0; i < 9 - (L > 2 ? 3 : 0); i++) logAt(g, logM, xe + lr + 0.4 + (R() - 0.5) * 0.04, 0.09 + L * 0.165, -2.3 + i * 0.25 + (L % 2) * 0.125 + (L > 2 ? 0.4 : 0), 0.085 + R() * 0.015, 0.08, 0.64, 'x', R, 6, 1);
     // стремянка, прислонённая к стене
     const ladX = xe + lr + 0.12;
     for (const dz of [-0.24, 0.24]) bm(g, hutWoodD, [ladX + 0.5, 0.0, 0.55 + dz], [ladX + 0.04, 2.6, 0.55 + dz], 0.06, 0.04);
@@ -542,6 +543,7 @@
     // колода с топором и щепа
     logAt(g, logM, -2.5, 0.31, 3.35, 0.3, 0.33, 0.62, 'y', R, 12, 1);
     rod(g, hutWoodD, [-2.5, 0.64, 3.35], [-2.15, 1.5, 3.55], 0.022, 6); bx(g, V(0x8c9298), -2.52, 0.7, 3.35, 0.2, 0.17, 0.035, 0, 0.2, 0.3);
+    cy(g, V(0x8a6e44), -2.5, 0.012, 3.35, 1.1, 0.024, 12);
     for (let i = 0; i < 5; i++) bx(g, chop, -2.5 + (R() - 0.5) * 1.4, 0.03, 3.35 + (R() - 0.5) * 1.2, 0.12, 0.03, 0.05, 0, R() * 3, 0);
     for (let i = 0; i < 3; i++) logAt(g, logM, -3.3 + R() * 0.5, 0.07, 2.9 + i * 0.35, 0.08, 0.075, 0.45, 'x', R, 6, 1);
     // фонарь у крыльца
@@ -627,7 +629,9 @@
       const [x, z, y] = shore(s, a), g2 = rockBase.clone(), pa = g2.attributes.position, sd = R() * 50;
       for (let i = 0; i < pa.count; i++) { const vx = pa.getX(i), vy = pa.getY(i), vz = pa.getZ(i), k = 1 + 0.32 * (vn(vx * 1.6 + sd, vz * 1.6 + vy * 1.3) - 0.5) * 2; pa.setXYZ(i, vx * k, vy * k * 0.66, vz * k); }
       g2.computeVertexNormals();
-      M4.compose(P3.set(x, y + rad * 0.12, z), Q.setFromEuler(new T.Euler((R() - 0.5) * 0.4, R() * TAU, (R() - 0.5) * 0.4)), S3.set(rad * (0.9 + R() * 0.4), rad * (0.8 + R() * 0.3), rad * (0.9 + R() * 0.4)));
+      pa.needsUpdate = true; let my = 0; for (let i = 0; i < pa.count; i++) my = Math.min(my, pa.getY(i));
+      const sy = rad * (0.8 + R() * 0.3);
+      M4.compose(P3.set(x, y - my * sy * 0.75 - 0.02, z), Q.setFromEuler(new T.Euler((R() - 0.5) * 0.3, R() * TAU, (R() - 0.5) * 0.3)), S3.set(rad * (0.9 + R() * 0.4), sy, rad * (0.9 + R() * 0.4)));
       const base = tone[R() * tone.length | 0], vv = 0.85 + R() * 0.3;
       A.geo(g2, M4, (v, n, i) => { const m = vv * (0.8 + 0.3 * vn(v.x * 3 + sd, v.z * 3)), moss = smooth(clamp((-v.y + 0.1) * 2.2, 0, 1)) * 0.7; const b = hexRGB(base), c = lerpRGB([b[0] * m, b[1] * m, b[2] * m], hexRGB(0x4f6a30), moss * 0.5 * (0.5 + 0.5 * n.y * -1)); return c; });
     }

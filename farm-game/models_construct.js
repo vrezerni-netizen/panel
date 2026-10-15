@@ -28,31 +28,34 @@
     for (let i = 0; i < n; i++) { const x = r() * S, y = r() * S, rad = rmin + r() * (rmax - rmin), a = amin + r() * (amax - amin); wrap9(S, x, y, rad, (X, Y) => { const gr = g.createRadialGradient(X, Y, 0, X, Y, rad); gr.addColorStop(0, rgb(col[0], col[1], col[2], a)); gr.addColorStop(1, rgb(col[0], col[1], col[2], 0)); g.fillStyle = gr; g.fillRect(X - rad, Y - rad, rad * 2, rad * 2); }); }
   }
 
-  // ------------------------------------------------------------------ текстуры (серые/цветные; тонируются материалом)
-  C.addProc('cn_concrete', pix(256, (() => { const a = fbm(5, 4), b = fbm(9, 8), c = fbm(21, 3); return (u, v, x, y) => {
+  // ------------------------------------------------------------------ текстуры (серые/цветные; тонируются материалом); рисуются лениво при первом использовании
+  const TEXDEF = {}, TEXDONE = {};
+  const defTex = (name, fn, size) => { TEXDEF[name] = [fn, size]; };
+  const ensureTex = (name) => { if (!TEXDONE[name]) { TEXDONE[name] = 1; const d = TEXDEF[name]; C.addProc(name, d[0], d[1]); } };
+  defTex('cn_concrete', pix(256, (() => { const a = fbm(5, 4), b = fbm(9, 8), c = fbm(21, 3); return (u, v, x, y) => {
     let l = 172 + (a(u, v) - 0.5) * 46 + (b(u * 2, v * 2) - 0.5) * 20 + (hash2(x, y) - 0.5) * 20;
     if (hash2(x * 1.7 + 3, y * 1.3) > 0.993) l -= 48;
     const st = Math.max(0, c(u, v) - 0.55) * 60;
     return [l - st * 0.4, l - st * 0.55 - 1, l - st * 0.9 - 4];
   }; })()), 256);
-  C.addProc('cn_dirt', pix(256, (() => { const a = fbm(31, 4), b = fbm(37, 8), c = fbm(41, 16); return (u, v, x, y) => {
+  defTex('cn_dirt', pix(256, (() => { const a = fbm(31, 4), b = fbm(37, 8), c = fbm(41, 16); return (u, v, x, y) => {
     const k = a(u, v), m = b(u, v), cl = c(u, v);
     let l = 0.62 + (k - 0.5) * 0.6 + (m - 0.5) * 0.35 + (cl - 0.5) * 0.25 + (hash2(x, y) - 0.5) * 0.18;
     let r = 112 * l, g = 86 * l, bl = 60 * l;
     if (hash2(x * 2.3 + 1, y * 1.9) > 0.985) { r += 50; g += 46; bl += 38; }
     return [r, g, bl];
   }; })()), 256);
-  C.addProc('cn_plaster', pix(256, (() => { const a = fbm(51, 4), b = fbm(55, 8); return (u, v, x, y) => {
+  defTex('cn_plaster', pix(256, (() => { const a = fbm(51, 4), b = fbm(55, 8); return (u, v, x, y) => {
     const l = 238 + (a(u, v) - 0.5) * 24 + (b(u, v) - 0.5) * 12 + (hash2(x, y) - 0.5) * 8; const st = Math.max(0, fbm(61, 3)(u, v) - 0.6) * 50;
     return [l - st * 0.3, l - 2 - st * 0.5, l - 8 - st * 0.8];
   }; })()), 256);
-  C.addProc('cn_timber', pix(256, (() => { const s1 = pn(71, 16), s2 = pn(73, 32), s3 = pn(77, 6), kn = pn(79, 4); return (u, v, x, y) => {
+  defTex('cn_timber', pix(256, (() => { const s1 = pn(71, 16), s2 = pn(73, 32), s3 = pn(77, 6), kn = pn(79, 4); return (u, v, x, y) => {
     let t = 0.84 + (s1(u * 10, v) - 0.5) * 0.3 + (s2(u * 36, v * 2) - 0.5) * 0.14;
     t += Math.sin((u + (s3(u * 2, v) - 0.5) * 0.25) * TAU * 6) * 0.045;
     const k = kn(u * 2, v * 2); if (k > 0.82) t -= (k - 0.82) * 1.6;
     return [t * 255, t * 238, t * 212];
   }; })()), 256);
-  C.addProc('cn_boards', (cv, g) => {
+  defTex('cn_boards', (cv, g) => {
     const S = 512, r = lcg(23), n = 8, w = S / n; g.fillStyle = '#777'; g.fillRect(0, 0, S, S);
     for (let i = 0; i < n; i++) {
       const L = 0.62 + r() * 0.3, x0 = i * w;
@@ -69,18 +72,18 @@
     }
     blotches(g, S, r, 26, 40, 110, [40, 30, 20], 0.05, 0.13); blotches(g, S, r, 14, 30, 80, [235, 235, 230], 0.04, 0.09);
   }, 512);
-  C.addProc('cn_tile', (cv, g) => {
+  defTex('cn_tile', (cv, g) => {
     const S = 256, r = lcg(31), cols = 8, rows = 8, tw = S / cols, th = S / rows, ov = th * 0.2; g.fillStyle = rgb(48, 22, 15); g.fillRect(0, 0, S, S);
     for (let row = rows - 1; row >= 0; row--) for (let c = -1; c <= cols; c++) for (const dy of [0, -S]) {
       const x = c * tw + (row % 2 ? tw / 2 : 0), y = row * th + dy, k = (r() - 0.5) * 34, dark = r() < 0.1 ? -22 : 0, h = th + ov;
-      const gr = g.createLinearGradient(0, y, 0, y + h); const R = 170 + k + dark, G = 74 + k * 0.6 + dark * 0.6, B = 48 + k * 0.45 + dark * 0.4;
+      const gr = g.createLinearGradient(0, y, 0, y + h); const R = 148 + k + dark, G = 70 + k * 0.6 + dark * 0.6, B = 50 + k * 0.45 + dark * 0.4;
       gr.addColorStop(0, rgb(R * 0.62, G * 0.62, B * 0.62)); gr.addColorStop(0.3, rgb(R * 0.95, G * 0.95, B * 0.95)); gr.addColorStop(0.78, rgb(R * 1.08, G * 1.08, B * 1.08)); gr.addColorStop(1, rgb(R * 0.7, G * 0.7, B * 0.7));
       g.fillStyle = gr; g.beginPath(); g.moveTo(x + 1, y); g.lineTo(x + tw - 1, y); g.lineTo(x + tw - 1, y + h - 8); g.quadraticCurveTo(x + tw - 1, y + h, x + tw - 9, y + h); g.lineTo(x + 9, y + h); g.quadraticCurveTo(x + 1, y + h, x + 1, y + h - 8); g.closePath(); g.fill();
       g.strokeStyle = rgb(30, 12, 8, 0.7); g.lineWidth = 1.4; g.stroke(); g.fillStyle = rgb(255, 220, 190, 0.1); g.fillRect(x + tw * 0.28, y + 3, tw * 0.22, h - 9);
     }
     blotches(g, S, r, 18, 20, 60, [30, 40, 25], 0.05, 0.1);
   }, 256);
-  C.addProc('cn_corr', (cv, g) => {
+  defTex('cn_corr', (cv, g) => {
     pix(256, (() => { const f = fbm(81, 4), st = pn(83, 32), rs = pn(85, 10); return (u, v, x, y) => {
       const s = 0.5 + 0.5 * Math.sin(u * TAU * 8), l = 0.5 + 0.46 * Math.pow(s, 0.8) + (st(u * 8, v) - 0.5) * 0.12, rust = Math.max(0, rs(u * 4, v) - 0.6) * 1.1 + Math.max(0, f(u, v) - 0.64) * 0.8, L = l * 255;
       return [L * (1 + rust * 0.35), L * (1 - rust * 0.1), L * (1 - rust * 0.4)];
@@ -89,7 +92,7 @@
     for (let y = 40; y < 256; y += 120) for (let i = 0; i < 8; i += 2) { const x = (i + 0.5) * 32; g.fillStyle = rgb(25, 25, 28, 0.7); g.beginPath(); g.arc(x, y, 2.2, 0, TAU); g.fill(); g.fillStyle = rgb(255, 255, 255, 0.35); g.fillRect(x - 1, y - 3, 1.5, 1.5); }
     for (let i = 0; i < 160; i++) { g.fillStyle = r() < 0.5 ? rgb(70, 50, 35, r() * 0.12) : rgb(255, 255, 255, r() * 0.1); g.fillRect(r() * 256, r() * 256, 1 + r() * 2, 6 + r() * 30); }
   }, 256);
-  C.addProc('cn_brick', (cv, g) => {
+  defTex('cn_brick', (cv, g) => {
     const S = 256, r = lcg(91), cols = 8, rows = 16, bw = S / cols, bh = S / rows; g.fillStyle = rgb(196, 188, 172); g.fillRect(0, 0, S, S);
     for (let row = 0; row < rows; row++) for (let c = -1; c <= cols; c++) {
       const x = c * bw + (row % 2) * bw / 2, y = row * bh, k = (r() - 0.5) * 38, d = r() < 0.08 ? -30 : 0;
@@ -99,7 +102,7 @@
     for (let i = 0; i < 700; i++) { g.fillStyle = rgb(40, 25, 15, r() * 0.08); g.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2); }
     blotches(g, S, r, 10, 30, 70, [50, 40, 30], 0.05, 0.1);
   }, 256);
-  C.addProc('cn_stone', (cv, g) => {
+  defTex('cn_stone', (cv, g) => {
     const S = 512, r = lcg(97), rows = 8; g.fillStyle = rgb(86, 80, 72); g.fillRect(0, 0, S, S);
     const hs = []; let sum = 0; for (let i = 0; i < rows; i++) { hs.push(0.7 + r() * 0.6); sum += hs[i]; }
     let y = 0;
@@ -119,13 +122,13 @@
     for (let i = 0; i < 1800; i++) { g.fillStyle = r() < 0.5 ? rgb(40, 36, 30, r() * 0.14) : rgb(255, 250, 240, r() * 0.1); g.fillRect(r() * S, r() * S, 1 + r() * 2.5, 1 + r() * 2.5); }
     blotches(g, S, r, 16, 30, 90, [40, 50, 30], 0.05, 0.1);
   }, 512);
-  C.addProc('cn_stripe', pix(128, (() => { const nz = pn(101, 8); return (u, v, x, y) => {
+  defTex('cn_stripe', pix(128, (() => { const nz = pn(101, 8); return (u, v, x, y) => {
     const t = (u + v) - Math.floor(u + v), e = 0.012, d = Math.min(Math.abs(t - 0.5), Math.min(t, 1 - t)), mix = clamp(d / e, 0, 1);
     let col; const orange = t < 0.5; const sc = 1 + (nz(u * 4, v * 4) - 0.5) * 0.14 + (hash2(x, y) - 0.5) * 0.06;
     col = orange ? [236, 104, 22] : [240, 238, 230]; if (d < e) { const o2 = orange ? [240, 238, 230] : [236, 104, 22]; col = col.map((c, i) => lerp(o2[i], c, 0.5 + 0.5 * mix)); }
     return [col[0] * sc, col[1] * sc, col[2] * sc];
   }; })()), 128);
-  C.addProc('cn_sign', (cv, g) => {
+  defTex('cn_sign', (cv, g) => {
     const S = 1024, y0 = S * 0.17, H = S * 0.66, r = lcg(113), ff = '"DejaVu Sans","Liberation Sans",Arial,Helvetica,sans-serif';
     g.fillStyle = '#2b2b2b'; g.fillRect(0, 0, S, S); g.fillStyle = '#f2b100'; g.fillRect(0, y0, S, H);
     g.save(); g.beginPath(); g.rect(22, y0 + 22, S - 44, 74); g.clip(); g.fillStyle = '#16140e'; g.fillRect(22, y0 + 22, S - 44, 74);
@@ -146,7 +149,7 @@
   const lamCache = {};
   const lam = (c) => lamCache[c] || (lamCache[c] = new T.MeshLambertMaterial({ color: c }));
   const col = (c) => ({ tex: false, mat: lam(c) });
-  const tex = (name, tint, su, sv, grain) => ({ tex: true, mat: C.texMat(name, 1, 1, tint, 0, 0, 0, { color: tint }), su, sv, grain });
+  const tex = (name, tint, su, sv, grain) => (ensureTex(name), { tex: true, mat: C.texMat(name, 1, 1, tint, 0, 0, 0, { color: tint }), su, sv, grain });
   const steel = (c) => ({ tex: false, mat: C.metal(c || 0xb5babf, { roughness: 0.42 }) });
   const K = { black: col(0x1b1c1e), dark: col(0x2e3033), rubber: col(0x1a1a1c), white: col(0xeeebe2), grey: col(0x8c8f91), steelDk: col(0x5a5f64) };
 
@@ -168,7 +171,7 @@
     g.setAttribute('uv', new T.BufferAttribute(uv, 2));
   }
   function put(s, g, x, y, z, ry, rx, rz, grain, w, h, d) {
-    if (s.tex) {
+    if (s.tex && !g.userData.uvSet) {
       let gr = grain; if (!gr && s.grain === 'L' && w != null) gr = (w >= h && w >= d) ? 'x' : (h >= d ? 'y' : 'z');
       const rot = ry || rx || rz; projUV(g, s, rot ? [RND() * 9, RND() * 9, RND() * 9] : [x, y, z], gr);
     }
@@ -237,8 +240,8 @@
     pine: () => tex('cn_timber', 0xe9c590, 1.0, 1.0, 'L'),
     oldwood: () => tex('cn_timber', 0xa58a68, 1.0, 1.0, 'L'),
     stripe: () => tex('cn_stripe', 0xffffff, 0.5, 0.5, 'b'),
-    sand: () => tex('cn_concrete', 0xfff0c4, 2.2, 2.2, 'b'),
-    gravel: () => tex('cn_concrete', 0xb4b2ad, 0.9, 0.9, 'b'),
+    sand: () => tex('cn_concrete', 0xe9d6a4, 2.2, 2.2, 'b'),
+    gravel: () => tex('cn_concrete', 0xb4b2ad, 1.7, 1.7, 'b'),
   };
 
   // ------------------------------------------------------------------ реквизит
@@ -257,7 +260,7 @@
   }
   /** Куча сыпучего: бугристый конус с мягкой вершиной + россыпь камешков. */
   function pile(cx, cz, rad, h, spec, kind, seed, stones) {
-    const r = lcg(seed), pts = [], seg = 24, ring = 9, ph = [r() * 6, r() * 6, r() * 6];
+    const r = lcg(seed), pts = [], seg = 20, ring = 8, ph = [r() * 6, r() * 6, r() * 6];
     for (let j = 0; j <= ring; j++) { const t = j / ring, rr = rad * (1 - Math.pow(t, 1.15)), y = h * (1 - Math.pow(1 - t, 1.7)) ; pts.push([Math.max(0.002, rr), y]); }
     const g = new T.LatheGeometry(pts.map((p) => new T.Vector2(p[0], p[1])), seg), pa = g.attributes.position;
     for (let i = 0; i < pa.count; i++) {
@@ -265,8 +268,9 @@
       const k = 1 + 0.1 * Math.sin(a * 2 + ph[0]) + 0.06 * Math.sin(a * 5 + ph[1]) + 0.025 * Math.sin(a * 11 + ph[2]) * (1 - t), kh = 1 + 0.08 * Math.sin(a * 3 + ph[1] + t * 4) + 0.04 * Math.sin(a * 8 + ph[0] - t * 6);
       pa.setXYZ(i, x * k, y * kh, z * k);
     }
-    smoothNormals(g); put(spec, g, cx, 0, cz, 0, 0, 0, 'b');
-    for (let i = 0; i < (stones == null ? (kind === 'gravel' ? 22 : 4) : stones); i++) {
+    smoothNormals(g); { const pp = g.attributes.position, uvs = new Float32Array(pp.count * 2); for (let i = 0; i < pp.count; i++) { uvs[i * 2] = (pp.getX(i) + cx) / spec.su; uvs[i * 2 + 1] = (pp.getZ(i) + cz) / spec.sv; } g.setAttribute('uv', new T.BufferAttribute(uvs, 2)); g.userData.uvSet = true; }
+    put(spec, g, cx, 0, cz, 0, 0, 0, 'b');
+    for (let i = 0; i < (stones == null ? (kind === 'gravel' ? 16 : 3) : stones); i++) {
       const a = r() * TAU, t = Math.sqrt(r()) * 0.85, rr = rad * t * 0.85, y = h * (1 - Math.pow(1 - (1 - t), 1.7)) * 0.95, sz = kind === 'gravel' ? 0.06 + r() * 0.06 : 0.07 + r() * 0.08;
       const gg = new T.IcosahedronGeometry(sz, 0); gg.scale(1 + r() * 0.4, 0.6 + r() * 0.3, 1 + r() * 0.4);
       put(col(kind === 'gravel' ? [0x7c7a75, 0x96928a, 0x6a6864, 0xa59f93][i % 4] : [0xa38e63, 0xb59d70, 0x8d7a54][i % 3]), gg, cx + Math.cos(a) * rr, y + sz * 0.1, cz + Math.sin(a) * rr, r() * 3, r() * 3, r() * 3);
@@ -330,9 +334,9 @@
   }
   function bucket(x, z, c, open, ry) {
     sub(x, 0, z, ry || 0, () => {
-      cyl(col(0xd8d9d6), 0.14, 0.12, 0.34, 0, 0.17, 0, 16); cyl(col(c), 0.145, 0.145, 0.07, 0, 0.3, 0, 16); cyl(col(0x8a8d90), 0.148, 0.148, 0.012, 0, 0.12, 0, 16);
-      if (open) { cyl(col(c), 0.125, 0.125, 0.015, 0, 0.345, 0, 16); } else { cyl(col(c), 0.147, 0.147, 0.02, 0, 0.345, 0, 16); }
-      put(K.steelDk, new T.TorusGeometry(0.14, 0.006, 4, 12, PI), 0, 0.34, 0, 0, 0, 0);
+      cyl(col(0xd8d9d6), 0.14, 0.12, 0.34, 0, 0.17, 0, 10); cyl(col(c), 0.145, 0.145, 0.07, 0, 0.3, 0, 10);
+      if (open) cyl(col(c), 0.125, 0.125, 0.015, 0, 0.345, 0, 10); else cyl(col(c), 0.147, 0.147, 0.02, 0, 0.345, 0, 10);
+      put(K.steelDk, new T.TorusGeometry(0.14, 0.007, 3, 8, PI), 0, 0.34, 0, 0, 0, 0);
     });
   }
   function wheelbarrow(x, z, ry) {
@@ -343,26 +347,24 @@
       bx(body, 0.6, 0.3, 0.03, 0, 0.58, 0.64, 0, -0.62); bx(body, 0.6, 0.24, 0.03, 0, 0.53, -0.45, 0, 0.3);
       for (const sx of [-0.2, 0.2]) { beam(wood, [sx, 0.48, -0.1], [sx * 1.4, 0.7, -1.18], 0.045, 0.045); beam(fr, [sx, 0.4, 0.2], [sx * 0.4, 0.24, 0.86], 0.035, 0.035); beam(fr, [sx * 1.05, 0.4, -0.55], [sx * 1.2, 0.0, -0.45], 0.035, 0.035); }
       bx(fr, 0.4, 0.03, 0.03, 0, 0.26, 0.86);
-      put(K.rubber, new T.TorusGeometry(0.17, 0.06, 8, 18), 0, 0.23, 0.9, 0, PI / 2 * 0, 0).rotation.y = PI / 2;
-      cyl(col(0x9ea3a8), 0.1, 0.1, 0.05, 0, 0.23, 0.9, 12, 0, PI / 2);
+      put(K.rubber, new T.TorusGeometry(0.17, 0.06, 6, 12), 0, 0.23, 0.9, PI / 2);
+      cyl(col(0x9ea3a8), 0.1, 0.1, 0.05, 0, 0.23, 0.9, 8, 0, PI / 2);
     });
   }
   function mixer(x, z, ry) {
     sub(x, 0, z, ry, () => {
       const or = col(0xe3701a), dk = col(0x35383c);
-      for (const sx of [-0.42, 0.42]) { beam(dk, [sx, 0.85, 0], [sx * 1.2, 0.0, 0.5], 0.05, 0.05); beam(dk, [sx, 0.85, 0], [sx * 1.2, 0.0, -0.5], 0.05, 0.05); put(K.rubber, new T.TorusGeometry(0.17, 0.065, 8, 16), sx * 1.55, 0.24, 0.02, PI / 2); cyl(col(0xa0a4a8), 0.1, 0.1, 0.03, sx * 1.62, 0.24, 0.02, 10, 0, PI / 2); }
-      cyl(dk, 0.03, 0.03, 1.1, 0, 0.24, 0.02, 8, 0, PI / 2);
-      rbx(col(0xd9d9d4), 0.5, 0.34, 0.42, 0.05, 0, 0.62, -0.18);
+      for (const sx of [-0.42, 0.42]) { beam(dk, [sx, 0.85, 0], [sx * 1.2, 0.0, 0.5], 0.05, 0.05); beam(dk, [sx, 0.85, 0], [sx * 1.2, 0.0, -0.5], 0.05, 0.05); put(K.rubber, new T.TorusGeometry(0.17, 0.065, 6, 12), sx * 1.55, 0.24, 0.02, PI / 2); }
+      cyl(dk, 0.03, 0.03, 1.1, 0, 0.24, 0.02, 6, 0, PI / 2);
+      rbx(col(0xd9d9d4), 0.5, 0.34, 0.42, 0.05, 0.05, 0.62, -0.18);
       sub(0, 0.98, 0.0, 0, () => {
         cur.rotation.x = 0.7; cur.rotation.order = 'YXZ';
-        lathe(or, [[0.001, -0.6], [0.16, -0.58], [0.34, -0.46], [0.46, -0.22], [0.5, 0.02], [0.48, 0.2], [0.38, 0.38], [0.29, 0.5], [0.27, 0.56]], 26, 0, 0, 0);
-        cyl(col(0x1d1e20), 0.265, 0.265, 0.012, 0, 0.5, 0, 20); put(dk, new T.TorusGeometry(0.5, 0.03, 6, 26), 0, 0.02, 0, 0, PI / 2);
-        put(dk, new T.TorusGeometry(0.27, 0.02, 6, 20), 0, 0.56, 0, 0, PI / 2);
-        for (let i = 0; i < 6; i++) { const a = i * TAU / 6; bx(col(0xb8561a), 0.03, 0.34, 0.03, Math.cos(a) * 0.4, 0.02, Math.sin(a) * 0.4, -a, 0, 0); }
-        cyl(col(0x777b80), 0.045, 0.045, 0.22, 0, -0.66, 0, 8);
+        lathe(or, [[0.001, -0.6], [0.16, -0.58], [0.34, -0.46], [0.46, -0.22], [0.5, 0.02], [0.48, 0.2], [0.38, 0.38], [0.29, 0.5], [0.27, 0.56]], 18, 0, 0, 0);
+        cyl(col(0x1d1e20), 0.265, 0.265, 0.012, 0, 0.5, 0, 14); put(dk, new T.TorusGeometry(0.5, 0.03, 4, 18), 0, 0.02, 0, 0, PI / 2);
+        put(dk, new T.TorusGeometry(0.27, 0.02, 4, 14), 0, 0.56, 0, 0, PI / 2);
+        cyl(col(0x777b80), 0.045, 0.045, 0.22, 0, -0.66, 0, 6);
       });
-      bx(col(0xd9d9d4), 0.1, 0.1, 0.1, 0.5, 0.95, 0.0); cyl(dk, 0.025, 0.025, 0.3, 0.52, 1.0, 0.18, 8, PI / 2);
-      bx(col(0xd8321c), 0.08, 0.05, 0.08, 0.4, 0.5, -0.38);
+      bx(col(0xd9d9d4), 0.1, 0.1, 0.1, 0.5, 0.95, 0.0); cyl(dk, 0.025, 0.025, 0.3, 0.52, 1.0, 0.18, 6, PI / 2);
     });
   }
   /** Колышки с обноской (шнуры) вокруг будущего здания. */
@@ -440,7 +442,7 @@
       bx(M.pine(), 3.6, 2.2, 0.08, 0, 2.55, 0.05); bx(col(0x3a3d41), 3.7, 0.08, 0.14, 0, 3.69, 0.05); bx(col(0x3a3d41), 3.7, 0.08, 0.14, 0, 1.41, 0.05);
       for (const sx of [-1.85, 1.85]) bx(col(0x3a3d41), 0.08, 2.3, 0.14, sx, 2.55, 0.05);
       const pg = new T.PlaneGeometry(3.45, 2.1); const uv = pg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 0.17 + uv.getY(i) * 0.66);
-      const sm = C.texMat('cn_sign', 1, 1, 0xffffff, 0, 0, 0, { color: 0xffffff }); const m = new T.Mesh(pg, sm); m.position.set(0, 2.55, 0.095); m.castShadow = true; m.receiveShadow = true; cur.add(m);
+      ensureTex('cn_sign'); const sm = C.texMat('cn_sign', 1, 1, 0xffffff, 0, 0, 0, { color: 0xffffff }); const m = new T.Mesh(pg, sm); m.position.set(0, 2.55, 0.095); m.castShadow = true; m.receiveShadow = true; cur.add(m);
       for (const sx of [-1.7, 1.7]) for (const sy of [1.55, 3.55]) cyl(col(0x777b80), 0.025, 0.025, 0.02, sx, sy, 0.1, 8, PI / 2);
       bx(col(0x55595e), 0.4, 0.06, 0.28, 0, 3.8, 0.2); // светильник
     });
@@ -458,11 +460,13 @@
     }
   }
 
-  FM.register('construct', 'house', (o) => houseBuild(clamp(o.stage | 0, 0, 4)));
-  FM.register('construct', 'shed', (o) => shedBuild(clamp(o.stage | 0, 0, 4)));
+  const VR = (o) => ((o.variant | 0) % 3 + 3) % 3;
+  FM.register('construct', 'barn', (o) => barnBuild(clamp(o.stage | 0, 0, 4), VR(o)));
+  FM.register('construct', 'house', (o) => houseBuild(clamp(o.stage | 0, 0, 4), VR(o)));
+  FM.register('construct', 'shed', (o) => shedBuild(clamp(o.stage | 0, 0, 4), VR(o)));
   FM.register('construct', 'sign', (opts) => {
     const g = begin(901);
-    dirtPatch(0, 0.5, 8.6, 6.0, 7);
+    dirtPatch(0, 0.9, 7.6, 5.3, 7);
     signBoard(0, 3.2);
     barrier(-9.4, 6.9, -2.6, 6.9); barrier(2.6, 6.9, 9.4, 6.9); barrier(-9.4, 6.9, -9.4, -1.6, 2.4); barrier(9.4, 6.9, 9.4, -1.6, 2.4);
     cone(-2.0, 7.2, 0.3); cone(2.0, 7.2, 1.1); cone(-3.1, 7.9, 0.5); cone(3.3, 7.8, 0.9); cone(-6.0, 7.6, 2); cone(6.2, 7.3, 1.2);
@@ -506,7 +510,7 @@
     bx(fr, w, fw, 0.09, cx, q.y0 + fw / 2, zf); bx(fr, w, fw, 0.09, cx, q.y1 - fw / 2, zf); bx(fr, fw, h - 2 * fw, 0.09, q.x0 + fw / 2, cy, zf); bx(fr, fw, h - 2 * fw, 0.09, q.x1 - fw / 2, cy, zf);
     if (!o.simple && o.panes !== 'one') bx(fr, fw * 0.7, h - 2 * fw, 0.05, cx, cy, zf);
     if (!o.simple && o.panes === 'cross') bx(fr, w - 2 * fw, fw * 0.7, 0.05, cx, cy, zf);
-    if (o.glass !== false) pane(w - fw, h - fw, cx, cy, zf - 0.015, 0);
+    if (o.glass !== false) { pane(w - fw, h - fw, cx, cy, zf - 0.015, 0); bx(col(0x2a343e), w - fw, h - fw, 0.02, cx, cy, zf - (o.bz != null ? o.bz : 0.07)); }
     if (o.trim !== false) { const tw = 0.08; bx(fr, w + 2 * tw, tw, 0.035, cx, q.y1 + tw / 2, zt); if (!o.simple) { bx(fr, tw, h, 0.035, q.x0 - tw / 2, cy, zt); bx(fr, tw, h, 0.035, q.x1 + tw / 2, cy, zt); } bx(fr, w + 0.2, 0.05, 0.14, cx, q.y0 - 0.025, zs); }
   }
   /** Стропила, обрешётка и покрытие двускатной крыши с коньком вдоль X (центр cx,cz). */
@@ -523,7 +527,7 @@
     const s = M.pine(), dz = o.hs, dy = o.yR - o.yE, L = Math.hypot(dz, dy), al = Math.atan2(dy, dz), n = Math.floor(L / o.sp);
     for (const sd of [1, -1]) for (let i = 0; i <= n; i++) { const t = (0.12 + i * o.sp) / L; if (t > 0.985) break; const z = sd * dz * (1 - t), y = o.yE + dy * t; bx(s, o.len, 0.03, 0.05, o.cx, y + 0.015 / Math.cos(al), o.cz + z, 0, sd * al); }
   }
-  const halfRound = (s, len, r, x, y, z) => { const g = new T.CylinderGeometry(r, r, len, 10, 1, true, -PI / 2, PI); g.rotateZ(PI / 2); g.rotateX(-PI / 2); return put(s, g, x, y, z); };
+  const halfRound = (s, len, r, x, y, z, ry) => { const g = new T.CylinderGeometry(r, r, len, 10, 1, true, -PI / 2, PI); g.rotateZ(PI / 2); g.rotateX(-PI / 2); return put(s, g, x, y, z, ry || 0); };
   function gutter(x0, x1, y, z, sd) { const m = col(0x7a7f84); bx(m, x1 - x0, 0.03, 0.1, (x0 + x1) / 2, y - 0.07, z + sd * 0.05); bx(m, x1 - x0, 0.09, 0.02, (x0 + x1) / 2, y - 0.03, z + sd * 0.1); bx(m, x1 - x0, 0.07, 0.015, (x0 + x1) / 2, y - 0.03, z); }
 
   // ------------------------------------------------------------------ САРАЙ 8 x 6 м
@@ -531,12 +535,12 @@
   function cementBags(x, z, n, ry) { const r = lcg(n * 7 + 1); sub(x, 0, z, ry || 0, () => { for (let i = 0; i < n; i++) { const L = i % 3, h = Math.floor(i / 3); rbx(col(i % 2 ? 0xcdc8bc : 0xbdb8ab), 0.8, 0.14, 0.5, 0.05, (r() - 0.5) * 0.05, 0.07 + h * 0.15, (L - 1) * 0.52 + (r() - 0.5) * 0.04, (r() - 0.5) * 0.1); } }); }
   function hammer(x, y, z, ry) { sub(x, y, z, ry, () => { bx(M.pine(), 0.32, 0.03, 0.03, 0, 0.015, 0); bx(col(0x55595e), 0.04, 0.045, 0.1, 0.15, 0.03, 0); }); }
 
-  const wall0 = (spec) => spec;
   /** Створка сдвижной двери: доски + Z-образная рама. Локально: центр (cx, cy), лицо в +Z на уровне z. */
-  function doorLeaf(boardSpec, w, h, cx, cy, z) {
-    const tr = col(0xe7e1d2); bx(boardSpec, w, h, 0.035, cx, cy, z);
+  function doorLeaf(boardSpec, w, h, cx, cy, z, xbrace, trimCol) {
+    const tr = col(trimCol || 0xe7e1d2); bx(boardSpec, w, h, 0.035, cx, cy, z);
     const t = 0.14; bx(tr, w, t, 0.03, cx, cy + h / 2 - t / 2, z + 0.03); bx(tr, w, t, 0.03, cx, cy - h / 2 + t / 2, z + 0.03); bx(tr, t, h - 2 * t, 0.03, cx - w / 2 + t / 2, cy, z + 0.03); bx(tr, t, h - 2 * t, 0.03, cx + w / 2 - t / 2, cy, z + 0.03);
     beam(tr, [cx - w / 2 + t, cy - h / 2 + t, z + 0.03], [cx + w / 2 - t, cy + h / 2 - t, z + 0.03], 0.13, 0.03, [0, 0, 1]);
+    if (xbrace) beam(tr, [cx - w / 2 + t, cy + h / 2 - t, z + 0.032], [cx + w / 2 - t, cy - h / 2 + t, z + 0.032], 0.13, 0.03, [0, 0, 1]);
   }
   function barrel(x, z, c) {
     sub(x, 0, z, 0, () => {
@@ -553,7 +557,7 @@
     });
   }
   function rake(x, z) { sub(x, 0, z, 0.2, () => { bx(M.pine(), 0.03, 1.7, 0.03, 0, 0.85, 0.0, 0, 0.12); bx(col(0x6d7276), 0.4, 0.03, 0.03, 0, 0.12, 0.2, 0, 0.12); }); }
-  function shedBuild(stage) {
+  function shedBuild(stage, vr) {
     const g = begin(2100 + stage), P = SH, yb = P.yb, conc = M.conc(), pine = M.pine(), Hs = P.plate - yb;
     const wall = tex('cn_boards', 0xb28d62, 1.6, 2.4, 'b'), trim = col(0xe7e1d2);
     const WL = { front: [-4, 3, 0, 8], back: [4, -3, PI, 8], right: [4, 3, PI / 2, 6], left: [-4, -3, -PI / 2, 6] };
@@ -588,7 +592,7 @@
       return finish(g);
     }
     // --- обшивка стен
-    const fresh = tex('cn_boards', 0xd9b47e, 1.6, 2.4, 'b'), stained = tex('cn_boards', 0xb98c59, 1.6, 2.4, 'b'), WM = stage === 4 ? stained : fresh;
+    const fresh = tex('cn_boards', 0xd9b47e, 1.6, 2.4, 'b'), stained = tex('cn_boards', [0xb98c59, 0x978f82, 0x82583a][vr], 1.6, 2.4, 'b'), WM = stage === 4 ? stained : fresh;
     onWall('front', () => cladWall(WM, 8, Hs, OPS.front, 0)); onWall('back', () => cladWall(WM, 8, Hs, OPS.back, 0));
     onWall('right', () => cladWall(WM, 6, Hs, OPS.right, 1.3)); onWall('left', () => cladWall(WM, 6, Hs, OPS.left, 1.3));
     // --- крыша
@@ -611,7 +615,7 @@
     onWall('back', () => win(OPS.back[0], { panes: 'cross', frame: FR })); onWall('right', () => win(OPS.right[0], { panes: 'two', frame: FR }));
     if (stage === 3) {
       onWall('front', () => { win(wq, { panes: 'cross', glass: false, frame: FR }); bx(K.steelDk, 6.4, 0.09, 0.1, 2.9, 2.34, 0.2); for (const hx of [1.5, 3.9]) bx(K.steelDk, 0.05, 0.12, 0.06, hx, 2.28, 0.16); });
-      sub(-4.35, yb, 0.2, -PI / 2, () => { sub(0, 0, 0, 0, () => { cur.rotation.x = -0.2; doorLeaf(wall0(fresh), 3.2, 2.2, 0, 1.1, 0.0); }); });
+      sub(-4.55, yb, 0.2, -PI / 2, () => { sub(0, 0, 0, 0, () => { cur.rotation.x = -0.2; doorLeaf(tex('cn_boards', 0x8a6238, 1.6, 2.4, 'b'), 3.2, 2.2, 0, 1.1, 0.0); }); });
       sub(5.9, 0, 4.2, 0.35, () => { cur.rotation.x = 0; sub(0, 0.0, 0, 0, () => { cur.rotation.x = -0.14; pane(1.2, 0.9, 0, 0.5, 0, 0); bx(col(0xd8c9a0), 1.28, 0.97, 0.03, 0, 0.5, -0.03); }); });
       sub(4.04, 0, 3.7, PI / 2, () => scaffold(7.4, 3, 2));
       bucket(-1.4, 4.0, 0x3c7a46, false); bucket(-0.9, 4.15, 0xeee9dc, true); bucket(-1.0, 3.7, 0x8b2f26, true); bucket(-1.9, 3.9, 0xeee9dc, false);
@@ -624,14 +628,15 @@
     // --- стадия 4: готовый сарай
     onWall('front', () => {
       win(wq, { panes: 'cross', frame: FR });
+      { const shs = tex('cn_boards', [0x4a6b52, 0x55657a, 0x7a3b2e][vr], 1.6, 2.4, 'a'); for (const sd of [-1, 1]) bx(shs, 0.5, wq.y1 - wq.y0, 0.04, sd < 0 ? wq.x0 - 0.36 : wq.x1 + 0.36, (wq.y0 + wq.y1) / 2, 0.075); }
       bx(K.steelDk, 6.6, 0.09, 0.1, 2.9, 2.36, 0.22); for (const hx of [1.7, 3.7]) { bx(K.steelDk, 0.05, 0.16, 0.06, hx, 2.28, 0.17); cyl(K.dark, 0.05, 0.05, 0.05, hx, 2.2, 0.2, 10, PI / 2); }
-      doorLeaf(wall0(stained), 3.3, 2.25, 2.7, 1.125, 0.115);
+      doorLeaf(stained, 3.3, 2.25, 2.7, 1.125, 0.115);
       bx(K.steelDk, 0.04, 0.3, 0.05, 1.5, 1.1, 0.18); bx(K.dark, 0.1, 0.12, 0.05, 1.45, 1.1, 0.17);
       bx(col(0x6d7276), 3.3, 0.04, 0.06, 2.7, 0.06, 0.16);
     });
     for (const [x, z] of [[-3.98, -2.98], [3.98, -2.98], [3.98, 2.98], [-3.98, 2.98]]) bx(trim, 0.13, Hs + 0.02, 0.13, x, yb + Hs / 2 + 0.01, z);
     rbx(conc, 4.2, 0.1, 1.5, 0.03, -1.3, 0.05, 3.8); rbx(conc, 3.4, 0.17, 0.5, 0.03, -1.3, 0.085, 3.35);
-    rbx(M.gravel(), 9.0, 0.05, 2.5, 0.02, 0.0, 0.025, 4.5);
+    rbx(M.gravel(), 7.6, 0.05, 1.9, 0.02, 0.0, 0.025, 4.45);
     cyl(col(0x777b80), 0.045, 0.045, P.yE - 0.1 - yb, -4.2, yb + (P.yE - 0.1 - yb) / 2, 3.5, 10); barrel(-4.2, 3.9, 0x2e6a52);
     woodpile(4.7, -0.4, PI / 2, 7, 4); rake(-4.1, 3.1);
     bx(K.dark, 0.16, 0.22, 0.16, 0.6, yb + 2.0, 3.08); sph(col(0xffe9a8), 0.06, 0.6, yb + 1.92, 3.17, 1, 1.2, 1, 8, 6);
@@ -667,9 +672,9 @@
     cyl(K.dark, 0.025, 0.025, 0.05, q.x1 - 0.2, h * 0.47, z0 + 0.07, 8, PI / 2);
   }
   function brickPack(x, z, ry, spec) { sub(x, 0, z, ry, () => { palletsAt(0, 0, 0, 1, 2); bx(spec, 1.0, 0.72, 0.8, 0, 0.144 + 0.36, 0); for (const px of [-0.3, 0.3]) bx(K.dark, 0.02, 0.73, 0.82, px, 0.51, 0); bx(K.dark, 1.02, 0.02, 0.82, 0, 0.51, 0); }); }
-  function houseBuild(stage) {
+  function houseBuild(stage, vr) {
     const g = begin(3100 + stage), P = HO, yb = P.yb, conc = M.conc(), pine = M.pine(), H = P.H;
-    const brick = tex('cn_brick', 0xeedcd2, 2.0, 1.2, 'b'), plaster = tex('cn_plaster', 0xeedfb4, 2.4, 2.4, 'b'), stone = tex('cn_stone', 0xe8e2d8, 2.0, 2.0, 'b'), tile = tex('cn_tile', 0xe2cdc2, 1.6, -2.4, 'b');
+    const brick = tex('cn_brick', 0xeedcd2, 2.0, 1.2, 'b'), plaster = tex('cn_plaster', [0xeedfb4, 0xe3e1d6, 0xf0d6ae][vr], 2.4, 2.4, 'b'), stone = tex('cn_stone', 0xe8e2d8, 2.0, 2.0, 'b'), tile = tex('cn_tile', [0xe2cdc2, 0xcdc2bf, 0xe8d6bc][vr], 1.6, -2.4, 'b');
     const WM = stage === 4 ? plaster : brick, trim = col(0xf0ebdd), RO = { len: 11.9, th: 0.05, hs: P.hs, yE: P.yE, yR: P.yR, cx: 0, cz: 0 }, al = Math.atan2(P.yR - P.yE, P.hs);
     const onWall = (k, fn) => { const w = HWL[k]; sub(w[0], yb, w[1], w[2], fn); };
     const px0 = -3.4, px1 = 0.6, pcx = -1.4, WZ = { z: -0.1, zt: 0.02, zs: 0.04 };
@@ -734,7 +739,7 @@
       if (stage === 2) { battens(Object.assign({ sp: 0.38 }, RO)); gableSlabs(col(0x25272b), Object.assign({}, RO, { th: 0.012, off: 0.0, len: 11.8, only: -1 })); }
       if (stage >= 3) {
         gableSlabs(tile, Object.assign({}, RO, { off: 0.08 }));
-        for (const sd of [1, -1]) { const dn = [0, -Math.sin(al), sd * Math.cos(al)], n = [0, Math.cos(al), sd * Math.sin(al)]; halfRound(col(0x8b3f2a), 11.95, 0.17, 0, P.yR + 0.1 + 0, 0); void dn; void n; break; }
+        halfRound(col(0x8b3f2a), 11.95, 0.17, 0, P.yR + 0.1, 0);
         for (const sd of [1, -1]) { bx(trim, 11.9, 0.2, 0.03, 0, P.yE - 0.06, sd * (P.hs + 0.02)); gutter(-5.6, 5.6, P.yE - 0.03, sd * (P.hs + 0.03), sd); }
         for (const sx of [-1, 1]) for (const sd of [1, -1]) beam(trim, [sx * 5.97, P.yE - 0.04, sd * (P.hs + 0.01)], [sx * 5.97, P.yR + 0.06, 0], 0.2, 0.04, [1, 0, 0]);
         // porch roof
@@ -743,7 +748,7 @@
       }
       // дымовая труба
       const cTop = stage === 2 ? 9.4 : 10.5, cx = 3.8, bk = tex('cn_brick', 0xd8c4b8, 2.0, 1.2, 'b');
-      bx(bk, 0.95, cTop - 7.2, 0.8, cx, (cTop + 7.2) / 2, 0); if (stage === 4) { bx(conc, 1.15, 0.12, 1.0, cx, cTop + 0.06, 0); for (const dx of [-0.2, 0.2]) cyl(col(0xb25a36), 0.11, 0.13, 0.4, cx + dx, cTop + 0.32, 0, 12); }
+      if (stage >= 2) bx(bk, 0.95, cTop - 7.2, 0.8, cx, (cTop + 7.2) / 2, 0); if (stage === 4) { bx(conc, 1.15, 0.12, 1.0, cx, cTop + 0.06, 0); for (const dx of [-0.2, 0.2]) cyl(col(0xb25a36), 0.11, 0.13, 0.4, cx + dx, cTop + 0.32, 0, 12); }
       // ================= окна и двери
       tag('окна и двери');
       const fit = (k, list, st) => list.forEach((q, i) => {
@@ -758,9 +763,9 @@
         for (const k of ['right', 'left']) { const q = HOPS[k][2]; onWall(k, () => win(q, Object.assign({ panes: 'one', glass: stage === 4, frame: 0xf0ebdd, trim: false, simple: true }, WZ))); }
         const fd = HOPS.front[0], bd = HOPS.back[0];
         if (stage === 4) {
-          onWall('front', () => panelDoor(fd, { z: -0.08, glass: true })); onWall('back', () => panelDoor(bd, { z: -0.08, tint: 0x5a3a24 }));
+          onWall('front', () => panelDoor(fd, { z: -0.08, glass: true, tint: [0x6b4328, 0x3b4a3f, 0x4e3a52][vr] })); onWall('back', () => panelDoor(bd, { z: -0.08, tint: 0x5a3a24 }));
           // ставни
-          const sh = tex('cn_boards', 0x44705a, 1.6, 2.4, 'a');
+          const sh = tex('cn_boards', [0x44705a, 0x3f5c84, 0x80402f][vr], 1.6, 2.4, 'a');
           onWall('front', () => { for (const q of HOPS.front) { if (q.y0 < 0.01) continue; for (const sd of [-1, 1]) bx(sh, 0.5, q.y1 - q.y0, 0.04, sd < 0 ? q.x0 - 0.37 : q.x1 + 0.37, (q.y0 + q.y1) / 2, 0.04); } });
           onWall('right', () => { const q = HOPS.right[0]; for (const sd of [-1, 1]) bx(sh, 0.5, q.y1 - q.y0, 0.04, sd < 0 ? q.x0 - 0.37 : q.x1 + 0.37, (q.y0 + q.y1) / 2, 0.04); });
         } else {
@@ -818,6 +823,175 @@
         flowers(-4.6, 5.9, 2.6, 0.7, [0xd8334a, 0xf0c030, 0xf0f0e8, 0xd070c0]); flowers(3.6, 5.9, 3.0, 0.7, [0xf0c030, 0xd8334a, 0xf0f0e8]);
         for (const x of [-6.0, 6.0]) bush(x, -4.6, 0.8, 0x2f5a28);
         barrel(-5.95, 4.7, 0x7c5a3a);
+      }
+    });
+    return finish(g);
+  }
+
+  if (window.__cnDebug) { // отладка: учёт треугольников по узлам (используется только при window.__cnDebug)
+    const wrap = (name, f) => function () { const t = TAG; TAG = name; try { return f.apply(this, arguments); } finally { TAG = t; } };
+    scaffold = wrap('scaffold', scaffold); mixer = wrap('mixer', mixer); sandGravel = wrap('piles', sandGravel); wheelbarrow = wrap('wheelbarrow', wheelbarrow); cementBags = wrap('bags', cementBags); brickPack = wrap('brickpack', brickPack);
+    boardStack = wrap('boards', boardStack); dumpster = wrap('dumpster', dumpster); bucket = wrap('bucket', bucket); palletsAt = wrap('pallets', palletsAt); ladder = wrap('ladder', ladder); sawhorse = wrap('sawhorse', sawhorse);
+    survey = wrap('survey', survey); surveyor = wrap('surveyor', surveyor); picketFence = wrap('fence', picketFence); bush = wrap('bush', bush); flowers = wrap('flowers', flowers); barrel = wrap('barrel', barrel); woodpile = wrap('woodpile', woodpile); win = wrap('win', win);
+  }
+
+  // ------------------------------------------------------------------ АМБАР 15 x 10 м (ломаная крыша) + навес
+  const BA = { bx0: 1.9, hl: 7.5, hw: 5.0, pl: 0.9, eave: 4.4, kn: [3.1, 7.2], ridge: 9.0 };
+  function slabPlane(spec, P, Q, n, th, zc, len, off) { const k = th / 2 - (off || 0); return beam(spec, [P[0] - n[0] * k, P[1] - n[1] * k, zc], [Q[0] - n[0] * k, Q[1] - n[1] * k, zc], len, th, [n[0], n[1], 0]); }
+  function bale(x, y, z, ry, c) { const r = lcg(Math.floor(x * 13 + z * 7 + y * 31 + 1)); rbx(col(c || [0xd2b45e, 0xc7a54d, 0xdcc069][Math.floor(r() * 3)]), 0.9, 0.46, 0.5, 0.07, x, y + 0.23, z, ry); for (const dx of [-0.22, 0.22]) bx(col(0x3d3a33), 0.025, 0.48, 0.52, x + Math.cos(ry || 0) * dx, y + 0.23, z - Math.sin(ry || 0) * dx, ry); }
+  function roundBale(x, z, ry) { sub(x, 0, z, ry, () => { cyl(col(0xcdb05a), 0.68, 0.68, 1.2, 0, 0.68, 0, 14, 0, PI / 2); cyl(col(0xb99a48), 0.6, 0.6, 1.24, 0, 0.68, 0, 10, 0, PI / 2); for (const dx of [-0.35, 0.35]) cyl(col(0xe8e4d8), 0.69, 0.69, 0.04, dx, 0.68, 0, 14, 0, PI / 2); }); }
+  const BOPS = [2.3, 5.8, 9.2, 12.7].map((cx) => op(cx, 0.9, 1.4, 2.55));
+  function railFence(x0, z0, x1, z1) {
+    const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz), n = Math.max(1, Math.round(L / 2.2)), ry = Math.atan2(dx, dz) - PI / 2, ow = M.oldwood();
+    sub(x0, 0, z0, ry + PI, () => { for (let i = 0; i <= n; i++) bx(ow, 0.12, 1.25, 0.12, -i * L / n, 0.62, 0); for (const y of [0.45, 0.8, 1.15]) bx(ow, L, 0.1, 0.04, -L / 2, y, 0.08); });
+  }
+  function barnBuild(stage, vr) {
+    const g = begin(4100 + stage), P = BA, conc = M.conc(), pine = M.pine(), oldw = M.oldwood();
+    const stone = tex('cn_stone', 0xdcd4c6, 2.0, 2.0, 'b'), redP = tex('cn_boards', [0xc4432f, 0xb23a2c, 0xa8482f][vr], 1.6, 2.4, 'b'), raw = tex('cn_boards', 0xd9b47e, 1.6, 2.4, 'b'), roofM = tex('cn_corr', [0x9ea4a8, 0x888e95, 0xa59a8e][vr], 0.96, 2.0, 'b');
+    const WHT = col(0xf0ede4), HW = P.hw, HL = P.hl, PL = P.pl;
+    const wallFront = stage >= 3 ? redP : raw, wallSide = stage === 4 ? redP : raw, wallLean = stage >= 3 ? redP : raw;
+    const A = (sd) => [sd * 5.4, 4.02], KN = (sd) => [sd * 3.18, 7.29], Rr = [0, 9.14], nL = (sd) => [sd * 0.827, 0.562], nU = (sd) => [sd * 0.502, 0.865];
+    sub(P.bx0, 0, 0, 0, () => {
+      if (stage <= 3) dirtPatch(-1.2, 0.2, 10.0, 8.7, 11);
+      // ================= фундамент
+      tag('foundation');
+      if (stage === 0) {
+        const rb = col(0x8a5a38), r = lcg(23);
+        for (const [x, z, w, d] of [[0, 7.4, 10.4, 0.8], [0, -7.4, 10.4, 0.8], [-4.8, 0, 0.8, 14.0], [4.8, 0, 0.8, 14.0]]) rbx(conc, w, 0.35, d, 0.04, x, 0.175, z);
+        rbx(M.gravel(), 8.8, 0.04, 13.2, 0.02, 0, 0.17, 0);
+        for (const z of [-7.5, -3.75, 0, 3.75, 7.5]) for (const sx of [-1, 1]) { rbx(conc, 0.7, 0.45, 0.7, 0.04, sx * 4.7, 0.225, z); for (const d of [-0.08, 0.08]) tube(rb, [sx * 4.7 + d, 0.45, z], [sx * 4.7 + d * 0.5, 1.1 + r() * 0.25, z + (r() - 0.5) * 0.06], 0.01, 5); }
+        for (const z of [-6.4, -3.8, -1.2, 1.4, 3.9]) { rbx(conc, 0.5, 0.35, 0.5, 0.04, -8.7, 0.175, z); tube(rb, [-8.7, 0.35, z], [-8.65, 0.9, z], 0.009, 5); }
+        rbx(conc, 0.5, 0.3, 10.5, 0.04, -8.7, 0.15, -1.2); rbx(conc, 4.0, 0.3, 0.5, 0.04, -6.9, 0.15, -6.5);
+        for (let i = 0; i < 4; i++) bx(oldw, 3.6, 0.035, 0.2, -9.0 + i * 0.1, 0.1 + 0.04 + i * 0.045, 8.3 + i * 0.02, 0.05);
+        survey(-8.8, 5.0, -7.5, 7.5, 1.8, 0.55); sandGravel(6.2, 3.0, 1.2); boardStack(6.8, -3.6, PI / 2, 4.2, 5, M.pine(), 5);
+        wheelbarrow(6.4, 7.0, 0.7); surveyor(1.4, 9.0); bucket(6.6, -6.6, 0xe8b814, false); boardStack(-3.0, 9.2, 0.1, 3.6, 3, M.pine(), 6);
+        return;
+      }
+      for (const x of [-1, 1]) bx(stone, 0.5, PL, 15.1, x * 4.8, PL / 2, 0); bx(stone, 10.1, PL, 0.5, 0, PL / 2, -7.3);
+      for (const x of [-1, 1]) bx(stone, 3.0, PL, 0.5, x * 3.55, PL / 2, 7.3);
+      bx(conc, 9.2, 0.14, 14.2, 0, 0.07, 0); if (stage >= 3) bx(conc, 4.0, 0.14, 0.9, 0, 0.07, 7.9);
+      bx(stone, 0.4, 0.45, 10.5, -8.65, 0.225, -1.25); bx(stone, 3.9, 0.45, 0.4, -6.9, 0.225, -6.45); bx(oldw, 3.8, 0.12, 10.4, -6.9, 0.06, -1.25);
+      // ================= каркас
+      tag('frame');
+      const zs = [-7.34, -3.75, 0, 3.75, 7.34], roofPts = (sd) => [[sd * 4.875, 4.4], [sd * 3.0, 7.1], [0, 8.85]];
+      if (stage <= 3) {
+        for (const z of zs) {
+          for (const sd of [-1, 1]) { bx(pine, 0.2, P.eave - PL, 0.2, sd * 4.85, (P.eave + PL) / 2, z); const rp = roofPts(sd); beam(pine, [rp[0][0], rp[0][1], z], [rp[1][0], rp[1][1], z], 0.2, 0.16, [0, 0, 1]); beam(pine, [rp[1][0], rp[1][1], z], [rp[2][0], rp[2][1], z], 0.2, 0.16, [0, 0, 1]); }
+          bx(pine, 6.2, 0.2, 0.16, 0, 7.0, z); if (stage === 1) { bx(pine, 9.6, 0.26, 0.18, 0, 4.1, z); for (const sd of [-1, 1]) beam(pine, [sd * 4.85, 3.2, z], [sd * 3.9, 4.1, z], 0.12, 0.12, [0, 0, 1]); }
+        }
+        for (const [x, y] of [[-4.875, 4.4], [4.875, 4.4], [-3.0, 7.1], [3.0, 7.1], [0, 8.75]]) bx(pine, 0.2, 0.2, 14.9, x, y, 0);
+      }
+      if (stage <= 2) for (let i = 0; i < 4; i++) for (const t of [0.25, 0.5, 0.75]) { const z = zs[i] + (zs[i + 1] - zs[i]) * t; for (const sd of [-1, 1]) { const rp = roofPts(sd); beam(pine, [rp[0][0], rp[0][1] - 0.1, z], [rp[1][0], rp[1][1] - 0.1, z], 0.07, 0.15, [0, 0, 1]); beam(pine, [rp[1][0], rp[1][1] - 0.1, z], [rp[2][0], rp[2][1] - 0.1, z], 0.07, 0.15, [0, 0, 1]); } }
+      if (stage === 1) {
+        for (const x of [-1, 1]) for (const y of [1.9, 3.1]) bx(pine, 0.08, 0.2, 14.8, x * 4.88, y, 0);
+        for (const z of [-7.35, 7.35]) for (const sx of [-4, -3, -1, 1, 3, 4]) { if (z > 0 && Math.abs(sx) < 2.1) continue; bx(pine, 0.1, 3.0, 0.14, sx, PL + 1.5, z); }
+        for (const sx of [-2, 2]) bx(pine, 0.2, 3.0, 0.2, sx, PL + 1.5, 7.34); bx(pine, 4.2, 0.2, 0.2, 0, 3.9, 7.34);
+        for (const z of [-1, 1]) bx(pine, 0.12, 4.0, 0.14, 0, 6.6, z * 7.35);
+      }
+      // ================= навес (с левой стороны)
+      tag('leanto');
+      for (const z of [-6.4, -3.8, -1.2, 1.4, 3.9]) bx(pine, 0.2, 2.2, 0.2, -8.6, 0.5 + 1.1, z);
+      bx(pine, 0.2, 0.22, 10.7, -8.6, 2.65, -1.25); bx(pine, 0.1, 0.2, 10.7, -5.05, 3.5, -1.25);
+      for (let i = 0; i < 12; i++) { const z = -6.5 + i * 0.97; beam(pine, [-5.0, 3.5, z], [-8.95, 2.62, z], 0.07, 0.14, [0, 1, 0]); }
+      if (stage >= 2) { sub(-8.8, 0.4, -6.45, -PI / 2, () => cladWall(wallLean, 10.4, 2.3, [], 0, 0.1, -0.1)); sub(-5.0, 0.4, -6.5, PI, () => cladWall(wallLean, 3.8, 2.3, [], 0, 0.1, -0.1)); }
+      // ================= стены
+      tag('walls');
+      if (stage >= 2) {
+        const outline = (notch) => { const o = [[-5, PL]]; if (notch) o.push([-2, PL], [-2, 3.7], [2, 3.7], [2, PL]); o.push([5, PL], [5, P.eave], [P.kn[0], P.kn[1]], [0, P.ridge], [-P.kn[0], P.kn[1]], [-5, P.eave]); return o; };
+        poly(wallFront, outline(true), [[[-0.85, 5.6], [-0.85, 7.5], [0.85, 7.5], [0.85, 5.6]]], 0.14, 0, 0, HL - 0.07, 0);
+        poly(wallFront, outline(false), [[[-0.5, 6.0], [-0.5, 7.0], [0.5, 7.0], [0.5, 6.0]]], 0.14, 0, 0, -HL + 0.07, PI);
+        sub(5, PL, 7.5, PI / 2, () => cladWall(wallSide, 15, P.eave - PL, BOPS, 0, 0.12, -0.12)); sub(-5, PL, -7.5, -PI / 2, () => cladWall(wallSide, 15, P.eave - PL, [], 0, 0.12, -0.12));
+      }
+      // ================= крыша
+      tag('roof');
+      if (stage === 2) {
+        for (const sd of [-1, 1]) for (const [p0, p1, n] of [[A(sd), KN(sd), nL(sd)], [KN(sd), Rr, nU(sd)]]) {
+          const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), cnt = Math.floor(L / 0.45), ang = Math.atan2(p1[1] - p0[1], Math.abs(p1[0] - p0[0]));
+          for (let i = 1; i < cnt; i++) { const t = i / cnt; bx(pine, 0.05, 0.03, 15.8, p0[0] + (p1[0] - p0[0]) * t + n[0] * 0.015, p0[1] + (p1[1] - p0[1]) * t + n[1] * 0.015, 0, 0, 0, -sd * ang); }
+        }
+        for (const sd of [-1]) { slabPlane(col(0x25272b), A(sd), KN(sd), nL(sd), 0.012, 0, 15.8, 0.0); slabPlane(col(0x25272b), KN(sd), Rr, nU(sd), 0.012, 0, 15.8, 0.0); }
+        for (let i = 0; i < 9; i++) { const t = i / 8; bx(pine, 0.05, 0.03, 11.0, -5.2 - t * 3.6, 3.56 - t * 0.8 + 0.07, -1.25); }
+      }
+      if (stage >= 3) {
+        for (const sd of [-1, 1]) { slabPlane(roofM, A(sd), KN(sd), nL(sd), 0.035, 0, 15.9, 0.06); slabPlane(roofM, KN(sd), Rr, nU(sd), 0.035, 0, 15.9, 0.06); }
+        halfRound(col(0x6c7176), 15.95, 0.22, 0, 9.2, 0, PI / 2); for (const sd of [-1, 1]) halfRound(col(0x6c7176), 15.9, 0.15, sd * 3.2, 7.36, 0, PI / 2);
+        slabPlane(roofM, [-5.0, 3.62], [-8.95, 2.78], [-0.211, 0.978], 0.035, -1.25, 11.2, 0.04);
+      }
+      // ================= окна и двери
+      tag('openings');
+      const WZ = { z: -0.04, zt: 0.045, zs: 0.07 };
+      if (stage >= 3) {
+        BOPS.forEach((q, i) => { if (stage === 3 && i % 2 === 1 && i < 3) return; sub(5, PL, 7.5, PI / 2, () => win(q, Object.assign({ panes: 'cross', frame: stage === 4 ? 0xf0ede4 : 0xe6dcc6, glass: stage === 4 || i % 2 === 0, simple: stage === 3 }, WZ, { z: -0.06 }))); });
+      }
+      if (stage >= 3) sub(0, 0, -HL, PI, () => win({ x0: -0.5, x1: 0.5, y0: 6.0, y1: 7.0 }, { panes: 'cross', frame: stage === 4 ? 0xf0ede4 : 0xe6dcc6, glass: stage === 4, z: -0.05, zt: 0.045, zs: 0.07, simple: stage === 3 }));
+      if (stage === 3) {
+        sub(0, 0, HL, 0, () => { bx(K.steelDk, 8.6, 0.1, 0.12, 0, 3.86, 0.2); for (const hx of [-3.2, -0.6, 1.5, 3.4]) bx(K.steelDk, 0.06, 0.2, 0.08, hx, 3.76, 0.15); doorLeaf(redP, 2.0, 3.55, -1.0, 0.15 + 1.775, 0.06, true, 0xf0ede4); });
+        sub(4.2, 0, 8.2, 0.2, () => { sub(0, 0, 0, 0, () => { cur.rotation.x = -0.14; doorLeaf(redP, 2.0, 3.55, 0, 1.775, 0, true, 0xf0ede4); }); });
+        sub(0, 0, HL, 0, () => { doorLeaf(redP, 0.8, 1.88, -0.42, 6.54, 0.06, true, 0xf0ede4); });
+      }
+      if (stage === 4) {
+        sub(0, 0, HL, 0, () => {
+          bx(K.steelDk, 8.6, 0.1, 0.12, 0, 3.86, 0.2); for (const hx of [-3.2, -0.6, 1.5, 3.4]) { bx(K.steelDk, 0.06, 0.2, 0.08, hx, 3.76, 0.15); cyl(K.dark, 0.06, 0.06, 0.06, hx, 3.64, 0.14, 8, PI / 2); }
+          for (const sx of [-1, 1]) doorLeaf(redP, 2.0, 3.55, sx * 1.0, 0.15 + 1.775, 0.06, true, 0xf0ede4);
+          bx(K.dark, 0.05, 0.4, 0.06, -0.12, 1.9, 0.14); bx(K.dark, 0.05, 0.4, 0.06, 0.12, 1.9, 0.14);
+          // наличник проёма
+          bx(WHT, 4.5, 0.22, 0.05, 0, 3.78, 0.03); for (const sx of [-1, 1]) bx(WHT, 0.18, 3.65, 0.05, sx * 2.1, 0.15 + 1.825, 0.03);
+          // люк сеновала: створки и наличник
+          for (const sx of [-1, 1]) doorLeaf(redP, 0.84, 1.9, sx * 0.43, 6.55, 0.05, true, 0xf0ede4);
+          bx(WHT, 2.1, 0.18, 0.05, 0, 7.6, 0.03); bx(WHT, 2.1, 0.18, 0.05, 0, 5.5, 0.03); for (const sx of [-1, 1]) bx(WHT, 0.18, 2.1, 0.05, sx * 0.97, 6.55, 0.03);
+          // подъёмная балка с блоком
+          bx(pine, 0.2, 0.26, 1.7, 0, 8.4, 0.75); bx(oldw, 0.16, 0.16, 0.16, 0, 8.4, 1.65); cyl(K.steelDk, 0.17, 0.17, 0.06, 0, 8.18, 1.6, 12, 0, PI / 2); tube(col(0x6a5a40), [0, 8.1, 1.6], [0, 6.55, 1.55], 0.012, 4); bx(K.steelDk, 0.08, 0.14, 0.06, 0, 6.5, 1.55);
+          beam(oldw, [0, 8.2, 0.1], [0, 8.45, 1.3], 0.1, 0.1, [1, 0, 0]);
+          beam(pine, [-0.7, 7.7, 0.2], [0, 8.45, 1.0], 0.1, 0.1, [0, 0, 1]); beam(pine, [0.7, 7.7, 0.2], [0, 8.45, 1.0], 0.1, 0.1, [0, 0, 1]);
+          // навесик над люком
+          for (const sd of [-1, 1]) slabPlane(roofM, [sd * 1.3, 8.35], [0, 8.95], [sd * 0.42, 0.91], 0.03, 1.1, 2.4, 0.03);
+        });
+        // белая отделка: углы, свесы
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(WHT, 0.22, P.eave - PL, 0.22, sx * 5.0, (P.eave + PL) / 2, sz * HL);
+        for (const sz of [-1, 1]) for (const sd of [-1, 1]) { beam(WHT, [A(sd)[0], A(sd)[1] - 0.05, sz * 7.97], [KN(sd)[0], KN(sd)[1] + 0.04, sz * 7.97], 0.3, 0.05, [0, 0, 1]); beam(WHT, [KN(sd)[0], KN(sd)[1] - 0.02, sz * 7.97], [0, Rr[1] + 0.04, sz * 7.97], 0.3, 0.05, [0, 0, 1]); }
+        for (const sd of [-1, 1]) { bx(WHT, 0.04, 0.26, 15.9, sd * 5.4, 3.92, 0); }
+        // цоколь заделан по краю
+        // фонарь (купол) на коньке
+        sub(0, 9.1, -1.5, 0, () => {
+          bx(redP, 1.1, 0.95, 1.1, 0, 0.42, 0); for (const sx of [-1, 1]) { bx(K.black, 0.02, 0.55, 0.62, sx * 0.555, 0.5, 0); bx(K.black, 0.62, 0.55, 0.02, 0, 0.5, sx * 0.555); }
+          bx(WHT, 1.2, 0.08, 1.2, 0, 0.9, 0); put(col(0x6c7176), new T.CylinderGeometry(0.06, 0.9, 0.75, 4), 0, 1.3, 0, PI / 4); cyl(col(0x4a4d51), 0.015, 0.015, 0.55, 0, 1.95, 0, 5); bx(col(0x4a4d51), 0.5, 0.1, 0.01, 0.0, 2.18, 0);
+        });
+        // водостоки и труба
+        for (const sd of [-1, 1]) sub(sd * 5.42, 0, 0, PI / 2, () => gutter(-7.9, 7.9, 3.97, 0, sd));
+        for (const [x, z] of [[5.58, 7.3], [-5.58, 7.3], [5.58, -7.3]]) { cyl(col(0x777b80), 0.05, 0.05, 3.9, x, 1.95, z, 8); for (const y of [1.2, 3.0]) tube(col(0x777b80), [x, y, z], [Math.sign(x) * 5.05, y, z], 0.02, 5); }
+      }
+      // ================= навес: наполнение (стадия 4)
+      tag('leanto-fill');
+      if (stage === 4) {
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) bale(-6.3 + (j % 2) * 0.5 - 0.3, i * 0.46 + 0.14, -5.6 + j * 0.0 - (i % 2) * 0.0, i % 2 ? 0.1 : 0, 0);
+        for (let i = 0; i < 3; i++) bale(-6.0, 0.14 + i * 0.46, -4.6 + (i % 2) * 0.05, PI / 2);
+        for (let i = 0; i < 2; i++) bale(-7.9, 0.14 + i * 0.46, -1.2 + 1.0 * i, PI / 2 + 0.05);
+        bx(oldw, 0.5, 0.45, 2.6, -8.1, 0.5, 2.0); bx(col(0xcdb05a), 0.4, 0.14, 2.4, -8.1, 0.78, 2.0);
+        rbx(WHT, 0.0001 + 0.5, 0.0001 + 0.1, 0.5, 0.04, -7.0, 0.05, 3.2);
+      }
+      // ================= реквизит
+      tag('props');
+      if (stage === 1) {
+        boardStack(6.8, -3.4, PI / 2, 4.2, 6, M.pine(), 5); boardStack(-3.6, 9.2, 0.1, 3.6, 4, M.pine(), 6); sawhorse(6.9, 6.0, 0.4); sawhorse(7.6, 5.0, -0.1); bx(pine, 2.4, 0.04, 0.2, 7.3, 0.94, 5.5, 0.3);
+        ladder(5.8, 5.0, PI / 2, 0.27, 5.0); sandGravel(-6.0, 9.0, 0.4); wheelbarrow(3.4, 9.2, 2.4);
+        for (let i = 0; i < 7; i++) bx(pine, 0.6 + (i * 0.37) % 0.8, 0.04, 0.12, 6.8 + (i % 3) * 0.2, 0.03 + (i % 2) * 0.04, -6.4 - i * 0.12, i * 0.9);
+      }
+      if (stage === 2) {
+        sub(5.0, 0, 7.9, PI / 2, () => scaffold(15.8, 4, 3)); mixer(7.6, 3.4, 2.4); sandGravel(-6.4, 9.0, 0.3); wheelbarrow(3.4, 9.2, 0.2); cementBags(7.6, 0.4, 8, 0.1);
+        boardStack(7.2, -4.4, PI / 2, 4.2, 4, M.pine(), 6); boardStack(-3.6, 9.2, 0.1, 3.6, 3, M.pine(), 7);
+      }
+      if (stage === 3) {
+        sub(5.0, 0, 7.9, PI / 2, () => scaffold(15.8, 4, 3));
+        bucket(-3.4, 9.0, 0x9c2c20, true); bucket(-2.8, 9.2, 0xeee9dc, true); bucket(-3.0, 8.7, 0x9c2c20, false); bucket(-3.9, 9.1, 0xeee9dc, false); bucket(2.8, 9.4, 0x9c2c20, false);
+        sawhorse(-5.5, 9.4, 0.3); bx(pine, 2.0, 0.04, 0.2, -5.5, 0.86, 9.4, 0.3); hammer(-5.2, 0.88, 9.4, 0.8);
+        dumpster(7.6, -5.6, 0.5); palletsAt(-3.6, 9.6, 0.2, 4, 3); palletsAt(7.6, 6.4, -0.1, 3, 8); cementBags(7.4, 1.0, 4, -0.3); wheelbarrow(3.6, 9.4, 1.0);
+      }
+      if (stage === 4) {
+        bx(conc, 6.4, 0.07, 2.5, 0, 0.035, 8.75); bx(M.gravel(), 7.0, 0.05, 1.2, 0, 0.025, 9.9);
+        roundBale(7.4, 4.0, 0.3); roundBale(7.2, 1.8, -0.2); for (let i = 0; i < 3; i++) bale(7.2, 0.14 + i * 0.46, -3.2, PI / 2); for (let i = 0; i < 2; i++) bale(7.2, 0.14 + i * 0.46, -4.2, PI / 2);
+        rake(-3.0, 8.3); barrel(-3.5, 8.5, 0x2e6a52);
+        sub(-6.2, 0, 7.6, 0.25, () => { bx(col(0x7d8084), 2.0, 0.4, 0.55, 0, 0.3, 0); bx(col(0x3f6b8a), 1.8, 0.04, 0.4, 0, 0.5, 0); for (const sx of [-0.8, 0.8]) bx(col(0x5a5d61), 0.08, 0.16, 0.5, sx, 0.08, 0); });
+        railFence(8.6, -7.0, 8.6, 6.6);
       }
     });
     return finish(g);

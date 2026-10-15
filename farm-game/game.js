@@ -901,7 +901,7 @@
     }
     if (modalAcc >= 1 && ui.modal && !ui.spinning && !ui.down) { modalAcc = 0; renderModal(); }
     if (saveAcc >= 8) { saveAcc = 0; save(); }
-    world.update(dt, S);
+    try { world.update(dt, S); } catch (e) { if (!ui.updErr) { ui.updErr = 1; console.error('сбой кадра', e); } }   // один сбой не должен останавливать игру
     if (window.__boot && !window.__boot.t1) { window.__boot.t1 = performance.now(); const ld = $('loading'); if (ld) { ld.classList.add('done'); setTimeout(() => ld.remove(), 700); } }
     requestAnimationFrame(frame);
   }
