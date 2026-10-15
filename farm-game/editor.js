@@ -47,8 +47,8 @@
       if (it) return { k: 'dec', it };
       return null;
     }
-    const newMulti = () => ({ k: 'multi', decs: [], roads: [], trees: [], rects: [], dirty: false });
-    const multiCount = (s) => s.decs.length + s.roads.length + s.trees.length;
+    const newMulti = () => ({ k: 'multi', decs: [], roads: [], trees: [], bigs: [], rects: [], dirty: false });
+    const multiCount = (s) => s.decs.length + s.roads.length + s.trees.length + (s.bigs ? s.bigs.length : 0);
     function updateMarker() {
       circ.visible = rectG.visible = false; dotM.visible = bar.visible = false; const s = ED.sel; if (!s) return;
       if (s.k === 'dec') {
@@ -64,6 +64,7 @@
         for (const t of s.trees) dot(t[0], t[1], 1.3);
         dotM.count = n; dotM.instanceMatrix.needsUpdate = true; dotM.visible = n > 0;
         let m = 0;
+        for (const bg of s.bigs || []) { if (m >= MAXR) break; const b = bg.bounds(); tmp.position.set((b[0] + b[2]) / 2, 0.62, (b[1] + b[3]) / 2); tmp.scale.set(b[2] - b[0], b[3] - b[1], 1); tmp.updateMatrix(); bar.setMatrixAt(m++, tmp.matrix); }
         for (const r of s.roads) { if (m >= MAXR) break; const b = api.roadBox(r); tmp.position.set((b[0] + b[2]) / 2, 0.62, (b[1] + b[3]) / 2); tmp.scale.set(b[2] - b[0], b[3] - b[1], 1); tmp.updateMatrix(); bar.setMatrixAt(m++, tmp.matrix); }
         bar.count = m; bar.instanceMatrix.needsUpdate = true; bar.visible = m > 0;
       }
@@ -80,7 +81,7 @@
       fire();
     };
     ED.layout = () => api.exportLayout();
-    ED.setTool = (tool, place) => { ED.tool = tool; ED.place = place || null; ED.roadStart = null; pin.visible = false; if (tool !== 'move' && tool !== 'place') { ED.sel = null; updateMarker(); } else if (tool === 'place' && ED.sel && ED.sel.k === 'multi') { ED.sel = null; updateMarker(); } fire(); };
+    ED.setTool = (tool, place) => { ED.tool = tool; ED.place = tool === 'placeBig' ? null : place || null; ED.placeBig = tool === 'placeBig' ? place : null; ED.roadStart = null; pin.visible = false; if (tool !== 'move' && tool !== 'place') { ED.sel = null; updateMarker(); } else if (tool === 'place' && ED.sel && ED.sel.k === 'multi') { ED.sel = null; updateMarker(); } fire(); };
     ED.setBrush = (v) => { ED.brush = !!v; fire(); };
     ED.setPatch = (k) => { ED.patchKind = k | 0; fire(); };
     ED.setRoadKind = (k) => { ED.roadKind = k | 0; fire(); };
@@ -117,6 +118,7 @@
         if (!multiCount(s)) return; push();
         for (const it of s.decs) api.decRemove(it.id);
         for (const r of s.roads) api.roadsRemove(r);
+        for (const b of s.bigs || []) if (b.hidable) api.bigVis(b.id, false);
         if (s.trees.length) { if (s.trees.length >= 40 && !s.dirty && s.rects.length) for (const r of s.rects) api.cutAdd(r); else for (const t of s.trees) api.cutAdd([t[0], t[1], 0.9]); }
         api.decFlush(); api.roadsFlush(); if (s.trees.length) rebuildForest();
       } else return;
@@ -147,6 +149,7 @@
       for (const r of api.ROADS) { const b = api.roadBox(r); if (b[2] >= xa && b[0] <= xb && b[3] >= za && b[1] <= zb && !rs.has(r)) { s.roads.push(r); rs.add(r); } }
       const ts = new Set(s.trees.map((t) => t[0] + ',' + t[1]));
       for (const t of api.forestIn(xa, za, xb, zb)) if (!ts.has(t[0] + ',' + t[1])) { s.trees.push(t); ts.add(t[0] + ',' + t[1]); }
+      for (const b of Object.values(BIG)) { if (!b.hidable || b.hidden || s.bigs.includes(b)) continue; const g = b.get(); if (g[0] >= xa && g[0] <= xb && g[1] >= za && g[1] <= zb) s.bigs.push(b); }
       s.rects.push([xa, za, xb, zb]);
       select(multiCount(s) ? s : null);
     }
@@ -157,6 +160,7 @@
       if (p.k === 'dec') flip(s.decs, p.it, (a, b) => a.id === b.id);
       else if (p.k === 'road') flip(s.roads, p.r, (a, b) => a === b);
       else if (p.k === 'tree') { flip(s.trees, p.t, (a, b) => a[0] === b[0] && a[1] === b[1]); s.dirty = true; }
+      else if (p.k === 'big' && p.b.hidable) flip(s.bigs, p.b, (a, b) => a === b);
       else return;
       select(multiCount(s) ? s : null);
     }
@@ -183,6 +187,10 @@
       const x = p.x, z = p.z;
       if (ED.tool === 'erase') { push(); lastCut = null; eraseAt(x, z); eraser.visible = false; rebuildForest(); fire(); return; }
       if (ED.tool === 'select') { toggleAt(x, z); return; }
+      if (ED.tool === 'placeBig') {
+        const b = BIG[ED.placeBig]; if (!b) return; push(); api.bigVis(b.id, true); const g = b.get(); b.set(cx(snap(x, 2)), cz(snap(z, 2)), g[2] || 0); b.commit && b.commit(); api.forestRebuild();
+        ED.tool = 'move'; ED.placeBig = null; select({ k: 'big', b }); return;
+      }
       if (ED.tool === 'road') {
         const gx = snap(x, 5), gz = snap(z, 5);
         if (!ED.roadStart) { ED.roadStart = [gx, gz]; pin.scale.set(3, 3, 1); pin.position.set(gx, 0.7, gz); pin.visible = true; fire(); return; }
