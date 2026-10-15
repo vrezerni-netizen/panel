@@ -151,7 +151,9 @@
   const K = { black: col(0x1b1c1e), dark: col(0x2e3033), rubber: col(0x1a1a1c), white: col(0xeeebe2), grey: col(0x8c8f91), steelDk: col(0x5a5f64) };
 
   // ------------------------------------------------------------------ строитель: текущая группа, примитивы
-  let cur = null, RND = null, GL = null;
+  let cur = null, RND = null, GL = null, TAG = '', TRI = {};
+  const tag = (n) => { TAG = n; };
+  function acc(g) { if (window.__cnDebug) TRI[TAG] = (TRI[TAG] || 0) + (g.index ? g.index.count : g.attributes.position.count) / 3; }
   function begin(seed) { cur = new T.Group(); RND = lcg(seed); GL = []; return cur; }
   function sub(x, y, z, ry, fn) { const g = new T.Group(); g.position.set(x || 0, y || 0, z || 0); g.rotation.y = ry || 0; const prev = cur; prev.add(g); cur = g; try { fn(); } finally { cur = prev; } return g; }
   function projUV(g, s, off, grain) {
@@ -170,13 +172,19 @@
       let gr = grain; if (!gr && s.grain === 'L' && w != null) gr = (w >= h && w >= d) ? 'x' : (h >= d ? 'y' : 'z');
       const rot = ry || rx || rz; projUV(g, s, rot ? [RND() * 9, RND() * 9, RND() * 9] : [x, y, z], gr);
     }
-    const m = new T.Mesh(g, s.mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.order = 'YXZ'; m.rotation.set(rx || 0, ry || 0, rz || 0); m.castShadow = true; m.receiveShadow = true; cur.add(m); return m;
+    acc(g); const m = new T.Mesh(g, s.mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.order = 'YXZ'; m.rotation.set(rx || 0, ry || 0, rz || 0); m.castShadow = true; m.receiveShadow = true; cur.add(m); return m;
   }
   const bx = (s, w, h, d, x, y, z, ry, rx, rz) => put(s, new T.BoxGeometry(w, h, d), x, y, z, ry, rx, rz, null, w, h, d);
   const cyl = (s, rt, rb, h, x, y, z, seg, rx, rz, open) => put(s, new T.CylinderGeometry(rt, rb, h, seg || 12, 1, !!open), x, y, z, 0, rx, rz);
   const sph = (s, r, x, y, z, sx, sy, sz, ws, hs) => { const g = new T.SphereGeometry(r, ws || 10, hs || 8); if (sx != null) g.scale(sx, sy, sz); return put(s, g, x, y, z); };
   const lathe = (s, pts, seg, x, y, z, rx, rz) => put(s, new T.LatheGeometry(pts.map((p) => new T.Vector2(p[0], p[1])), seg || 16), x, y, z, 0, rx, rz);
-  const rbx = (s, w, h, d, r, x, y, z, ry, rx, rz) => put(s, C.rbox(w, h, d, r, 2), x, y, z, ry, rx, rz, null, w, h, d);
+  function pillowGeo(w, h, d, r) {
+    const g = new T.BoxGeometry(w, h, d, 2, 2, 2), p = g.attributes.position; r = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
+    const hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ix = clamp(x, -hx, hx), iy = clamp(y, -hy, hy), iz = clamp(z, -hz, hz), nx = x - ix, ny = y - iy, nz = z - iz, l = Math.hypot(nx, ny, nz); if (l > 1e-6) p.setXYZ(i, ix + nx / l * r, iy + ny / l * r, iz + nz / l * r); }
+    smoothNormals(g); return g;
+  }
+  const rbx = (s, w, h, d, r, x, y, z, ry, rx, rz) => put(s, pillowGeo(w, h, d, r), x, y, z, ry, rx, rz, null, w, h, d);
   const _a = new T.Vector3(), _b = new T.Vector3(), _c = new T.Vector3(), _d = new T.Vector3(), _m = new T.Matrix4();
   /** Брус между двумя точками: w — ширина (поперёк, ⟂ up), h — высота сечения (вдоль up), up — подсказка «вверх». */
   function beam(s, p, q, w, h, up) {
@@ -200,7 +208,7 @@
     const b = bev || 0, g = new T.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - 2 * b), bevelEnabled: !!b, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 6 });
     g.translate(0, 0, -(d - 2 * b) / 2);
     if (s.tex) projUV(g, s, [x || 0, y || 0, z || 0], s.grain === 'L' ? 'y' : null);
-    const m = new T.Mesh(g, s.mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.y = ry || 0; m.castShadow = m.receiveShadow = true; cur.add(m); return m;
+    acc(g); const m = new T.Mesh(g, s.mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.y = ry || 0; m.castShadow = m.receiveShadow = true; cur.add(m); return m;
   }
   /** Боковой профиль [[вперёд,вверх]...], выдавленный на ширину w по X (центр), «вперёд» = +Z. */
   function prof(s, pts, w, bev, x, y, z, ry) {
@@ -211,7 +219,7 @@
   }
   function pane(w, h, x, y, z, ry) { const g = new T.BoxGeometry(w, h, 0.014); g.rotateY(ry || 0); g.translate(x, y, z); GL.push({ g, grp: cur }); }
   function finish(root, glassTint) {
-    root.updateMatrixWorld(true);
+    root.updateMatrixWorld(true); if (window.__cnDebug) { console.error('CNTRI ' + JSON.stringify(TRI)); TRI = {}; }
     const old = Math.random; Math.random = lcg(4242); let out; try { out = C.bakeTex(root); } finally { Math.random = old; }
     if (GL.length) {
       const pos = [], nor = [];
@@ -249,7 +257,7 @@
   }
   /** Куча сыпучего: бугристый конус с мягкой вершиной + россыпь камешков. */
   function pile(cx, cz, rad, h, spec, kind, seed, stones) {
-    const r = lcg(seed), pts = [], seg = 30, ring = 14, ph = [r() * 6, r() * 6, r() * 6];
+    const r = lcg(seed), pts = [], seg = 24, ring = 9, ph = [r() * 6, r() * 6, r() * 6];
     for (let j = 0; j <= ring; j++) { const t = j / ring, rr = rad * (1 - Math.pow(t, 1.15)), y = h * (1 - Math.pow(1 - t, 1.7)) ; pts.push([Math.max(0.002, rr), y]); }
     const g = new T.LatheGeometry(pts.map((p) => new T.Vector2(p[0], p[1])), seg), pa = g.attributes.position;
     for (let i = 0; i < pa.count; i++) {
@@ -258,9 +266,9 @@
       pa.setXYZ(i, x * k, y * kh, z * k);
     }
     smoothNormals(g); put(spec, g, cx, 0, cz, 0, 0, 0, 'b');
-    for (let i = 0; i < (stones == null ? (kind === 'gravel' ? 26 : 5) : stones); i++) {
+    for (let i = 0; i < (stones == null ? (kind === 'gravel' ? 22 : 4) : stones); i++) {
       const a = r() * TAU, t = Math.sqrt(r()) * 0.85, rr = rad * t * 0.85, y = h * (1 - Math.pow(1 - (1 - t), 1.7)) * 0.95, sz = kind === 'gravel' ? 0.06 + r() * 0.06 : 0.07 + r() * 0.08;
-      const gg = new T.IcosahedronGeometry(sz, 1); gg.scale(1 + r() * 0.4, 0.6 + r() * 0.3, 1 + r() * 0.4);
+      const gg = new T.IcosahedronGeometry(sz, 0); gg.scale(1 + r() * 0.4, 0.6 + r() * 0.3, 1 + r() * 0.4);
       put(col(kind === 'gravel' ? [0x7c7a75, 0x96928a, 0x6a6864, 0xa59f93][i % 4] : [0xa38e63, 0xb59d70, 0x8d7a54][i % 3]), gg, cx + Math.cos(a) * rr, y + sz * 0.1, cz + Math.sin(a) * rr, r() * 3, r() * 3, r() * 3);
     }
   }
@@ -305,7 +313,7 @@
         sub((r() - 0.5) * 0.08, 0.144 * i, (r() - 0.5) * 0.08, (r() - 0.5) * 0.1, () => {
           for (let k = 0; k < 5; k++) bx(s, 1.2, 0.022, 0.145, 0, 0.133, -0.34 + k * 0.17);
           for (let k = 0; k < 3; k++) bx(s, 1.2, 0.022, 0.1, 0, 0.011, -0.35 + k * 0.35);
-          for (const px of [-0.55, 0, 0.55]) for (const pz of [-0.33, 0, 0.33]) bx(s, 0.1, 0.1, 0.1, px, 0.072, pz);
+          for (const pz of [-0.33, 0, 0.33]) bx(s, 1.2, 0.09, 0.1, 0, 0.072, pz);
         });
       }
     });
@@ -390,33 +398,24 @@
   }
   /** Леса из круглых труб: идут вдоль X от x=0 до len, стена на z=0, леса впереди (+Z). */
   function scaffold(len, bays, lifts, o) {
-    o = o || {}; const lift = o.lift || 2.0, dep = o.dep || 1.05, gap = o.gap || 0.3, s = steel(0xaab0b6), wood = M.oldwood(), r = 0.0245, y0 = 0.45;
-    const bw = len / bays, topY = y0 + (lifts - 1) * lift;
-    for (let i = 0; i <= bays; i++) for (const zz of [gap, gap + dep]) {
-      tube(s, [i * bw, 0.1, zz], [i * bw, topY + 1.15, zz], r, 8);
-      bx(K.steelDk, 0.15, 0.012, 0.15, i * bw, 0.1, zz); cyl(s, 0.03, 0.03, 0.14, i * bw, 0.17, zz, 8);
-    }
+    o = o || {}; const lift = o.lift || 2.0, dep = o.dep || 1.05, gap = o.gap || 0.3, s = steel(0xaab0b6), wood = M.oldwood(), r = 0.0245, y0 = 0.45, SG = 6, bw = len / bays, topY = y0 + (lifts - 1) * lift, zo = gap + dep;
+    for (let i = 0; i <= bays; i++) for (const zz of [gap, zo]) { tube(s, [i * bw, 0.1, zz], [i * bw, topY + 1.15, zz], r, SG); bx(K.steelDk, 0.14, 0.012, 0.14, i * bw, 0.1, zz); }
     for (let k = 0; k < lifts; k++) {
       const y = y0 + k * lift;
       for (let i = 0; i < bays; i++) {
-        for (const zz of [gap, gap + dep]) tube(s, [i * bw, y, zz], [(i + 1) * bw, y, zz], r, 8);
-        // настил
-        for (let b = 0; b < 4; b++) bx(wood, bw - 0.04, 0.038, 0.225, (i + 0.5) * bw, y + 0.06, gap + 0.07 + b * 0.235);
-        // ограждение и бортовая доска
-        tube(s, [i * bw, y + 0.5, gap + dep], [(i + 1) * bw, y + 0.5, gap + dep], r, 8); tube(s, [i * bw, y + 1.0, gap + dep], [(i + 1) * bw, y + 1.0, gap + dep], r, 8);
-        bx(wood, bw - 0.04, 0.15, 0.03, (i + 0.5) * bw, y + 0.17, gap + dep + 0.03);
+        for (const zz of [gap, zo]) tube(s, [i * bw, y, zz], [(i + 1) * bw, y, zz], r, SG);
+        for (let b = 0; b < 2; b++) bx(wood, bw - 0.04, 0.038, 0.46, (i + 0.5) * bw, y + 0.06, gap + 0.26 + b * 0.5);
+        tube(s, [i * bw, y + 0.5, zo], [(i + 1) * bw, y + 0.5, zo], r, SG); tube(s, [i * bw, y + 1.0, zo], [(i + 1) * bw, y + 1.0, zo], r, SG);
+        bx(wood, bw - 0.04, 0.15, 0.03, (i + 0.5) * bw, y + 0.17, zo + 0.03);
       }
-      for (let i = 0; i <= bays; i++) { tube(s, [i * bw, y - 0.05, gap], [i * bw, y - 0.05, gap + dep], r, 8); for (const zz of [gap, gap + dep]) bx(K.steelDk, 0.07, 0.07, 0.07, i * bw, y, zz); }
-      // торцевые ограждения
-      for (const xx of [0, len]) { tube(s, [xx, y + 0.5, gap], [xx, y + 0.5, gap + dep], r, 8); tube(s, [xx, y + 1.0, gap], [xx, y + 1.0, gap + dep], r, 8); }
+      for (let i = 0; i <= bays; i++) { tube(s, [i * bw, y - 0.05, gap], [i * bw, y - 0.05, zo], r, SG); bx(K.steelDk, 0.07, 0.07, 0.07, i * bw, y, zo); }
+      for (const xx of [0, len]) { tube(s, [xx, y + 0.5, gap], [xx, y + 0.5, zo], r, SG); tube(s, [xx, y + 1.0, gap], [xx, y + 1.0, zo], r, SG); }
     }
-    // диагональные связи по внешней стороне
-    for (let i = 0; i < bays; i++) if (i % 2 === 0) for (let k = 0; k < lifts; k++) { const y = y0 + k * lift; const rise = k === lifts - 1 ? 1.0 : lift; if (k % 2 === 0) tube(s, [i * bw, y, gap + dep + 0.03], [(i + 1) * bw, y + rise, gap + dep + 0.03], r * 0.9, 8); else tube(s, [(i + 1) * bw, y, gap + dep + 0.03], [i * bw, y + rise, gap + dep + 0.03], r * 0.9, 8); }
-    // лестница на леса
-    sub(len * 0.5 + bw * 0.5 - 0.2, 0, gap + dep + 0.3, 0, () => {
-      const L = topY + 0.9, n = Math.floor(L / 0.28), tl = 0.0;
-      for (const sx of [-0.2, 0.2]) tube(s, [sx, 0, 0.55], [sx, topY + 0.5, 0.0], 0.02, 6);
-      for (let i = 1; i < n; i++) { const t = i * 0.28 / (topY + 0.5); if (t > 1) break; tube(s, [-0.2, t * (topY + 0.5), 0.55 * (1 - t)], [0.2, t * (topY + 0.5), 0.55 * (1 - t)], 0.012, 5); }
+    for (let i = 0; i < bays; i += 2) for (let k = 0; k < lifts; k++) { const y = y0 + k * lift, rise = k === lifts - 1 ? 1.0 : lift; if (k % 2 === 0) tube(s, [i * bw, y, zo + 0.03], [(i + 1) * bw, y + rise, zo + 0.03], r * 0.9, SG); else tube(s, [(i + 1) * bw, y, zo + 0.03], [i * bw, y + rise, zo + 0.03], r * 0.9, SG); }
+    sub(len * 0.5 + bw * 0.5 - 0.2, 0, zo + 0.3, 0, () => {
+      const hh = topY + 0.5, n = Math.floor(hh / 0.3);
+      for (const sx of [-0.2, 0.2]) tube(s, [sx, 0, 0.55], [sx, hh, 0.0], 0.02, 5);
+      for (let i = 1; i < n; i++) { const t = i * 0.3 / hh; if (t > 1) break; tube(s, [-0.2, t * hh, 0.55 * (1 - t)], [0.2, t * hh, 0.55 * (1 - t)], 0.012, 4); }
     });
   }
   function dumpster(x, z, ry) {
@@ -459,6 +458,7 @@
     }
   }
 
+  FM.register('construct', 'house', (o) => houseBuild(clamp(o.stage | 0, 0, 4)));
   FM.register('construct', 'shed', (o) => shedBuild(clamp(o.stage | 0, 0, 4)));
   FM.register('construct', 'sign', (opts) => {
     const g = begin(901);
@@ -493,26 +493,27 @@
     if (o.diag) beam(s, [o.diag[0], pw, 0], [o.diag[1], H - pw * 1.9, 0], 0.05, 0.08, [0, 0, 1]);
   }
   /** Обшивка стены (экструзия контура с проёмами). gable: высота фронтона над H (вершина по центру). Проёмы-двери (y0=0) вырезаются из нижней кромки. */
-  function cladWall(spec, L, H, ops, gable, th) {
-    th = th || 0.04; ops = (ops || []).slice().sort((a, b) => a.x0 - b.x0); const pts = [[0, 0]], holes = [];
+  function cladWall(spec, L, H, ops, gable, th, zOff) {
+    th = th || 0.04; zOff = zOff || 0; ops = (ops || []).slice().sort((a, b) => a.x0 - b.x0); const pts = [[0, 0]], holes = [];
     for (const q of ops) { if (q.y0 <= 0.001) { pts.push([q.x0, 0], [q.x0, q.y1], [q.x1, q.y1], [q.x1, 0]); } else holes.push([[q.x0, q.y0], [q.x0, q.y1], [q.x1, q.y1], [q.x1, q.y0]]); }
     pts.push([L, 0], [L, H]); if (gable) pts.push([L / 2, H + gable]); pts.push([0, H]);
-    return poly(spec, pts, holes, th, 0, 0, th / 2, 0);
+    return poly(spec, pts, holes, th, 0, 0, zOff + th / 2, 0);
   }
   /** Окно в локальной системе стены: рама, переплёт, подоконник, стекло. o: {panes:'cross'|'two'|'one', glass:true, trim, frame:colour} */
   function win(q, o) {
     o = o || {}; const w = q.x1 - q.x0, h = q.y1 - q.y0, cx = (q.x0 + q.x1) / 2, cy = (q.y0 + q.y1) / 2, fr = col(o.frame || 0xece7da), fw = o.fw || 0.06;
-    bx(fr, w, fw, 0.09, cx, q.y0 + fw / 2, 0.015); bx(fr, w, fw, 0.09, cx, q.y1 - fw / 2, 0.015); bx(fr, fw, h - 2 * fw, 0.09, q.x0 + fw / 2, cy, 0.015); bx(fr, fw, h - 2 * fw, 0.09, q.x1 - fw / 2, cy, 0.015);
-    if (o.panes !== 'one') bx(fr, fw * 0.7, h - 2 * fw, 0.05, cx, cy, 0.015);
-    if (o.panes === 'cross') bx(fr, w - 2 * fw, fw * 0.7, 0.05, cx, cy, 0.015);
-    if (o.glass !== false) pane(w - fw, h - fw, cx, cy, 0.0, 0);
-    if (o.trim !== false) { const tw = 0.08; bx(fr, w + 2 * tw, tw, 0.035, cx, q.y1 + tw / 2, 0.05); bx(fr, tw, h, 0.035, q.x0 - tw / 2, cy, 0.05); bx(fr, tw, h, 0.035, q.x1 + tw / 2, cy, 0.05); bx(fr, w + 0.2, 0.05, 0.14, cx, q.y0 - 0.025, 0.09); }
+    const zf = o.z != null ? o.z : 0.015, zt = o.zt != null ? o.zt : 0.05, zs = o.zs != null ? o.zs : 0.09;
+    bx(fr, w, fw, 0.09, cx, q.y0 + fw / 2, zf); bx(fr, w, fw, 0.09, cx, q.y1 - fw / 2, zf); bx(fr, fw, h - 2 * fw, 0.09, q.x0 + fw / 2, cy, zf); bx(fr, fw, h - 2 * fw, 0.09, q.x1 - fw / 2, cy, zf);
+    if (!o.simple && o.panes !== 'one') bx(fr, fw * 0.7, h - 2 * fw, 0.05, cx, cy, zf);
+    if (!o.simple && o.panes === 'cross') bx(fr, w - 2 * fw, fw * 0.7, 0.05, cx, cy, zf);
+    if (o.glass !== false) pane(w - fw, h - fw, cx, cy, zf - 0.015, 0);
+    if (o.trim !== false) { const tw = 0.08; bx(fr, w + 2 * tw, tw, 0.035, cx, q.y1 + tw / 2, zt); if (!o.simple) { bx(fr, tw, h, 0.035, q.x0 - tw / 2, cy, zt); bx(fr, tw, h, 0.035, q.x1 + tw / 2, cy, zt); } bx(fr, w + 0.2, 0.05, 0.14, cx, q.y0 - 0.025, zs); }
   }
   /** Стропила, обрешётка и покрытие двускатной крыши с коньком вдоль X (центр cx,cz). */
   function rafters(o) {
     const s = o.spec || M.pine(), dy = o.yR - o.yE, al = Math.atan2(dy, o.hs), off = o.d / 2 / Math.cos(al);
-    for (let i = 0; i < o.n; i++) { const x = lerp(o.x0, o.x1, i / (o.n - 1)); for (const sd of [1, -1]) beam(s, [x, o.yE - off, o.cz + sd * o.hs], [x, o.yR - off, o.cz], o.w, o.d, [0, 1, 0]); if (o.collar && i % 2 === 0 && i > 0 && i < o.n - 1) { const hh = o.collar, zz = hh / dy * o.hs; bx(s, o.w, 0.045, 2 * zz - 0.1, x, o.yR - hh - off, o.cz); } if (o.tie && i % 2 === 0 && i > 0 && i < o.n - 1) bx(s, o.w, 0.15, 2 * o.tie, x, o.plate - 0.075, o.cz); }
-    bx(s, o.x1 - o.x0 + 0.5, 0.2, 0.05, (o.x0 + o.x1) / 2, o.yR - 0.12, o.cz);
+    for (let i = 0; i < o.n; i++) { const x = lerp(o.x0, o.x1, i / (o.n - 1)); if (o.tails) { if (i % 2 === 0 || i === o.n - 1) for (const sd of [1, -1]) beam(s, [x, o.yE - off, o.cz + sd * o.hs], [x, o.yE + 0.3 * (o.yR - o.yE) / o.hs * 0.0 + (0.9 / o.hs) * (o.yR - o.yE) - off, o.cz + sd * (o.hs - 0.9)], o.w, o.d, [0, 1, 0]); continue; } for (const sd of [1, -1]) beam(s, [x, o.yE - off, o.cz + sd * o.hs], [x, o.yR - off, o.cz], o.w, o.d, [0, 1, 0]); if (o.collar && i % 2 === 0 && i > 0 && i < o.n - 1) { const hh = o.collar, zz = hh / dy * o.hs; bx(s, o.w, 0.045, 2 * zz - 0.1, x, o.yR - hh - off, o.cz); } if (o.tie && i % 2 === 0 && i > 0 && i < o.n - 1) bx(s, o.w, 0.15, 2 * o.tie, x, o.plate - 0.075, o.cz); }
+    if (!o.tails) bx(s, o.x1 - o.x0 + 0.5, 0.2, 0.05, (o.x0 + o.x1) / 2, o.yR - 0.12, o.cz);
   }
   function gableSlabs(s, o) {
     const dz = o.hs, dy = o.yR - o.yE, L = Math.hypot(dz, dy) + (o.ext || 0), al = Math.atan2(dy, dz);
@@ -539,8 +540,8 @@
   }
   function barrel(x, z, c) {
     sub(x, 0, z, 0, () => {
-      lathe(col(c || 0x2e6a52), [[0.001, 0.0], [0.27, 0.0], [0.31, 0.06], [0.345, 0.45], [0.31, 0.84], [0.28, 0.9], [0.27, 0.9]], 20, 0, 0, 0);
-      cyl(col(0x1b2a24), 0.27, 0.27, 0.02, 0, 0.88, 0, 18); for (const y of [0.12, 0.45, 0.78]) cyl(K.dark, y === 0.45 ? 0.352 : 0.322, y === 0.45 ? 0.352 : 0.322, 0.028, 0, y, 0, 20, 0, 0, true);
+      lathe(col(c || 0x2e6a52), [[0.001, 0.0], [0.27, 0.0], [0.31, 0.06], [0.345, 0.45], [0.31, 0.84], [0.28, 0.9], [0.27, 0.9]], 14, 0, 0, 0);
+      cyl(col(0x1b2a24), 0.27, 0.27, 0.02, 0, 0.88, 0, 18); for (const y of [0.12, 0.45, 0.78]) cyl(K.dark, y === 0.45 ? 0.352 : 0.322, y === 0.45 ? 0.352 : 0.322, 0.028, 0, y, 0, 14, 0, 0, true);
     });
   }
   function woodpile(x, z, ry, cols, rows) {
@@ -575,7 +576,7 @@
     // --- каркас
     if (stage === 1) for (const k of ['front', 'back', 'right', 'left']) onWall(k, () => studWall(WL[k][3], Hs, OPS[k], { diag: k === 'right' ? [0.4, 2.4] : null }));
     for (const [x, z] of [[-3.93, -2.93], [3.93, -2.93], [3.93, 2.93], [-3.93, 2.93]]) bx(pine, 0.16, Hs + 0.1, 0.16, x, yb + (Hs + 0.1) / 2, z);
-    const R = { x0: -4.3, x1: 4.3, n: 12, hs: P.hs, yE: P.yE, yR: P.yR, d: 0.13, w: 0.055, cz: 0, collar: 0.75, tie: 2.93, plate: P.plate };
+    const R = { x0: -4.3, x1: 4.3, n: 12, hs: P.hs, yE: P.yE, yR: P.yR, d: 0.13, w: 0.055, cz: 0, collar: stage < 3 ? 0.75 : 0, tie: stage < 3 ? 2.93 : 0, plate: P.plate, tails: stage >= 3 };
     rafters(R);
     for (const sz of [-1, 1]) bx(pine, 8.2, 0.12, 0.14, 0, P.plate - 0.06, sz * 2.96);
     for (const sx of [-1, 1]) bx(pine, 0.14, 0.12, 6.0, sx * 3.97, P.plate - 0.06, 0);
@@ -634,6 +635,191 @@
     cyl(col(0x777b80), 0.045, 0.045, P.yE - 0.1 - yb, -4.2, yb + (P.yE - 0.1 - yb) / 2, 3.5, 10); barrel(-4.2, 3.9, 0x2e6a52);
     woodpile(4.7, -0.4, PI / 2, 7, 4); rake(-4.1, 3.1);
     bx(K.dark, 0.16, 0.22, 0.16, 0.6, yb + 2.0, 3.08); sph(col(0xffe9a8), 0.06, 0.6, yb + 1.92, 3.17, 1, 1.2, 1, 8, 6);
+    return finish(g);
+  }
+
+  // ------------------------------------------------------------------ ДОМ 11 x 8 м (два этажа)
+  const HO = { zo: -1.2, yb: 0.4, H: 5.55, plate: 5.95, hs: 4.55, yE: 5.73, yR: 9.04, gab: 2.91 };
+  const op = (cx, w, y0, y1) => ({ x0: cx - w / 2, x1: cx + w / 2, y0, y1 });
+  const hGw = (wx) => op(wx + 5.5, 1.3, 0.85, 2.25), hUw = (wx) => op(wx + 5.5, 1.2, 3.85, 5.2);
+  const HOPS = {
+    front: [op(4.1, 1.1, 0, 2.2), hGw(-4.2), hGw(1.8), hGw(4.2), hUw(-4.2), hUw(-1.4), hUw(1.8), hUw(4.2)],
+    back: [op(1.1, 1.0, 0, 2.15), op(9.7, 1.3, 0.85, 2.25), op(6.9, 1.3, 0.85, 2.25), op(3.7, 1.3, 0.85, 2.25), op(9.7, 1.2, 3.85, 5.2), op(6.9, 1.2, 3.85, 5.2), op(3.7, 1.2, 3.85, 5.2), op(1.3, 1.2, 3.85, 5.2)],
+    right: [op(4, 1.3, 0.85, 2.25), op(4, 1.2, 3.85, 5.2), op(4, 0.8, 6.15, 7.0)], left: [op(4, 1.3, 0.85, 2.25), op(4, 1.2, 3.85, 5.2), op(4, 0.8, 6.15, 7.0)],
+  };
+  const HWL = { front: [-5.5, 4.0, 0, 11], back: [5.5, -4.0, PI, 11], right: [5.5, 4.0, PI / 2, 8], left: [-5.5, -4.0, -PI / 2, 8] };
+  function picketFence(x0, z0, x1, z1, gates) {
+    const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz), ry = Math.atan2(dx, dz) - PI / 2, n = Math.round(L / 0.27), wh = col(0xf2efe6);
+    const shape = [[-0.035, 0], [0.035, 0], [0.035, 0.82], [0, 0.9], [-0.035, 0.82]];
+    sub(x0, 0, z0, ry + PI, () => {
+      for (let i = 0; i <= n; i++) { const t = i * L / n; if (gates && gates.some((g) => t > g[0] && t < g[1])) continue; poly(wh, shape, null, 0.02, -t, 0.06, 0, 0); }
+      for (const y of [0.3, 0.68]) bx(wh, L, 0.06, 0.03, -L / 2, y + 0.06, -0.025);
+      for (let i = 0; i <= Math.ceil(L / 2.2); i++) bx(wh, 0.08, 0.98, 0.08, -Math.min(L, i * 2.2), 0.49, -0.05);
+    });
+  }
+  function bush(x, z, r, c) { const rn = lcg(Math.floor(x * 31 + z * 17 + 5)); for (let i = 0; i < 2; i++) { const rr = r * (0.7 + rn() * 0.35); sph(col(c || [0x3f6b2e, 0x4b7a34, 0x365d29][i % 3]), rr, x + (rn() - 0.5) * r * 1.0, rr * 0.82, z + (rn() - 0.5) * r * 0.8, 1, 0.85, 1, 7, 5); } }
+  function flowers(x, z, w, d, c) { const rn = lcg(Math.floor(x * 13 + z * 7 + 3)); rbx(col(0x4a3524), w, 0.12, d, 0.04, x, 0.06, z); for (let i = 0; i < Math.round(w * d * 5); i++) put(col(c[Math.floor(rn() * c.length)]), new T.OctahedronGeometry(0.08 + rn() * 0.04, 0), x + (rn() - 0.5) * (w - 0.2), 0.22 + rn() * 0.1, z + (rn() - 0.5) * (d - 0.2)); }
+  function panelDoor(q, o) {
+    o = o || {}; const w = q.x1 - q.x0, h = q.y1 - q.y0, cx = (q.x0 + q.x1) / 2, z0 = o.z || 0, wood = tex('cn_boards', o.tint || 0x6b4328, 1.6, 2.4, 'b'), fr = col(0xf0ebdd);
+    bx(wood, w - 0.1, h - 0.05, 0.06, cx, h / 2, z0); for (const sy of [0.28, 0.72]) { bx(wood, w - 0.4, h * 0.3, 0.03, cx, h * sy, z0 + 0.04); }
+    if (o.glass) pane(w - 0.45, h * 0.28, cx, h * 0.8, z0 + 0.03, 0);
+    bx(fr, w, 0.07, 0.1, cx, h - 0.035, z0 + 0.01); bx(fr, 0.07, h, 0.1, q.x0 + 0.035, h / 2, z0 + 0.01); bx(fr, 0.07, h, 0.1, q.x1 - 0.035, h / 2, z0 + 0.01);
+    cyl(K.dark, 0.025, 0.025, 0.05, q.x1 - 0.2, h * 0.47, z0 + 0.07, 8, PI / 2);
+  }
+  function brickPack(x, z, ry, spec) { sub(x, 0, z, ry, () => { palletsAt(0, 0, 0, 1, 2); bx(spec, 1.0, 0.72, 0.8, 0, 0.144 + 0.36, 0); for (const px of [-0.3, 0.3]) bx(K.dark, 0.02, 0.73, 0.82, px, 0.51, 0); bx(K.dark, 1.02, 0.02, 0.82, 0, 0.51, 0); }); }
+  function houseBuild(stage) {
+    const g = begin(3100 + stage), P = HO, yb = P.yb, conc = M.conc(), pine = M.pine(), H = P.H;
+    const brick = tex('cn_brick', 0xeedcd2, 2.0, 1.2, 'b'), plaster = tex('cn_plaster', 0xeedfb4, 2.4, 2.4, 'b'), stone = tex('cn_stone', 0xe8e2d8, 2.0, 2.0, 'b'), tile = tex('cn_tile', 0xe2cdc2, 1.6, -2.4, 'b');
+    const WM = stage === 4 ? plaster : brick, trim = col(0xf0ebdd), RO = { len: 11.9, th: 0.05, hs: P.hs, yE: P.yE, yR: P.yR, cx: 0, cz: 0 }, al = Math.atan2(P.yR - P.yE, P.hs);
+    const onWall = (k, fn) => { const w = HWL[k]; sub(w[0], yb, w[1], w[2], fn); };
+    const px0 = -3.4, px1 = 0.6, pcx = -1.4, WZ = { z: -0.1, zt: 0.02, zs: 0.04 };
+    sub(0, 0, P.zo, 0, () => {
+      if (stage <= 3) dirtPatch(0.0, 0.9, 10.2, 8.0, 9);
+      // ================= стадия 0: участок и фундамент
+      tag('стадия 0: участок и фундамент');
+      if (stage === 0) {
+        const rb = col(0x8a5a38), r = lcg(19);
+        for (const [x, z, w, d] of [[0, 3.9, 11.3, 0.5], [0, -3.9, 11.3, 0.5], [-5.4, 0, 0.5, 7.3], [5.4, 0, 0.5, 7.3]]) rbx(conc, w, 0.4, d, 0.04, x, 0.2, z);
+        rbx(M.gravel(), 10.3, 0.05, 7.3, 0.02, 0, 0.275, 0);
+        for (let i = -5; i <= 5; i++) tube(rb, [i * 0.95, 0.31, -3.6], [i * 0.95, 0.31, 3.6], 0.006, 4);
+        for (let i = -3; i <= 3; i++) tube(rb, [-5.0, 0.33, i * 1.1], [5.0, 0.33, i * 1.1], 0.006, 4);
+        for (let i = 0; i < 5; i++) rbx(conc, 0.5, 0.36, 0.5, 0.04, -4.4 + i * 2.2, 0.18, 0);
+        for (const [x, z] of [[-5.4, -3.9], [5.4, -3.9], [5.4, 3.9], [-5.4, 3.9], [-2.7, 3.9], [0, 3.9], [2.7, 3.9], [-2.7, -3.9], [0, -3.9], [2.7, -3.9], [-5.4, 0], [5.4, 0]]) { tube(rb, [x - 0.07, 0.4, z], [x - 0.05, 1.0 + r() * 0.2, z + 0.04], 0.009, 5); tube(rb, [x + 0.07, 0.4, z], [x + 0.05, 0.9 + r() * 0.2, z - 0.04], 0.009, 5); }
+        rbx(conc, 4.3, 0.25, 2.3, 0.04, pcx, 0.125, 5.1); for (const px of [px0 + 0.1, px1 - 0.1]) { tube(rb, [px, 0.25, 6.05], [px, 0.95, 6.07], 0.009, 5); tube(rb, [px + 0.06, 0.25, 6.05], [px + 0.05, 0.8, 6.05], 0.009, 5); }
+        for (let i = 0; i < 4; i++) bx(M.oldwood(), 3.4, 0.035, 0.2, -8.6 + i * 0.1, 0.1 + 0.04 + i * 0.045, -5.4 + i * 0.02, 0.05);
+        survey(-5.5, 5.5, -4, 4, 2.0, 0.55); sandGravel(-8.8, 3.4, 1.2); boardStack(8.6, 1.4, PI / 2, 4.2, 5, M.pine(), 5);
+        wheelbarrow(-6.6, 6.6, 0.7); surveyor(6.8, 6.8); bucket(7.0, -5.6, 0xe8b814, false); boardStack(-8.4, -3.4, 0.2, 3.6, 3, M.pine(), 6);
+        return;
+      }
+      rbx(conc, 11.3, yb, 8.3, 0.05, 0, yb / 2, 0); rbx(conc, 4.3, 0.5, 2.3, 0.05, pcx, 0.25, 5.1);
+      // ================= каркас / стены
+      tag('каркас / стены');
+      if (stage === 1) {
+        for (const k of ['front', 'back', 'right', 'left']) onWall(k, () => sub(0, 0, -0.15, 0, () => studWall(HWL[k][3], H, HOPS[k].filter((q) => q.y1 < H), { t: 0.14, diag: k === 'front' ? null : [0.5, 2.8] })));
+        for (const [x, z] of [[-5.4, -3.9], [5.4, -3.9], [5.4, 3.9], [-5.4, 3.9]]) bx(pine, 0.22, H + 0.1, 0.22, x, yb + (H + 0.1) / 2, z);
+        for (const x of [-5.0, -2.5, 0, 2.5, 5.0]) bx(pine, 0.18, 3.0, 0.18, x, yb + 1.5, 0);
+        bx(pine, 10.4, 0.26, 0.16, 0, yb + 2.87, 0); for (const z of [-3.85, 3.85]) bx(pine, 10.4, 0.22, 0.14, 0, yb + 2.89, z);
+        for (let i = 0; i <= 16; i++) for (const sz of [-1, 1]) bx(pine, 0.06, 0.2, 3.75, -5.0 + i * 0.625, yb + 2.9, sz * 1.95);
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 7; j++) bx(pine, 2.44, 0.03, 1.2, -3.8 + i * 2.46, yb + 3.015, -3.6 + j * 1.2);
+      } else {
+        onWall('front', () => cladWall(WM, 11, H, HOPS.front, 0, 0.3, -0.3)); onWall('back', () => cladWall(WM, 11, H, HOPS.back, 0, 0.3, -0.3));
+        onWall('right', () => cladWall(WM, 8, H, HOPS.right, P.gab, 0.3, -0.3)); onWall('left', () => cladWall(WM, 8, H, HOPS.left, P.gab, 0.3, -0.3));
+        bx(pine, 10.6, 0.1, 7.6, 0, yb + 3.0, 0); bx(M.oldwood(), 10.6, 0.12, 7.6, 0, yb + 0.06, 0);
+        for (const z of [-1, 1]) bx(stone, 11.4, 0.34, 0.1, 0, yb + 0.17, z * 4.07); for (const x of [-1, 1]) bx(stone, 0.1, 0.34, 8.2, x * 5.57, yb + 0.17, 0);
+      }
+      // ================= крыльцо
+      tag('крыльцо');
+      bx(pine, 0.2, 2.3, 0.2, px0 + 0.1, 0.5 + 1.15, 6.05); bx(pine, 0.2, 2.3, 0.2, px1 - 0.1, 0.5 + 1.15, 6.05); bx(pine, 4.2, 0.26, 0.16, pcx, 0.5 + 2.2, 6.05);
+      bx(pine, 4.2, 0.18, 0.1, pcx, 3.78, 3.96);
+      if (stage <= 2) for (let i = 0; i < 5; i++) beam(pine, [px0 + 0.1 + i * 0.95, 2.78, 6.05], [px0 + 0.1 + i * 0.95, 3.82, 3.96], 0.06, 0.14, [0, 1, 0]);
+      if (stage === 1) for (let i = 0; i <= 6; i++) bx(pine, 0.06, 0.2, 2.2, px0 + 0.1 + i * 0.66, 0.6, 5.05);
+      if (stage >= 2) bx(M.oldwood(), 4.2, 0.05, 2.25, pcx, 0.525, 5.05);
+      // ================= крыша
+      tag('крыша');
+      rafters({ x0: -5.9, x1: 5.9, n: 16, hs: P.hs, yE: P.yE, yR: P.yR, d: 0.16, w: 0.07, cz: 0, collar: stage < 3 ? 1.2 : 0, tie: stage < 3 ? 3.95 : 0, plate: P.plate, tails: stage >= 3 });
+      for (const sz of [-1, 1]) bx(pine, 11.2, 0.14, 0.16, 0, P.plate - 0.07, sz * 3.9);
+      // слуховое окно
+      const zf = 3.0, dY0 = 6.7, dYe = 8.1, dYr = 8.55, dw = 0.85, dq = { x0: -0.4, x1: 0.4, y0: 7.15, y1: 7.95 };
+      if (stage === 1) {
+        for (const sx of [-dw, dw]) { bx(pine, 0.08, dYe - dY0, 0.08, sx, (dYe + dY0) / 2, zf); beam(pine, [sx, dYe, zf], [sx, dYe, 1.3], 0.06, 0.1); beam(pine, [sx, dYe, zf], [0, dYr, zf], 0.06, 0.1, [0, 0, 1]); }
+        beam(pine, [0, dYr - 0.05, zf + 0.1], [0, dYr - 0.05, 0.6], 0.06, 0.14); bx(pine, 1.8, 0.08, 0.08, 0, 7.15, zf); bx(pine, 1.8, 0.08, 0.08, 0, 7.95, zf);
+      } else {
+        poly(WM, [[-dw, dY0], [dw, dY0], [dw, dYe], [0, dYr], [-dw, dYe]], [[[dq.x0, dq.y0], [dq.x0, dq.y1], [dq.x1, dq.y1], [dq.x1, dq.y0]]], 0.16, 0, 0, zf, 0);
+        for (const sx of [-1, 1]) sub(sx * (dw - 0.06), 0, 0, PI / 2, () => poly(WM, [[-zf, dY0], [-zf, dYe], [-1.15, dYe]], null, 0.12, 0, 0, 0, 0));
+        if (stage === 2) { sub(0, 0, 1.775, -PI / 2, () => battens({ len: 2.75, hs: 1.05, yE: 8.1, yR: 8.6, cx: 0, cz: 0, sp: 0.4 })); }
+        else sub(0, 0, 1.775, -PI / 2, () => gableSlabs(tile, { len: 2.75, th: 0.04, hs: 1.05, yE: 8.1, yR: 8.6, cx: 0, cz: 0, off: 0.05 }));
+        if (stage >= 3) sub(0, 0, zf + 0.08, 0, () => win(dq, Object.assign({ frame: 0xf0ebdd, panes: 'cross', glass: stage === 4 }, WZ, { z: -0.08 })));
+      }
+      // кровля основной крыши
+      if (stage === 2) { battens(Object.assign({ sp: 0.38 }, RO)); gableSlabs(col(0x25272b), Object.assign({}, RO, { th: 0.012, off: 0.0, len: 11.8, only: -1 })); }
+      if (stage >= 3) {
+        gableSlabs(tile, Object.assign({}, RO, { off: 0.08 }));
+        for (const sd of [1, -1]) { const dn = [0, -Math.sin(al), sd * Math.cos(al)], n = [0, Math.cos(al), sd * Math.sin(al)]; halfRound(col(0x8b3f2a), 11.95, 0.17, 0, P.yR + 0.1 + 0, 0); void dn; void n; break; }
+        for (const sd of [1, -1]) { bx(trim, 11.9, 0.2, 0.03, 0, P.yE - 0.06, sd * (P.hs + 0.02)); gutter(-5.6, 5.6, P.yE - 0.03, sd * (P.hs + 0.03), sd); }
+        for (const sx of [-1, 1]) for (const sd of [1, -1]) beam(trim, [sx * 5.97, P.yE - 0.04, sd * (P.hs + 0.01)], [sx * 5.97, P.yR + 0.06, 0], 0.2, 0.04, [1, 0, 0]);
+        // porch roof
+        const al2 = Math.atan2(1.15, 2.5), L2 = Math.hypot(2.5, 1.15);
+        if (stage >= 3) bx(tile, 4.7, 0.05, L2 + 0.35, pcx, 3.38 + 0.025 * Math.cos(al2) + 0.03, 5.3, 0, al2);
+      }
+      // дымовая труба
+      const cTop = stage === 2 ? 9.4 : 10.5, cx = 3.8, bk = tex('cn_brick', 0xd8c4b8, 2.0, 1.2, 'b');
+      bx(bk, 0.95, cTop - 7.2, 0.8, cx, (cTop + 7.2) / 2, 0); if (stage === 4) { bx(conc, 1.15, 0.12, 1.0, cx, cTop + 0.06, 0); for (const dx of [-0.2, 0.2]) cyl(col(0xb25a36), 0.11, 0.13, 0.4, cx + dx, cTop + 0.32, 0, 12); }
+      // ================= окна и двери
+      tag('окна и двери');
+      const fit = (k, list, st) => list.forEach((q, i) => {
+        const door = q.y0 < 0.01;
+        if (door) return;
+        if (q.y0 > 6) { return; }
+        if (st === 3) { const m = (i + (k === 'front' ? 0 : k === 'back' ? 1 : 2)) % 3; if (m === 0) return; onWall(k, () => win(q, Object.assign({ panes: 'cross', glass: m === 2, frame: 0xece3cf }, WZ))); }
+        else onWall(k, () => win(q, Object.assign({ panes: q.y0 > 3 ? 'two' : 'cross', frame: 0xf0ebdd, simple: !(k === 'front' && q.y0 < 3) }, WZ)));
+      });
+      if (stage >= 3) {
+        for (const k of ['front', 'back', 'right', 'left']) fit(k, HOPS[k], stage);
+        for (const k of ['right', 'left']) { const q = HOPS[k][2]; onWall(k, () => win(q, Object.assign({ panes: 'one', glass: stage === 4, frame: 0xf0ebdd, trim: false, simple: true }, WZ))); }
+        const fd = HOPS.front[0], bd = HOPS.back[0];
+        if (stage === 4) {
+          onWall('front', () => panelDoor(fd, { z: -0.08, glass: true })); onWall('back', () => panelDoor(bd, { z: -0.08, tint: 0x5a3a24 }));
+          // ставни
+          const sh = tex('cn_boards', 0x44705a, 1.6, 2.4, 'a');
+          onWall('front', () => { for (const q of HOPS.front) { if (q.y0 < 0.01) continue; for (const sd of [-1, 1]) bx(sh, 0.5, q.y1 - q.y0, 0.04, sd < 0 ? q.x0 - 0.37 : q.x1 + 0.37, (q.y0 + q.y1) / 2, 0.04); } });
+          onWall('right', () => { const q = HOPS.right[0]; for (const sd of [-1, 1]) bx(sh, 0.5, q.y1 - q.y0, 0.04, sd < 0 ? q.x0 - 0.37 : q.x1 + 0.37, (q.y0 + q.y1) / 2, 0.04); });
+        } else {
+          onWall('front', () => { const q = fd, w = q.x1 - q.x0; for (const x of [q.x0, q.x1]) bx(trim, 0.08, 2.2, 0.14, x, 1.1, -0.1); bx(trim, w + 0.1, 0.08, 0.14, (q.x0 + q.x1) / 2, 2.2, -0.1); });
+          onWall('back', () => { const q = bd, w = q.x1 - q.x0; for (const x of [q.x0, q.x1]) bx(trim, 0.08, 2.15, 0.14, x, 1.08, -0.1); bx(trim, w + 0.1, 0.08, 0.14, (q.x0 + q.x1) / 2, 2.15, -0.1); });
+        }
+      }
+      // ================= ступени, перила (стадии 3,4)
+      tag('ступени, перила (стадии 3,4)');
+      if (stage >= 3) for (let i = 0; i < 3; i++) { const top = 0.4 - i * 0.14; bx(stone, 1.9, top, 0.34, pcx, top / 2, 6.3 + i * 0.34); }
+      if (stage === 4) {
+        const wh = col(0xf0ebdd);
+        // перила крыльца
+        const rail = (xa, za, xb, zb) => { const L = Math.hypot(xb - xa, zb - za), n = Math.max(1, Math.round(L / 0.2)), ry = Math.atan2(xb - xa, zb - za) - PI / 2; sub(xa, 0, za, ry + PI, () => { bx(wh, L, 0.07, 0.09, -L / 2, 1.5, 0); bx(wh, L, 0.05, 0.07, -L / 2, 0.68, 0); for (let i = 0; i <= n; i++) bx(wh, 0.04, 0.8, 0.04, -i * L / n, 1.09, 0); }); };
+        rail(px0 + 0.1, 6.05, -2.3, 6.05); rail(-0.5, 6.05, px1 - 0.1, 6.05); rail(px0 + 0.1, 6.05, px0 + 0.1, 4.0); rail(px1 - 0.1, 6.05, px1 - 0.1, 4.0);
+        for (const [x, z] of [[-2.3, 6.05], [-0.5, 6.05]]) bx(wh, 0.12, 1.1, 0.12, x, 1.05, z);
+        for (const x of [px0 + 0.1, px1 - 0.1]) { bx(wh, 0.26, 0.1, 0.26, x, 0.58, 6.05); }
+        // цветочные ящики
+        for (const q of [HOPS.front[1], HOPS.front[3]]) onWall('front', () => { const cx2 = (q.x0 + q.x1) / 2; bx(col(0x6b4a30), 1.3, 0.2, 0.22, cx2, q.y0 - 0.2, 0.2); for (let i = 0; i < 6; i++) put(col([0xd8334a, 0xe8c030, 0xd8334a, 0xf0f0e8][i % 4]), new T.OctahedronGeometry(0.09, 0), cx2 - 0.55 + i * 0.22, q.y0 - 0.04, 0.2); });
+        // фонарь у двери
+        onWall('front', () => { bx(K.dark, 0.14, 0.22, 0.14, 5.0, 2.5, 0.07); sph(col(0xffe6a0), 0.06, 5.0, 2.5, 0.14, 1, 1.3, 1, 8, 6); });
+      }
+      // ================= водосточные трубы
+      tag('водосточные трубы');
+      if (stage >= 3) { for (const [x, z, sd] of [[-5.62, 4.1, 1], [5.62, -4.1, -1]]) { cyl(col(0x777b80), 0.045, 0.045, 5.3, x, 2.65, z, 8); tube(col(0x777b80), [x, 5.3, z], [x + Math.sign(x) * 0.28, 5.85, z + sd * 0.5], 0.045, 8); cyl(col(0x777b80), 0.045, 0.045, 0.3, x + Math.sign(x) * 0.28, 5.95, z + sd * 0.53, 8); } }
+      // ================= реквизит по стадиям
+      tag('реквизит по стадиям');
+      if (stage === 1) {
+        boardStack(8.6, 1.4, PI / 2, 4.2, 6, M.pine(), 5); boardStack(-8.4, -3.4, 0.2, 3.6, 4, M.pine(), 6); sawhorse(7.6, -5.2, 0.4); sawhorse(8.8, -4.6, -0.1); bx(pine, 2.4, 0.04, 0.2, 8.2, 0.94, -4.9, 0.3);
+        ladder(3.4, 5.5, 0.05, 0.27, 5.0); sandGravel(-8.8, 4.0, 0.4); wheelbarrow(-6.8, 6.6, 2.4);
+        for (let i = 0; i < 7; i++) bx(pine, 0.6 + (i * 0.37) % 0.8, 0.04, 0.12, 5.8 + (i % 3) * 0.2, 0.03 + (i % 2) * 0.04, 6.2 + i * 0.12, i * 0.9);
+      }
+      if (stage === 2) {
+        sub(5.5, 0, 4.9, PI / 2, () => scaffold(9.8, 4, 3)); mixer(-7.4, 4.4, 0.9); sandGravel(-9.0, 1.8, 1.4); wheelbarrow(-5.6, 7.0, 0.2); cementBags(-8.2, 6.4, 8, 0.3);
+        brickPack(8.8, 5.4, 0.3, brick); brickPack(9.8, 4.0, -0.2, brick); brickPack(8.4, 7.2, 0.1, brick); boardStack(-8.6, -3.6, 0.1, 3.6, 3, M.pine(), 6);
+        for (let i = 0; i < 4; i++) bx(pine, 2.4 - i * 0.3, 0.05, 0.14, -7.4, 0.14 + i * 0.05, -6.0 + i * 0.01);
+      }
+      if (stage === 3) {
+        sub(5.5, 0, 4.9, PI / 2, () => scaffold(9.8, 4, 3));
+        bucket(-3.0, 7.0, 0x3c7a46, false); bucket(-2.5, 7.2, 0xeee9dc, true); bucket(-2.6, 6.8, 0x8b2f26, true); bucket(-3.5, 7.1, 0xeee9dc, false);
+        sawhorse(-6.4, 6.4, 0.3); bx(pine, 2.0, 0.04, 0.2, -6.4, 0.86, 6.4, 0.3); hammer(-6.1, 0.88, 6.4, 0.8);
+        dumpster(9.0, -3.4, 0.5); palletsAt(-8.4, -3.6, 0.2, 4, 3); palletsAt(-8.6, -1.4, -0.1, 2, 8); cementBags(8.6, 7.0, 4, -0.3);
+        sub(-6.8, 0, 3.2, 0, () => { for (let i = 0; i < 2; i++) { palletsAt(0, i * 1.1, 0.1, 1, 3 + i); bx(tile, 1.0, 0.5, 0.8, 0, 0.144 + 0.25, i * 1.1); } });
+        sub(-4.6, 0, 7.4, 0.3, () => { sub(0, 0, 0, 0, () => { cur.rotation.x = -0.2; doorLeaf(tex('cn_boards', 0x6b4328, 1.6, 2.4, 'b'), 1.1, 2.15, 0, 1.075, 0); }); });
+        for (let i = 0; i < 6; i++) bx(pine, 1.0 + (i * 0.3) % 0.9, 0.04, 0.1, 4.0 + i * 0.5, 0.13, 8.0 + (i % 2) * 0.3, i * 1.3);
+      }
+      if (stage === 4) {
+        // дорожка, площадка, забор, кусты
+        for (let i = 0; i < 4; i++) bx(stone, 1.2, 0.06, 0.6, pcx + (i % 2 ? 0.05 : -0.05), 0.03, 8.1 + i * 0.35 * 1.0);
+        bx(conc, 4.6, 0.06, 1.4, pcx, 0.03, 7.4);
+        picketFence(-6.9, 9.5, pcx - 0.55, 9.5); picketFence(pcx + 0.55, 9.5, 6.9, 9.5); picketFence(-6.9, 9.5, -6.9, 6.2); picketFence(6.9, 9.5, 6.9, 6.2);
+        bx(col(0xf0ebdd), 0.1, 1.05, 0.1, pcx - 0.6, 0.52, 9.5); bx(col(0xf0ebdd), 0.1, 1.05, 0.1, pcx + 0.6, 0.52, 9.5);
+        for (const x of [-5.4, 3.0, 5.6]) bush(x, 4.5, 0.55);
+        for (const x of [-6.2, 6.3]) { bush(x, 3.2, 0.7, 0x2f5a28); bush(x, 7.0, 0.6); }
+        flowers(-4.6, 5.9, 2.6, 0.7, [0xd8334a, 0xf0c030, 0xf0f0e8, 0xd070c0]); flowers(3.6, 5.9, 3.0, 0.7, [0xf0c030, 0xd8334a, 0xf0f0e8]);
+        for (const x of [-6.0, 6.0]) bush(x, -4.6, 0.8, 0x2f5a28);
+        barrel(-5.95, 4.7, 0x7c5a3a);
+      }
+    });
     return finish(g);
   }
 

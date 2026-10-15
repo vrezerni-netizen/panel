@@ -352,7 +352,7 @@
   };
   const VEH_KEYS = ['tractor', 'combine', 'waterer', 'spreader', 'logger', 'grinder'];
   const VEH_START = { tractor: [-468, 255], combine: [-449, 255], waterer: [-430, 255], spreader: [-411, 255], logger: [-170, -116], grinder: [-188, -116] };  // стоянка у поля «Моя ферма»
-  const VEH_VER = 6;
+  const VEH_VER = 7;   // 7: стоянка техники переехала к первому полю — все машины встают на новое место
   const ROAD_N = -100; // северная дорога вдоль леса и целины
   const SITE_POS = [[165, -135], [198, -135], [231, -135]]; // три стройплощадки
   const SAWMILL_POS = [-28, -128];
@@ -394,6 +394,16 @@
     }
   }
 
+  /** Земля: трава с плавными пятнами света, тени и сухих мест, чтобы не было видно однообразного повтора текстуры. */
+  function groundMat() {
+    const m = texMat('grass', 1300, 1300, 0x6fae4f).clone();
+    m.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;\nfloat h21(vec2 p){return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);}\nfloat vn(vec2 p){vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);}')
+        .replace('#include <color_fragment>', '#include <color_fragment>\nfloat gn = vn(vWp.xz * 0.011) * 0.5 + vn(vWp.xz * 0.045) * 0.32 + vn(vWp.xz * 0.19) * 0.18;\ndiffuseColor.rgb *= mix(vec3(0.78, 0.88, 0.68), vec3(1.14, 1.09, 0.88), gn);');
+    };
+    return m;
+  }
   function create(canvas, labelBox, cb, layout0) {
     const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
@@ -406,7 +416,7 @@
     scene.add(sun); scene.add(sun.target);
     const skyDome = new T.Mesh(new T.SphereGeometry(2600, 24, 12), new T.ShaderMaterial({ side: T.BackSide, depthWrite: false, fog: false, uniforms: { top: { value: new T.Color(0x5c8fb8) }, bot: { value: new T.Color(0xc6d8e2) } }, vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }', fragmentShader: 'uniform vec3 top; uniform vec3 bot; varying float h; void main(){ gl_FragColor = vec4(mix(bot, top, pow(clamp(h,0.0,1.0), 0.6)), 1.0); }' }));
     skyDome.renderOrder = -1; skyDome.frustumCulled = false; scene.add(skyDome);
-    const ground = new T.Mesh(new T.PlaneGeometry(5200, 5200), texMat('grass', 1300, 1300, 0x6fae4f)); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+    const ground = new T.Mesh(new T.PlaneGeometry(5200, 5200), groundMat()); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
     const world = new T.Group(); scene.add(world);
     const W = { mode: 'map', cb, renderer, scene, camera, time: 0, S: null, inputOn: true, lite: !!(root.matchMedia && root.matchMedia('(hover:none) and (pointer:coarse)').matches) };
@@ -924,8 +934,7 @@
         if (lv > 0 && (!vehs[k] || vehs[k].lv !== lv)) {
           const old = vehs[k], g = MODEL('vehicle', k, { level: lv }, () => { const q = vehicleModel(k, lv > 5); q.scale.setScalar(2.6); return q; });
           g.traverse((o) => { o.userData.veh = k; });
-          if (!S.veh[k]) S.veh[k] = { x: VEH_START[k][0], z: VEH_START[k][1], r: 0, lv: 2 };
-          else if (!S.veh[k].lv) { const v0 = S.veh[k]; v0.lv = 2; if (Math.abs(v0.z - 255) < 14 && v0.x > -300 && v0.x < -205) v0.x += BAY[0] + 253; }   // старые сохранения: техника переезжает вслед за стоянкой
+          if (!S.veh[k]) { const bayK = ['tractor', 'combine', 'waterer', 'spreader'].indexOf(k) >= 0; S.veh[k] = { x: VEH_START[k][0] + (bayK ? BAY[0] + 439 : 0), z: VEH_START[k][1] + (bayK ? BAY[1] - 255 : 0), r: 0 }; }
           g.position.set(S.veh[k].x, 0.1, S.veh[k].z); g.rotation.y = S.veh[k].r; world.add(g);
           if (old) { world.remove(old.g); old.g = g; old.lv = lv; } else vehs[k] = { g, key: k, lv, lab: addLabel('map', '', new T.Vector3(), 'vlbl'), anim: null };
           vehs[k].g = g; vehs[k].lv = lv;
@@ -1248,7 +1257,7 @@
       set(x, z, r) { POND[0] = x; POND[1] = z; BIG_ROT.pond = r; bGroups.pondG.position.set(x, 0, z); bGroups.pondG.rotation.y = r; },
       bounds: () => rectB(POND[0], POND[1], 27, 21), hit(x, z) { return Math.hypot((x - POND[0]) / 27, (z - POND[1]) / 21) < 1; } });
     regBig('bay', { name: 'Стоянка техники', canRot: true, area: 1000, get: () => [BAY[0], BAY[1], BIG_ROT.bay || 0],
-      set(x, z, r) { BAY[0] = x; BAY[1] = z; BIG_ROT.bay = r; bGroups.bayG.position.set(x, 0, z); bGroups.bayG.rotation.y = r; townLabels.bay.pos.set(x, 9, z); },
+      set(x, z, r) { const dx = x - BAY[0], dz = z - BAY[1]; if ((dx || dz) && W.S && W.S.veh) for (const k of ['tractor', 'combine', 'waterer', 'spreader']) { const q = W.S.veh[k]; if (q && vehs[k] && Math.abs(q.x - BAY[0]) < 45 && Math.abs(q.z - BAY[1]) < 16) setVehPos(k, q.x + dx, q.z + dz, null); } BAY[0] = x; BAY[1] = z; BIG_ROT.bay = r; bGroups.bayG.position.set(x, 0, z); bGroups.bayG.rotation.y = r; townLabels.bay.pos.set(x, 9, z); },
       bounds: () => rectB(BAY[0], BAY[1], 36, 7), hit(x, z) { return inRect(this, x, z); } });
     // «удалить» большой объект = спрятать (его кнопки остаются в меню «Город»); вернуть можно в списке «Объекты»
     const HIDEF = {};

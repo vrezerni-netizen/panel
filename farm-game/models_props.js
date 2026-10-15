@@ -604,14 +604,14 @@
   const lerpC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
   // ---------------------------------------------------------------- атлас листвы: 8x8 ячеек по 128 px (цвет + маска прозрачности)
-  const ATL = 1024, CELL = 128, GN = 8, LEVK = [0.62, 0.97, 1.25];     // LEVK: яркость ячеек «тень / середина / свет»
+  const ATL = 1024, CELL = 128, GN = 8, LEVK = [0.6, 0.94, 1.16];     // LEVK: яркость ячеек «тень / середина / свет»
   const SPEC = {      // n листьев, len/wid в px, wpos — где самая широкая часть, lo/hi — цвета тени и света, nc — число пучков в ячейке
-    oak:    { seed: 1, n: 230, len: 15, wid: 7.2, wpos: 0.55, nc: 7, lo: [40, 70, 28],  hi: [98, 138, 48],  yel: 0.06, lobes: 1 },
-    birch:  { seed: 2, n: 170, len: 13, wid: 7,   wpos: 0.38, nc: 8, lo: [80, 112, 44], hi: [150, 176, 74], yel: 0.12 },
-    fruit:  { seed: 3, n: 190, len: 17, wid: 7.5, wpos: 0.5,  nc: 7, lo: [46, 82, 32],  hi: [104, 146, 56], yel: 0.03 },
-    poplar: { seed: 4, n: 210, len: 14, wid: 7.5, wpos: 0.42, nc: 7, lo: [62, 96, 42],  hi: [136, 168, 84], yel: 0.05 },
-    bush:   { seed: 5, n: 230, len: 14, wid: 7,   wpos: 0.5,  nc: 6, lo: [32, 64, 26],  hi: [86, 128, 44],  yel: 0.02 },
-    pine:   { seed: 6, lo: [26, 54, 38], hi: [84, 122, 62] },
+    oak:    { seed: 1, n: 230, len: 15, wid: 7.2, wpos: 0.55, nc: 7, lo: [40, 68, 28],  hi: [88, 124, 46],  yel: 0.06, lobes: 1 },
+    birch:  { seed: 2, n: 170, len: 13, wid: 7,   wpos: 0.38, nc: 8, lo: [78, 108, 42], hi: [138, 166, 70], yel: 0.12 },
+    fruit:  { seed: 3, n: 190, len: 17, wid: 7.5, wpos: 0.5,  nc: 7, lo: [44, 78, 30],  hi: [94, 134, 52], yel: 0.03 },
+    poplar: { seed: 4, n: 210, len: 14, wid: 7.5, wpos: 0.42, nc: 7, lo: [60, 92, 40],  hi: [124, 156, 80], yel: 0.05 },
+    bush:   { seed: 5, n: 230, len: 14, wid: 7,   wpos: 0.5,  nc: 6, lo: [32, 62, 26],  hi: [80, 118, 42],  yel: 0.02 },
+    pine:   { seed: 6, lo: [26, 52, 38], hi: [76, 112, 58] },
   };
   function leafPath(g, len, wid, wp) {
     g.beginPath(); g.moveTo(0, 0);
@@ -632,9 +632,9 @@
   }
   function paintLeaves(g, ox, oy, mask, P, leaves, level, dens) {
     g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
-    g.fillStyle = mask ? '#000' : rgbs(P.lo, 0.5 * LEVK[level]); g.fillRect(ox, oy, CELL, CELL);
+    g.fillStyle = mask ? '#000' : rgbs(lerpC(P.lo, P.hi, 0.2), 0.7 * LEVK[level]); g.fillRect(ox, oy, CELL, CELL);
     for (const l of leaves) {
-      const up = 1 - l.y / CELL, t = clamp(0.22 + 0.36 * l.rho + 0.4 * (up - 0.5) + (l.t - 0.5) * 0.55, 0, 1);
+      const up = 1 - l.y / CELL, t = clamp(0.34 + 0.12 * l.rho + 0.42 * (up - 0.5) + (l.t - 0.5) * 0.7, 0, 1);
       let c = lerpC(P.lo, P.hi, t); if (l.yel) c = lerpC(c, [150, 148, 54], 0.55);
       g.save(); g.translate(ox + l.x, oy + l.y); g.rotate(l.a); g.translate(-l.len * 0.5, 0);
       g.fillStyle = mask ? '#fff' : rgbs(c, LEVK[level] * (l.under ? 0.72 : 1));
@@ -752,9 +752,8 @@
     _TR = {
       leaf: new T.MeshLambertMaterial({ map: tex, alphaTest: 0.4, side: T.DoubleSide }),
       bark: new T.MeshLambertMaterial({ map: oakT, color: 0xd9ccb8 }), barkPine: new T.MeshLambertMaterial({ map: oakT, color: 0xd8a888 }), barkBirch: new T.MeshLambertMaterial({ map: birchT, color: 0xffffff }),
-      atlas: tex, uv(key) { const [c, rr] = cells[key], p = 1.5; return [(c * CELL + p) / ATL, 1 - ((rr + 1) * CELL - p) / ATL, ((c + 1) * CELL - p) / ATL, 1 - (rr * CELL + p) / ATL]; },
+      uv(key) { const [c, rr] = cells[key], p = 1.5; return [(c * CELL + p) / ATL, 1 - ((rr + 1) * CELL - p) / ATL, ((c + 1) * CELL - p) / ATL, 1 - (rr * CELL + p) / ATL]; },
     };
-    if (window.__dbgTrees) window.__dbgTrees = _TR; /*DBG*/
     return _TR;
   }
 
@@ -850,20 +849,20 @@
   }
   /** Облако карточек по поверхности эллипсоида-«доли» кроны. L {c, rad, n}; crown — центр кроны для сферических нормалей */
   function lobeCards(B, r, K, sp, L, crown, o) {
-    const [cx, cy, cz] = L.c, [rx, ry, rz] = L.rad, ga = 2.399963, ph = r() * TAU, n = L.n, sz = o.size, asp = o.asp || 0.92;
+    const [cx, cy, cz] = L.c, [rx, ry, rz] = L.rad, ga = 2.399963, ph = r() * TAU, n = L.n, sz = o.size, asp = o.asp || 0.92, bias = (o.lv || 0) + (r() - 0.5) * 0.3;
     for (let i = 0; i < n; i++) {
       const yy = 1 - (i + 0.5) / n * 2, q = Math.sqrt(1 - yy * yy), a = ph + i * ga;
       let dx = Math.cos(a) * q + (r() - 0.5) * 0.35, dy = yy + (r() - 0.5) * 0.35, dz = Math.sin(a) * q + (r() - 0.5) * 0.35;
       const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
       if (dy < -0.45 && r() < (o.skipBelow == null ? 0.45 : o.skipBelow)) continue;
-      const inner = r() < (o.inner == null ? 0.18 : o.inner), spike = !inner && r() < (o.spike == null ? 0.07 : o.spike);
+      const inner = r() < (o.inner == null ? 0.18 : o.inner), spike = !inner && r() < (o.spike == null ? 0 : o.spike);
       const k = inner ? 0.45 + 0.25 * r() : spike ? 1.0 + 0.12 * r() : (o.k || 0.9) + 0.2 * r();
       const px = cx + dx * rx * k, py = cy + dy * ry * k, pz = cz + dz * rz * k;
       let nf, hint = null;
       if (spike) {                                   // торчащая наружу веточка: плоскость содержит направление «наружу» (ломает силуэт кроны)
         const tx = r() - 0.5, ty = r() - 0.5, tz = r() - 0.5, dd = tx * dx + ty * dy + tz * dz, tn = NRM(tx - dd * dx, ty - dd * dy, tz - dd * dz); nf = NRM(dx * 0.85 + tn[0] * 0.5, dy * 0.85 + tn[1] * 0.5, dz * 0.85 + tn[2] * 0.5); hint = [dx, dy, dz];
-      } else nf = NRM(dx + (r() - 0.5) * 0.3, dy + (r() - 0.5) * 0.3, dz + (r() - 0.5) * 0.3);
-      const t = 0.5 + 0.5 * dy + (r() - 0.5) * 0.55 + (o.lv || 0) - (inner ? 0.4 : 0), lv = t < 0.3 ? 0 : t < 0.64 ? 1 : 2, uv = K.uv(sp + (r() < 0.5 ? 0 : 1) + lv);
+      } else nf = NRM(dx + (r() - 0.5) * 0.4, dy + (r() - 0.5) * 0.4, dz + (r() - 0.5) * 0.4);
+      const t = 0.5 + 0.5 * dy + (r() - 0.5) * 0.55 + bias - (inner ? 0.4 : 0), lv = t < 0.3 ? 0 : t < 0.64 ? 1 : 2, uv = K.uv(sp + (r() < 0.5 ? 0 : 1) + lv);
       if (r() < 0.5) { const tmp = uv[0]; uv[0] = uv[2]; uv[2] = tmp; }
       const sc = lerp(sz[0], sz[1], r()) * (spike ? 0.8 : 1), roll = hint ? (r() - 0.5) * 0.7 : Math.abs(nf[1]) > 0.8 ? r() * TAU : (r() - 0.5) * 2.2;
       const nfn = (vx, vy, vz) => {                  // нормаль освещения: «шар» доли + шар кроны + нормаль карточки
@@ -900,7 +899,7 @@
     for (const L of lobes) {
       if (L.limb || L.top) blobTo(Lf, core, L.c[0], L.c[1] - 0.1, L.c[2], L.rad[0] * 0.55, L.rad[1] * 0.6, L.rad[2] * 0.55, o.seed + 5, 0, 0.14);
       if (L.limb && !low) limb(W, [fork[0], fork[1] - r() * 0.5, fork[2]], [lerp(fork[0], L.c[0], 0.85), L.c[1] - 0.8, lerp(fork[2], L.c[2], 0.85)], 0.26, 0.06, 6, 0.45);
-      lobeCards(Lf, r, K, 'oak', L, crown, { size: low ? [1.45, 2.05] : [1.15, 1.65], inner: low ? 0.25 : 0.3, k: 0.88, cy: 1.15, skipBelow: 0.15, spike: low ? 0.03 : 0.07 });
+      lobeCards(Lf, r, K, 'oak', L, crown, { size: low ? [1.45, 2.05] : [1.15, 1.65], inner: low ? 0.25 : 0.3, k: 0.88, cy: 1.15, skipBelow: 0.15, spike: 0 });
     }
     if (!low) {
       limb(W, fork, [lean[0] * 1.1, 7.6, lean[1] * 1.1], 0.28, 0.07, 6, 0.1);

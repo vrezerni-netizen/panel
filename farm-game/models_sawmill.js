@@ -138,7 +138,7 @@
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       let dx = 0, dy = 0;
       for (const w of W) { if (!w.kx && !w.ky) continue; const c = Math.cos(((w.kx * x + w.ky * y) / S) * TAU + w.ph) * w.a * TAU / S; dx += c * w.kx; dy += c * w.ky; }
-      dx *= 6; dy *= 6; const len = Math.sqrt(dx * dx + dy * dy + 1), i = (y * S + x) * 4;
+      dx *= 2.2; dy *= 2.2; const len = Math.sqrt(dx * dx + dy * dy + 1), i = (y * S + x) * 4;
       im.data[i] = (-dx / len * 0.5 + 0.5) * 255; im.data[i + 1] = (-dy / len * 0.5 + 0.5) * 255; im.data[i + 2] = (1 / len * 0.5 + 0.5) * 255; im.data[i + 3] = 255;
     }
     g.putImageData(im, 0, 0);
@@ -171,7 +171,7 @@
   function bx(g, m, x, y, z, w, h, d, rx, ry, rz) { const t = m.userData && m.userData.tile; return t ? add(g, boxUV(w, h, d, t, x * 7.31 + z * 3.17 + y * 1.3), m, x, y, z, rx, ry, rz) : add(g, unitBox, m, x, y, z, rx, ry, rz, w, h, d); }
   function cy(g, m, x, y, z, r, h, seg, rx, ry, rz) { return add(g, cylG(seg || 14), m, x, y, z, rx, ry, rz, r * 2, h, r * 2); }
   function cone(g, m, x, y, z, rb, rt, h, seg, rx, ry, rz) { return add(g, new T.CylinderGeometry(rt, rb, h, seg || 16), m, x, y, z, rx, ry, rz); }
-  function ball(g, m, x, y, z, r, sx, sy, sz) { const k = 'b'; const geo = sphCache[k] || (sphCache[k] = new T.SphereGeometry(1, 9, 6)); return add(g, geo, m, x, y, z, 0, 0, 0, r * (sx || 1), r * (sy || 1), r * (sz || 1)); }
+  function ball(g, m, x, y, z, r, sx, sy, sz) { const k = 'b'; const geo = sphCache[k] || (sphCache[k] = new T.SphereGeometry(1, 8, 5)); return add(g, geo, m, x, y, z, 0, 0, 0, r * (sx || 1), r * (sy || 1), r * (sz || 1)); }
   const _v = new T.Vector3(), _z = new T.Vector3(0, 0, 1), _y = new T.Vector3(0, 1, 0);
   /** брус между точками a и b, сечение t1 (по x) × t2 (по y) */
   function bm(g, m, a, b, t1, t2) { _v.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); const len = _v.length(); const o = bx(g, m, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, t1, t2, len); o.rotation.set(0, 0, 0); o.quaternion.setFromUnitVectors(_z, _v.clone().normalize()); return o; }
@@ -234,6 +234,8 @@
     (extras || []).forEach((e) => e && out.add(e));
     return out;
   }
+  /** сдвиг содержимого, чтобы начало координат было в центре габарита */
+  function centred(out, dx, dz) { const w = new T.Group(); out.position.set(dx, 0, dz); w.add(out); return w; }
   const _cache = {};
   function reg(kind, name, fn) {
     FM.register(kind, name, (opts) => { const key = kind + ':' + name; if (!_cache[key]) _cache[key] = fn(opts || {}); return _cache[key].clone(true); });
@@ -289,8 +291,11 @@
     for (let i = 0; i < 3; i++) bx(g, steelM, XM, 1.6 + i * 1.5, SZ0 + 0.02, 12.8, 0.08, 0.05);                 // ригели обшивки на внутренней стене
     // вентиляционные жалюзи и окна на задней стене
     for (const x of [-3.6, 2.2, 5.4]) { bx(g, V(0x2a3a42), x, 4.5, SZ0 - 0.11, 1.5, 0.7, 0.03); for (let k = 0; k < 4; k++) bx(g, steelM, x, 4.25 + k * 0.17, SZ0 - 0.14, 1.56, 0.04, 0.05, 0.4); }
+    for (const x of XS) bx(g, steelM, x, (0.8 + EH) / 2, SZ0 - 0.13, 0.22, EH - 0.8, 0.06);                         // наружные пилястры
+    bx(g, galvM, XM, 0.86, SZ0 - 0.12, 13.2, 0.1, 0.12); bx(g, galvM, XM, EH + 0.02, SZ0 - 0.12, 13.2, 0.1, 0.12);   // отливы
+    bx(g, V(0x8a9096), -2.2, 1.6, SZ0 - 0.2, 0.7, 0.9, 0.22); bx(g, V(0x5c6168), -2.2, 1.6, SZ0 - 0.32, 0.6, 0.8, 0.03); rod(g, black, [-2.2, 2.05, SZ0 - 0.2], [-2.2, 5.0, SZ0 - 0.2], 0.03, 6); // шкаф и кабель-канал
     // дверь в торце
-    bx(g, V(0x4d5f56), SX0 - 0.1, 1.15, -4.4, 0.06, 2.0, 0.95); bx(g, V(0xd8d4c4), SX0 - 0.13, 1.15, -4.4, 0.03, 2.1, 1.1); bx(g, concM, SX0 - 0.35, 0.12, -4.4, 0.7, 0.24, 1.4);
+    bx(g, V(0x4d5f56), SX0 - 0.1, 1.15, -4.4, 0.06, 2.0, 0.95); for (const dz of [-0.55, 0.55]) bx(g, V(0xd8d4c4), SX0 - 0.13, 1.15, -4.4 + dz, 0.05, 2.1, 0.1); bx(g, V(0xd8d4c4), SX0 - 0.13, 2.22, -4.4, 0.05, 0.1, 1.2); bx(g, concM, SX0 - 0.35, 0.12, -4.4, 0.7, 0.24, 1.4); bx(g, steelM, SX0 - 0.15, 1.1, -4.12, 0.04, 0.12, 0.05);
     // --- рельсы и тележка (каретка) вдоль X
     const rz1 = -0.65, rz2 = 0.85;
     for (let x = -5.5; x < 6.4; x += 0.9) bx(g, timberD, x, FL + 0.07, (rz1 + rz2) / 2, 0.2, 0.14, 2.1);
@@ -313,7 +318,7 @@
     bx(g, steelM, SXP + 0.5, 2.9, -1.25, 0.14, 3.5, 0.18);                                              // направляющая линейка
     bx(g, yellow, SXP - 0.5, 3.1, -1.25, 0.12, 0.5, 0.14);
     // опилки вокруг
-    for (let i = 0; i < 4; i++) add(g, blobG, V(0xcaa66a), SXP + (R() - 0.5) * 3.2, FL, -1.3 - R() * 1.4, 0, R() * 3, 0, 0.7 + R() * 0.5, 0.2 + R() * 0.1, 0.6 + R() * 0.4);
+    for (let i = 0; i < 4; i++) add(g, blobG, V(0xcaa66a), SXP + (R() - 0.5) * 3.2, FL, -1.3 - R() * 1.4, 0, R() * 3, 0, 0.7 + R() * 0.5, 0.1 + R() * 0.08, 0.6 + R() * 0.4);
     // --- выходной рольганг/ленточный конвейер для досок через проём в восточной стене
     const BZ = -4.05;
     bx(g, rubber, 4.55, 1.0, BZ, 8.2, 0.07, 0.8); bx(g, steelM, 4.55, 0.92, BZ - 0.45, 8.3, 0.18, 0.08); bx(g, steelM, 4.55, 0.92, BZ + 0.45, 8.3, 0.18, 0.08);
@@ -362,7 +367,7 @@
       for (const y of [0.42, 1.78]) bx(g, timberD, (LX0 + LX1) / 2, y - 0.07, bz, 3.5, 0.1, 1.55);
       bx(g, lumberM, (LX0 + LX1) / 2 + 0.05, 0.42 + 0.58, bz, 3.3, 1.1, 1.3);
       if (R() < 0.8) bx(g, lumberM, (LX0 + LX1) / 2 - 0.1, 1.78 + 0.45, bz, 3.1 + R() * 0.2, 0.85, 1.3);
-      for (const x of [LX0 + 0.9, LX1 - 0.9]) { bx(g, steelM, x, 1.0, bz, 0.04, 1.14, 1.34); }
+      bx(g, steelM, LX0 + 0.9, 1.0, bz, 0.04, 1.14, 1.34);
     }
     // --- поддоны
     function pallet(px, py, pz, ry, c) {
@@ -371,7 +376,7 @@
       for (let i = 0; i < 5; i++) bx(pg, col, -0.5 + i * 0.25, 0.139, 0, 0.12, 0.022, 0.8);
       for (const x of [-0.55, 0, 0.55]) bx(pg, col, x, 0.011, 0, 0.12, 0.022, 0.8);
     }
-    for (let i = 0; i < 4; i++) pallet(-8.9, FL - 0.2 + i * 0.152 + 0.0, 3.3, 0.05 * i, 0xb89560 + i * 0x040302);
+    for (let i = 0; i < 3; i++) pallet(-8.9, i * 0.152, 3.3, 0.05 * i, 0xb89560 + i * 0x040302);
     pallet(-7.6, 0, 2.6, 0.5, 0xc2a066); pallet(-10.2, 0, 3.9, -0.2, 0xa88a58);
     pallet(LX0 + 0.8, FL - 0.02, LZ1 - 0.5, 0.1, 0xb89560); pallet(LX0 + 2.2, FL - 0.02, LZ1 - 0.5, 0.0, 0xc2a066); pallet(LX0 + 0.8, FL + 0.13, LZ1 - 0.5, 0.15, 0xad8d58);
     // --- дизельный бак в обваловании
@@ -382,7 +387,7 @@
     cy(g, steelM, DX - 0.3, 2.0, DZ, 0.17, 0.12, 12); cy(g, galvM, DX + 0.5, 2.0, DZ + 0.2, 0.08, 0.16, 8);
     bx(g, yellow, DX, 1.25, DZ + 0.73, 2.9, 0.08, 0.02); bx(g, steelM, DX + 1.1, 0.8, DZ + 0.78, 0.5, 0.7, 0.3);
     rod(g, black, [DX + 1.1, 1.0, DZ + 0.95], [DX + 1.5, 0.3, DZ + 1.4], 0.03, 6); bx(g, steelM, DX + 1.6, 0.3, DZ + 1.5, 0.08, 0.14, 0.2);
-    for (let i = 0; i < 3; i++) cy(g, V([0x2c4f8a, 0x8e3a2a, 0x2f6b46][i]), DX - 3.2 + i * 0.7, 0.45, DZ + 1.7, 0.27, 0.9, 14);
+    for (let i = 0; i < 3; i++) { cy(g, V([0x2c4f8a, 0x8e3a2a, 0x2f6b46][i]), DX - 1.7 + i * 0.62, 0.45, DZ + 1.75, 0.27, 0.9, 12); cy(g, steelM, DX - 1.7 + i * 0.62, 0.45, DZ + 1.75, 0.285, 0.05, 12); }
     // --- бревенчатый подъёмник (наклонный цепной транспортёр) подаёт брёвна с площадки к каретке
     const slopeA = Math.atan2(0.95, 5.6);
     for (const cxs of [-4.3, -1.2]) {
@@ -441,9 +446,7 @@
     const sign = new T.Mesh(new T.PlaneGeometry(6, 1.2), signM); sign.position.set(sx, sy, sz); sign.name = 'sign'; sign.userData.sign = true; sign.castShadow = false; sign.receiveShadow = true;
     // --- сборка
     const out = finish(g, 11, [mergeInto(lamps, lampM, false), mergeInto(gl, C.glassM(0xa9cbd8), false), sign]);
-    out.userData.sign = sign;
-    // стёкла окон: плоскости
-    return out;
+    return centred(out, 0.02, -0.3);
   }
 
   reg('building', 'sawmill', buildSawmill);
@@ -546,8 +549,7 @@
     cy(g, iron, 1.95, 1.9, pz1 - 0.15, 0.085, 0.3, 8); cy(g, iron, 1.95, 2.07, pz1 - 0.15, 0.11, 0.03, 8); cy(lamps, lampM, 1.95, 1.9, pz1 - 0.15, 0.06, 0.24, 8);
     // бочка с дождевой водой у угла
     cy(g, hutWoodD, -3.6, 0.5, zf + 0.7, 0.36, 1.0, 14); for (const y of [0.2, 0.8]) cy(g, iron, -3.6, y, zf + 0.7, 0.37, 0.04, 14);
-    const out = finish(g, 21, [mergeInto(lamps, lampM, false), mergeInto(gl, C.glassM(0xa9cbd8), false)]);
-    return out;
+    return centred(finish(g, 21, [mergeInto(lamps, lampM, false), mergeInto(gl, C.glassM(0xa9cbd8), false)]), 0.15, -0.3);
   }
   reg('building', 'loggerHut', buildHut);
 
@@ -571,7 +573,7 @@
 
   function buildPond() {
     const RX = 27, RZ = 21, NA = 72, R = lcg(5151), WL = 0.12;
-    const go = (a) => clamp(0.935 + 0.1 * (0.55 * pn(a, 4, 3) + 0.3 * pn(a, 9, 7) + 0.15 * pn(a, 17, 5) - 0.5), 0.88, 0.984);
+    const go = (a) => clamp(0.935 + 0.17 * (0.5 * pn(a, 3, 3) + 0.32 * pn(a, 7, 7) + 0.18 * pn(a, 15, 5) - 0.5), 0.8, 0.984);
     const bw = (a) => 0.105 + 0.06 * (pn(a, 6, 21) - 0.5);
     const at = (a, f) => [Math.cos(a) * RX * f, Math.sin(a) * RZ * f];
     const KY = [[0, 0.012], [0.15, 0.09], [0.4, 0.26], [0.62, 0.19], [0.8, 0.125], [0.9, 0.085], [1.0, 0.05]];
@@ -579,7 +581,7 @@
     const bankY = (s, x, z) => { const nz = ((vn(x * 0.17 + 3.1, z * 0.17 - 2.2) - 0.5) * 0.09 + (vn(x * 0.8, z * 0.8) - 0.5) * 0.03) * smooth(clamp(s / 0.2, 0, 1)); return Math.max(0.012, profY(s) + nz); };
     const CK = [[0, hexRGB(0x4f7a35)], [0.1, hexRGB(0x58803a)], [0.22, hexRGB(0x76804a)], [0.38, hexRGB(0x938867)], [0.52, hexRGB(0x7d6c4d)], [0.68, hexRGB(0x5d4a31)], [0.8, hexRGB(0x3d3023)], [0.92, hexRGB(0x2f2c20)], [1.0, hexRGB(0x252d22)]];
     const bankCol = (s, a, x, z) => {
-      let c = keyLerp(CK, s, lerpRGB); const m = 0.82 + 0.34 * vn(x * 0.5 + 7, z * 0.5) + (vn(x * 2.2, z * 2.2) - 0.5) * 0.18;
+      let c = keyLerp(CK, s, lerpRGB); const m = 0.66 * (0.82 + 0.34 * vn(x * 0.5 + 7, z * 0.5) + (vn(x * 2.2, z * 2.2) - 0.5) * 0.18);
       const moss = smooth(clamp((pn(a, 11, 77) - 0.45) * 4, 0, 1)) * smooth(clamp((s - 0.45) / 0.3, 0, 1)) * (1 - smooth(clamp((s - 0.85) / 0.15, 0, 1))); if (moss > 0) c = lerpRGB(c, hexRGB(0x5b7233), moss * 0.55);
       return [c[0] * m, c[1] * m, c[2] * m];
     };
@@ -608,7 +610,7 @@
       wRing.push(wpos.length / 3);
       for (let i = 0; i < NA; i++) {
         const a = (i / NA) * TAU, fe = go(a) - sW * bw(a), [x, z] = at(a, fe * u), t = k / (wF.length - 1), c = lerpRGB(shallow, deep, smooth(clamp(t * 1.15, 0, 1))), m = 0.94 + 0.12 * vn(x * 0.12 + 5, z * 0.12);
-        wpos.push(x, WL, z); wuv.push(x / 7, z / 7); wcol.push(c[0] * m, c[1] * m, c[2] * m, lerp(0.4, 0.98, smooth(clamp(t * 2.2, 0, 1))));
+        wpos.push(x, WL, z); wuv.push(x / 4.5, z / 4.5); wcol.push(c[0] * m, c[1] * m, c[2] * m, lerp(0.4, 0.98, smooth(clamp(t * 2.2, 0, 1))));
         const nx = (vn(x * 0.35 + 11, z * 0.35) - 0.5) * 0.07, nz = (vn(x * 0.35, z * 0.35 + 17) - 0.5) * 0.07, nl = Math.sqrt(1 + nx * nx + nz * nz); wnor.push(nx / nl, 1 / nl, nz / nl);
       }
     });
@@ -616,7 +618,7 @@
     for (let r = 0; r < wRing.length - 1; r++) for (let i = 0; i < NA; i++) { const a0 = wRing[r] + i, a1 = wRing[r] + (i + 1) % NA, b0 = wRing[r + 1] + i, b1 = wRing[r + 1] + (i + 1) % NA; widx.push(a0, b0, a1, a1, b0, b1); }
     for (let i = 0; i < NA; i++) widx.push(wRing[wRing.length - 1] + i, wc, wRing[wRing.length - 1] + (i + 1) % NA);
     const wgeo = new T.BufferGeometry(); wgeo.setAttribute('position', new T.Float32BufferAttribute(wpos, 3)); wgeo.setAttribute('color', new T.Float32BufferAttribute(wcol, 4)); wgeo.setAttribute('normal', new T.Float32BufferAttribute(wnor, 3)); wgeo.setAttribute('uv', new T.Float32BufferAttribute(wuv, 2)); wgeo.setIndex(widx);
-    const water = new T.Mesh(wgeo, new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.05, metalness: 0.1, envMapIntensity: 0.95, transparent: true, opacity: 0.88, depthWrite: false, normalMap: CVT('smw_ripple'), normalScale: new T.Vector2(0.28, 0.28) })); water.renderOrder = 3; water.name = 'water'; water.receiveShadow = true;
+    const water = new T.Mesh(wgeo, new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.05, metalness: 0.1, envMapIntensity: 0.95, transparent: true, opacity: 0.88, depthWrite: false, normalMap: CVT('smw_ripple'), normalScale: new T.Vector2(0.22, 0.22) })); water.renderOrder = 3; water.name = 'water'; water.receiveShadow = true;
     // --- камни, тростник, рогоз, кувшинки: один меш с вершинными цветами
     const acc = new T.Group(), A = new Acc(), M4 = new T.Matrix4(), Q = new T.Quaternion(), S3 = new T.Vector3(), P3 = new T.Vector3();
     const shore = (s, a) => { const f = go(a) - s * bw(a), [x, z] = at(a, f); return [x, z, bankY(s, x, z)]; };
@@ -632,7 +634,7 @@
     const tones = [0x8a8a84, 0x7a7a74, 0x9a968a, 0x6f6e68, 0xa49e90];
     for (let i = 0; i < 6; i++) rock((i + R() * 0.7) / 6 * TAU, 0.55 + R() * 0.4, 0.55 + R() * 0.4, tones);
     for (let i = 0; i < 14; i++) rock(R() * TAU, 0.45 + R() * 0.5, 0.25 + R() * 0.25, tones);
-    for (let i = 0; i < 14; i++) rock(R() * TAU, 0.3 + R() * 0.65, 0.1 + R() * 0.14, tones);
+    for (let i = 0; i < 9; i++) rock(R() * TAU, 0.3 + R() * 0.65, 0.1 + R() * 0.14, tones);
     // лезвия тростника
     const Gb = [hexRGB(0x4a6a2c), hexRGB(0x78a042), hexRGB(0xb5c25e)], Gy = [hexRGB(0x5a6a2a), hexRGB(0xa0b04a), hexRGB(0xd6c872)];
     function blade(x, y, z, h, wd, lx, lz, phi, pal, nrm) {
@@ -652,7 +654,7 @@
       }
     }
     const clusterAngs = []; for (let i = 0; i < 34; i++) { let a, tries = 0; do { a = R() * TAU; tries++; } while (pn(a, 7, 41) < 0.42 && tries < 12); clusterAngs.push(a); }
-    clusterAngs.forEach((a, i) => reedCluster(a, 0.72 + R() * 0.2, 9 + (R() * 5 | 0), 0.9, 1.9, 0.5 + R() * 0.3, false));
+    clusterAngs.forEach((a, i) => reedCluster(a, 0.72 + R() * 0.2, 10 + (R() * 5 | 0), 1.2, 2.5, 0.6 + R() * 0.5, false));
     // рогоз: стебель + коричневый початок
     function cattail(a, s) {
       const [cx, cz, cyy] = shore(s, a); const n = 3 + (R() * 3 | 0);
@@ -684,8 +686,8 @@
     padGroup(2.2, 0.55, 6, 3.4); padGroup(3.0, 0.7, 4, 2.2); padGroup(5.4, 0.62, 4, 2.4);
     const props = A.mesh(new T.MeshLambertMaterial({ vertexColors: true, side: T.DoubleSide }));
     // плавающие брёвна
-    const logsG = new T.Group();
-    for (const [a, f, len, ry] of [[0.6, 0.55, 3.6, 0.7], [4.1, 0.5, 2.8, 2.4]]) { const [x, z] = at(a, f * (go(a) - sW * bw(a))), o = add(logsG, logGeo(0.2, 0.17, len, 10, 2, R), logM, x, WL - 0.04, z, 0, ry, 0); o.rotation.set(0, ry, PI / 2 + 0.05); o.rotation.order = 'YXZ'; }
+    const logsG = new T.Group(), pondLogM = tm('smw_log', null, 0x8f8070);
+    for (const [a, f, len, ry] of [[0.6, 0.55, 3.6, 0.7], [4.1, 0.5, 2.8, 2.4]]) { const [x, z] = at(a, f * (go(a) - sW * bw(a))), o = add(logsG, logGeo(0.2, 0.17, len, 10, 2, R), pondLogM, x, WL - 0.04, z, 0, ry, 0); o.rotation.set(0, ry, PI / 2 + 0.05); o.rotation.order = 'YXZ'; }
     const out = new T.Group(); out.add(bank); out.add(props); out.add(logsG); out.add(water);
     return out;
   }
