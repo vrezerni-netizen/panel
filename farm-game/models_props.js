@@ -604,7 +604,7 @@
   const lerpC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
   // ---------------------------------------------------------------- атлас листвы: 8x8 ячеек по 128 px (цвет + маска прозрачности)
-  const ATL = 1024, CELL = 128, GN = 8, LEVK = [0.6, 0.92, 1.2];     // LEVK: яркость ячеек «тень / середина / свет»
+  const ATL = 1024, CELL = 128, GN = 8, LEVK = [0.62, 0.97, 1.25];     // LEVK: яркость ячеек «тень / середина / свет»
   const SPEC = {      // n листьев, len/wid в px, wpos — где самая широкая часть, lo/hi — цвета тени и света, nc — число пучков в ячейке
     oak:    { seed: 1, n: 230, len: 15, wid: 7.2, wpos: 0.55, nc: 7, lo: [40, 70, 28],  hi: [98, 138, 48],  yel: 0.06, lobes: 1 },
     birch:  { seed: 2, n: 170, len: 13, wid: 7,   wpos: 0.38, nc: 8, lo: [80, 112, 44], hi: [150, 176, 74], yel: 0.12 },
@@ -648,10 +648,11 @@
     }
     g.restore();
   }
-  function paintCore(g, ox, oy, mask, P) {          // непрозрачный тёмный «внутренний слой листвы»
+  function paintCore(g, ox, oy, mask, P, br) {
+    br = br || 1;          // непрозрачный тёмный «внутренний слой листвы»
     g.save(); g.beginPath(); g.rect(ox, oy, CELL, CELL); g.clip();
-    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.6); g.fillRect(ox, oy, CELL, CELL);
-    if (!mask) { const r = lcg(P.seed * 53 + 7); for (let i = 0; i < 1100; i++) { g.save(); g.translate(ox + r() * CELL, oy + r() * CELL); g.rotate(r() * TAU); g.fillStyle = rgbs(lerpC(P.lo, P.hi, r() * 0.55), 0.55 + r() * 0.3); leafPath(g, 7, 3.4, 0.5); g.fill(); g.restore(); } }
+    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.6 * br); g.fillRect(ox, oy, CELL, CELL);
+    if (!mask) { const r = lcg(P.seed * 53 + 7); for (let i = 0; i < 1100; i++) { g.save(); g.translate(ox + r() * CELL, oy + r() * CELL); g.rotate(r() * TAU); g.fillStyle = rgbs(lerpC(P.lo, P.hi, r() * 0.55), (0.55 + r() * 0.3) * br); leafPath(g, 7, 3.4, 0.5); g.fill(); g.restore(); } }
     g.restore();
   }
   function paintFrond(g, ox, oy, mask, level, variant) {    // ветка ели: стебель снизу вверх, хвоя «ёлочкой»
@@ -661,18 +662,18 @@
     const cx = ox + CELL / 2, y0 = oy + CELL - 3, H = CELL - 8, bend = (r() - 0.5) * 12;
     const fw = (t) => 0.47 * CELL * Math.pow(Math.sin(Math.PI * clamp(0.07 + 0.86 * Math.pow(t, 0.85), 0, 1)), 0.7);
     const px = (t) => cx + bend * t * t, py = (t) => y0 - H * t;
-    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.8 * k); g.beginPath();
-    for (let t = 0; t <= 1.001; t += 0.05) g.lineTo(px(t) - fw(t) * 0.62, py(t));
-    for (let t = 1; t >= -0.001; t -= 0.05) g.lineTo(px(t) + fw(t) * 0.62, py(t));
+    g.fillStyle = mask ? '#fff' : rgbs(P.lo, 0.7 * k); g.beginPath();
+    for (let t = 0; t <= 1.001; t += 0.05) g.lineTo(px(t) - fw(t) * 0.58, py(t));
+    for (let t = 1; t >= -0.001; t -= 0.05) g.lineTo(px(t) + fw(t) * 0.58, py(t));
     g.closePath(); g.fill();
     g.strokeStyle = mask ? '#fff' : rgbs([86, 62, 44], k); g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(px(0), py(0)); g.lineTo(px(0.95), py(0.95)); g.stroke();
-    const N = 36;
+    const N = 46;
     for (let i = 0; i < N; i++) {
       const t = 0.03 + 0.97 * i / (N - 1), w = fw(t);
-      for (const s of [-1, 1]) for (let m = 0; m < 3; m++) {
-        const ang = -Math.PI / 2 + s * (0.7 + r() * 0.55), len = w * (0.55 + r() * 0.55) * (m === 2 ? 0.6 : 1), ex = px(t) + Math.cos(ang) * len, ey = py(t) + Math.sin(ang) * len;
+      for (const s of [-1, 1]) for (let m = 0; m < 4; m++) {
+        const ang = -Math.PI / 2 + s * (0.62 + r() * 0.5), len = w * (0.5 + r() * 0.6) * (m >= 2 ? 0.65 : 1), ex = px(t) + Math.cos(ang) * len, ey = py(t) + Math.sin(ang) * len;
         const tt = clamp(0.2 + 0.5 * t + 0.35 * (len / (w + 1)) + (r() - 0.5) * 0.3, 0, 1);
-        g.strokeStyle = mask ? '#fff' : rgbs(lerpC(P.lo, P.hi, tt), k); g.lineWidth = 3.2 - 1.2 * t; g.beginPath(); g.moveTo(px(t), py(t)); g.lineTo(ex, ey); g.stroke();
+        g.strokeStyle = mask ? '#fff' : rgbs(lerpC(P.lo, P.hi, tt), k); g.lineWidth = 2.2 - 0.7 * t; g.beginPath(); g.moveTo(px(t), py(t)); g.lineTo(ex, ey); g.stroke();
       }
     }
     g.restore();
@@ -739,7 +740,7 @@
       both('core' + sp, (g, ox, oy, mask) => paintCore(g, ox, oy, mask, P));
     }
     for (let v = 0; v < 2; v++) for (let l = 0; l < 3; l++) both('pine' + v + l, (g, ox, oy, mask) => paintFrond(g, ox, oy, mask, l, v));
-    both('corepine', (g, ox, oy, mask) => paintCore(g, ox, oy, mask, SPEC.pine));
+    both('corepine', (g, ox, oy, mask) => paintCore(g, ox, oy, mask, SPEC.pine, 1.5));
     [[196, 52, 42], [226, 142, 44], [176, 188, 72]].forEach((c, i) => both('fruit' + i, (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'fruit', c)));
     both('berry', (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'berry', [120, 26, 44]));
     both('flower0', (g, ox, oy, mask) => paintFruit(g, ox, oy, mask, 'flower', [236, 150, 176]));
@@ -855,7 +856,7 @@
       let dx = Math.cos(a) * q + (r() - 0.5) * 0.35, dy = yy + (r() - 0.5) * 0.35, dz = Math.sin(a) * q + (r() - 0.5) * 0.35;
       const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
       if (dy < -0.45 && r() < (o.skipBelow == null ? 0.45 : o.skipBelow)) continue;
-      const inner = r() < (o.inner == null ? 0.18 : o.inner), spike = !inner && r() < (o.spike == null ? 0.12 : o.spike);
+      const inner = r() < (o.inner == null ? 0.18 : o.inner), spike = !inner && r() < (o.spike == null ? 0.07 : o.spike);
       const k = inner ? 0.45 + 0.25 * r() : spike ? 1.0 + 0.12 * r() : (o.k || 0.9) + 0.2 * r();
       const px = cx + dx * rx * k, py = cy + dy * ry * k, pz = cz + dz * rz * k;
       let nf, hint = null;
@@ -891,15 +892,15 @@
     tube(W, crv([[0, -0.05, 0], [lean[0] * 0.25, 1.1, lean[1] * 0.25], [lean[0] * 0.7, 2.4, lean[1] * 0.7], fork], low ? [0, 0.4, 1] : [0, 0.05, 0.12, 0.25, 0.42, 0.62, 0.82, 1]),
       (t) => lerp(low ? 0.46 : 0.5, 0.3, Math.pow(t, 0.8)), low ? 5 : 10, { ur: 2, vs: 1.4, flare: low ? null : { amp: 0.7, k: 0.75, n: 5, ph: r() * TAU } });
     const lobes = [], ring0 = r() * TAU, nr = low ? 4 : 5;
-    for (let i = 0; i < nr; i++) { const a = ring0 + i / nr * TAU + (r() - 0.5) * 0.7, d = low ? 1.5 + r() * 0.8 : 1.5 + r() * 0.8; lobes.push({ c: [Math.cos(a) * d + lean[0], (low ? 5.6 : 6.1) + r() * 1.0, Math.sin(a) * d + lean[1]], rad: low ? [2.2 + r() * 0.4, 1.7, 2.2 + r() * 0.4] : [2.0 + r() * 0.5, 1.7 + r() * 0.35, 2.0 + r() * 0.5], n: low ? 18 : 56, limb: 1 }); }
-    lobes.push({ c: [lean[0] * 1.1 + (r() - 0.5) * 0.8, (low ? 7.0 : 7.9) + r() * 0.4, lean[1] * 1.1 + (r() - 0.5) * 0.8], rad: low ? [2.3, 1.7, 2.3] : [2.3, 1.8, 2.3], n: low ? 20 : 60, top: 1 });
+    for (let i = 0; i < nr; i++) { const a = ring0 + i / nr * TAU + (r() - 0.5) * 0.7, d = low ? 1.5 + r() * 0.8 : 1.5 + r() * 0.8; lobes.push({ c: [Math.cos(a) * d + lean[0], (low ? 5.6 : 6.1) + r() * 1.0, Math.sin(a) * d + lean[1]], rad: low ? [2.2 + r() * 0.4, 1.7, 2.2 + r() * 0.4] : [2.0 + r() * 0.5, 1.7 + r() * 0.35, 2.0 + r() * 0.5], n: low ? 27 : 56, limb: 1 }); }
+    lobes.push({ c: [lean[0] * 1.1 + (r() - 0.5) * 0.8, (low ? 7.0 : 7.9) + r() * 0.4, lean[1] * 1.1 + (r() - 0.5) * 0.8], rad: low ? [2.3, 1.7, 2.3] : [2.3, 1.8, 2.3], n: low ? 30 : 60, top: 1 });
     if (!low) for (let i = 0; i < 4; i++) { const a = ring0 + 0.6 + i / 4 * TAU + (r() - 0.5) * 0.5, d = 2.9 + r() * 0.7; lobes.push({ c: [Math.cos(a) * d + lean[0], 4.9 + r() * 0.5, Math.sin(a) * d + lean[1]], rad: [1.6, 1.15, 1.6], n: 30 }); }
     const core = K.uv('coreoak');
     blobTo(Lf, core, crown[0], crown[1] + 0.3, crown[2], low ? 2.6 : 2.5, low ? 1.6 : 1.3, low ? 2.6 : 2.5, o.seed + 1, 1, 0.12);
     for (const L of lobes) {
       if (L.limb || L.top) blobTo(Lf, core, L.c[0], L.c[1] - 0.1, L.c[2], L.rad[0] * 0.55, L.rad[1] * 0.6, L.rad[2] * 0.55, o.seed + 5, 0, 0.14);
       if (L.limb && !low) limb(W, [fork[0], fork[1] - r() * 0.5, fork[2]], [lerp(fork[0], L.c[0], 0.85), L.c[1] - 0.8, lerp(fork[2], L.c[2], 0.85)], 0.26, 0.06, 6, 0.45);
-      lobeCards(Lf, r, K, 'oak', L, crown, { size: low ? [1.9, 2.5] : [1.15, 1.65], inner: low ? 0.2 : 0.3, k: 0.88, cy: 1.15, skipBelow: 0.15 });
+      lobeCards(Lf, r, K, 'oak', L, crown, { size: low ? [1.45, 2.05] : [1.15, 1.65], inner: low ? 0.25 : 0.3, k: 0.88, cy: 1.15, skipBelow: 0.15, spike: low ? 0.03 : 0.07 });
     }
     if (!low) {
       limb(W, fork, [lean[0] * 1.1, 7.6, lean[1] * 1.1], 0.28, 0.07, 6, 0.1);
@@ -917,14 +918,14 @@
     B.tri(ids[0], ids[1], ids[2]); B.tri(ids[1], ids[3], ids[2]); B.tri(ids[2], ids[3], ids[4]); B.tri(ids[3], ids[5], ids[4]);
   }
   function pineBuild(o, low) {
-    const K = treeKit(), r = lcg(o.seed * 157 + 9), S = 0.86 + r() * 0.28, W = TB(), Lf = TB(), top = 11.6, NW = low ? 9 : 14;
+    const K = treeKit(), r = lcg(o.seed * 157 + 9), S = 0.86 + r() * 0.28, W = TB(), Lf = TB(), top = 12.6, NW = low ? 10 : 16;
     tube(W, crv([[0, -0.05, 0], [(r() - 0.5) * 0.3, top * 0.5, (r() - 0.5) * 0.3], [(r() - 0.5) * 0.2, top - 1.1, (r() - 0.5) * 0.2]], low ? [0, 0.4, 1] : [0, 0.06, 0.2, 0.45, 0.7, 1]), (t) => lerp(0.4, 0.05, Math.pow(t, 0.85)), low ? 5 : 7, { ur: 2, vs: 1.6, cap: true });
     for (let i = 0; i < NW; i++) {
-      const t = i / (NW - 1), y = lerp(2.4, top - 1.5, Math.pow(t, 0.95)) + (r() - 0.5) * 0.25, Rr = lerp(3.4, 0.45, Math.pow(t, 0.9)) * (0.92 + r() * 0.18);
-      const n = Math.round(low ? lerp(7, 5, t) : lerp(9, 5, t)), a0 = r() * TAU;
+      const t = i / (NW - 1), y = lerp(2.4, top - 1.3, 1 - Math.pow(1 - t, 1.3)) + (r() - 0.5) * 0.2, Rr = lerp(3.4, 0.5, Math.pow(t, 1.1)) * (0.92 + r() * 0.18);
+      const n = Math.round(low ? lerp(7, 5, t) : lerp(9, 6, t)), a0 = r() * TAU;
       for (let k = 0; k < n; k++) {
         const a = a0 + k / n * TAU + (r() - 0.5) * 0.5, L = Rr * (0.88 + r() * 0.24), lv = t < 0.3 ? (r() < 0.5 ? 0 : 1) : (r() < 0.4 ? 2 : 1), uv = K.uv('pine' + (r() < 0.5 ? 0 : 1) + lv);
-        frond(Lf, Math.cos(a), Math.sin(a), y, L, Math.max(0.55, L * 0.95), L * (0.3 + 0.08 * (1 - t)), uv, (r() - 0.5) * 0.12, 0.4);
+        frond(Lf, Math.cos(a), Math.sin(a), y, L, Math.max(0.85, L * 0.95), L * (0.3 + 0.08 * (1 - t) + (r() - 0.5) * 0.14), uv, (r() - 0.5) * 0.12, 0.4);
       }
     }
     const core = K.uv('corepine'), seg = 8, r0 = low ? 1.3 : 1.45, P0 = [], P1 = [];
@@ -933,7 +934,7 @@
     for (let j = 0; j <= seg; j++) { const p = P0[j % seg], a = j / seg * TAU; Lf.vert(p[0], p[1], p[2], Math.cos(a) * 0.92, 0.38, Math.sin(a) * 0.92, uc + Math.cos(a) * hu, vc + Math.sin(a) * hu); }
     for (let j = 0; j <= seg; j++) { const p = P1[j % seg], a = j / seg * TAU; Lf.vert(p[0], p[1], p[2], Math.cos(a) * 0.92, 0.38, Math.sin(a) * 0.92, uc + Math.cos(a) * hu * 0.6, vc + Math.sin(a) * hu * 0.6); }
     const apx = Lf.vert(0, top - 2.6, 0, 0, 1, 0, uc, vc);
-    for (let k = 0; k < (low ? 2 : 3); k++) { const a = k * PI / (low ? 2 : 3) + r(); card(Lf, [0, top - 1.0, 0], [Math.cos(a), 0, Math.sin(a)], 0, 1.3, 2.3, K.uv('pine' + (k & 1) + 2), () => NRM(0.3 * Math.cos(a), 1, 0.3 * Math.sin(a)), [0, 1, 0]); }
+    for (const [yy, L, up] of [[top - 1.25, 0.95, -0.35], [top - 0.7, 0.6, -0.8]]) for (let k = 0, n = low ? 4 : 5, a0 = r() * TAU; k < n; k++) { const a = a0 + k / n * TAU; frond(Lf, Math.cos(a), Math.sin(a), yy, L, 0.8, L * up, K.uv('pine' + (k & 1) + 2), 0, 0.5); }
     for (let j = 0; j < seg; j++) { const a = b0 + j, b = a + 1, c = b0 + seg + 1 + j, d = c + 1; Lf.tri(a, b, c); Lf.tri(b, d, c); Lf.tri(c, d, apx); }
     return treeGroup(W, Lf, S, K, K.barkPine);
   }
@@ -943,12 +944,12 @@
   // ---------------------------------------------------------------- берёза
   reg('tree', 'birch', (o) => {
     const K = treeKit(), r = lcg(o.seed * 83 + 21), S = 0.88 + r() * 0.24, lean = (r() - 0.5) * 0.5, W = TB(), Lf = TB(), crown = [lean, 6.5, 0.1];
-    tube(W, crv([[0, -0.02, 0], [lean * 0.3, 1.5, 0.05], [lean * 0.55, 3.2, 0.14], [lean * 0.9, 5.2, 0.08], [lean * 1.1, 7.3, 0.1]], [0, 0.04, 0.1, 0.2, 0.32, 0.46, 0.6, 0.74, 0.88, 1]), (t) => lerp(0.26, 0.05, Math.pow(t, 0.9)), 8, { ur: 1, vs: 1.6, cap: true });
+    tube(W, crv([[0, -0.02, 0], [lean * 0.3, 1.5, 0.05], [lean * 0.55, 3.2, 0.14], [lean * 0.9, 5.5, 0.08], [lean * 1.1, 7.8, 0.1]], [0, 0.04, 0.1, 0.2, 0.32, 0.46, 0.6, 0.74, 0.88, 1]), (t) => lerp(0.26, 0.05, Math.pow(t, 0.9)), 8, { ur: 1, vs: 1.6, cap: true });
     const lobes = [], a0 = r() * TAU;
-    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.3 + r() * 0.6, L = { c: [lean + Math.cos(a) * d, 6.0 + r() * 0.9, 0.1 + Math.sin(a) * d], rad: [1.5, 1.35, 1.5], n: 46 }; lobes.push(L); limb(W, [lean * 0.8, 3.8 + r() * 1.0, 0.1], [lean + Math.cos(a) * d * 0.9, L.c[1] - 0.5, 0.1 + Math.sin(a) * d * 0.9], 0.085, 0.025, 5, 0.35); }
-    lobes.push({ c: [lean * 1.1, 7.7, 0.1], rad: [1.4, 1.3, 1.4], n: 44 }); lobes.push({ c: [lean * 0.9 + (r() - 0.5), 5.0 + r() * 0.3, (r() - 0.5)], rad: [1.3, 1.0, 1.3], n: 26 });
-    blobTo(Lf, K.uv('corebirch'), crown[0], crown[1] + 0.2, crown[2], 1.5, 1.4, 1.5, o.seed + 3, 0, 0.14);
-    for (const L of lobes) lobeCards(Lf, r, K, 'birch', L, crown, { size: [0.95, 1.35], inner: 0.35, k: 0.9, skipBelow: 0.2, asp: 0.95 });
+    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.3 + r() * 0.6, L = { c: [lean + Math.cos(a) * d, 6.3 + r() * 0.9, 0.1 + Math.sin(a) * d], rad: [1.5, 1.35, 1.5], n: 42 }; lobes.push(L); limb(W, [lean * 0.8, 3.8 + r() * 1.0, 0.1], [lean + Math.cos(a) * d * 0.9, L.c[1] - 0.5, 0.1 + Math.sin(a) * d * 0.9], 0.085, 0.025, 5, 0.35); }
+    lobes.push({ c: [lean * 1.1, 8.1, 0.1], rad: [1.4, 1.3, 1.4], n: 38 }); lobes.push({ c: [lean * 0.9 + (r() - 0.5), 5.0 + r() * 0.3, (r() - 0.5)], rad: [1.3, 1.0, 1.3], n: 26 });
+    blobTo(Lf, K.uv('corebirch'), crown[0], crown[1] + 0.2, crown[2], 0.9, 0.9, 0.9, o.seed + 3, 0, 0.14);
+    for (const L of lobes) lobeCards(Lf, r, K, 'birch', L, crown, { size: [0.95, 1.35], inner: 0.45, k: 0.9, skipBelow: 0.15, asp: 0.95 });
     for (let i = 0; i < 3; i++) { const a = r() * TAU; limb(W, [lean * 0.9, 5.0 + r(), 0.1], [lean + Math.cos(a) * 1.9, 6.4 + r() * 0.8, 0.1 + Math.sin(a) * 1.9], 0.05, 0.015, 4, 0.2); }
     return treeGroup(W, Lf, S, K, K.barkBirch);
   });
@@ -958,10 +959,11 @@
     const K = treeKit(), r = lcg(o.seed * 61 + 33), S = 0.9 + r() * 0.2, kf = (o.variant ? o.variant : o.seed) % 3, W = TB(), Lf = TB(), crown = [0, 4.2, 0], pts = [];
     tube(W, crv([[0, -0.04, 0], [0.04, 0.8, 0.02], [0.06, 1.8, 0]], [0, 0.1, 0.25, 0.45, 0.7, 1]), (t) => lerp(0.3, 0.22, t), 9, { ur: 2, vs: 1.3, flare: { amp: 0.45, k: 0.5, n: 4, ph: r() * TAU } });
     const lobes = [], a0 = r() * TAU;
-    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.45 + r() * 0.5, L = { c: [Math.cos(a) * d, 3.6 + r() * 0.5, Math.sin(a) * d], rad: [1.6, 1.3, 1.6], n: 44 }; lobes.push(L); limb(W, [0.05, 1.5 + r() * 0.3, 0], [Math.cos(a) * d * 0.85, L.c[1] - 0.6, Math.sin(a) * d * 0.85], 0.17, 0.05, 6, 0.4); }
-    lobes.push({ c: [(r() - 0.5) * 0.5, 4.3, (r() - 0.5) * 0.5], rad: [2.0, 1.6, 2.0], n: 46 }); lobes.push({ c: [0.2, 5.0, 0], rad: [1.3, 1.0, 1.3], n: 26 });
-    blobTo(Lf, K.uv('corefruit'), 0, 4.0, 0, 2.5, 1.7, 2.5, o.seed + 2, 1, 0.12);
-    for (const L of lobes) lobeCards(Lf, r, K, 'fruit', L, crown, { size: [1.0, 1.45], inner: 0.25, k: 0.9, cy: 1.2, pts });
+    for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.6, d = 1.45 + r() * 0.5, L = { c: [Math.cos(a) * d, 3.6 + r() * 0.5, Math.sin(a) * d], rad: [1.6, 1.3, 1.6], n: 50 }; lobes.push(L); limb(W, [0.05, 1.5 + r() * 0.3, 0], [Math.cos(a) * d * 0.85, L.c[1] - 0.6, Math.sin(a) * d * 0.85], 0.17, 0.05, 6, 0.4); }
+    lobes.push({ c: [(r() - 0.5) * 0.5, 4.3, (r() - 0.5) * 0.5], rad: [2.0, 1.6, 2.0], n: 52 }); lobes.push({ c: [0.2, 5.0, 0], rad: [1.3, 1.0, 1.3], n: 28 });
+    blobTo(Lf, K.uv('corefruit'), 0, 4.0, 0, 1.5, 1.0, 1.5, o.seed + 2, 1, 0.12);
+    for (const L of lobes) blobTo(Lf, K.uv('corefruit'), L.c[0], L.c[1] - 0.1, L.c[2], L.rad[0] * 0.5, L.rad[1] * 0.5, L.rad[2] * 0.5, o.seed + 6, 0, 0.14);
+    for (const L of lobes) lobeCards(Lf, r, K, 'fruit', L, crown, { size: [1.1, 1.6], inner: 0.35, k: 0.9, cy: 1.2, pts, skipBelow: 0.2 });
     for (let i = 0, n = 0; n < 30 && i < 300 && pts.length; i++) {
       const q = pts[Math.floor(r() * pts.length)], nf = NRM(q.d[0], q.d[1] - 0.2, q.d[2]); n++;
       card(Lf, [q.p[0] + q.d[0] * 0.25, q.p[1] + q.d[1] * 0.25 - 0.1, q.p[2] + q.d[2] * 0.25], nf, r() * TAU, 0.55, 0.55, K.uv('fruit' + kf), () => NRM(q.d[0], q.d[1] * 0.6, q.d[2]));
@@ -985,10 +987,10 @@
   // ---------------------------------------------------------------- куст ~1.5 м
   reg('tree', 'bush', (o) => {
     const K = treeKit(), r = lcg(o.seed * 29 + 7), S = 0.85 + r() * 0.3, kb = (o.variant ? o.variant : o.seed) % 3, Lf = TB(), pts = [], crown = [0, 0.55, 0];
-    const lobes = [{ c: [0, 0.78, 0], rad: [0.85, 0.65, 0.85], n: 34 }], a0 = r() * TAU;
+    const lobes = [{ c: [0, 0.78, 0], rad: [0.85, 0.65, 0.85], n: 48 }], a0 = r() * TAU;
     for (let i = 0; i < 4; i++) { const a = a0 + i / 4 * TAU + (r() - 0.5) * 0.5, d = 0.55 + r() * 0.15; lobes.push({ c: [Math.cos(a) * d, 0.55 + r() * 0.1, Math.sin(a) * d], rad: [0.58, 0.5, 0.58], n: 22 }); }
-    blobTo(Lf, K.uv('corebush'), 0, 0.62, 0, 0.95, 0.6, 0.95, o.seed + 4, 1, 0.12);
-    for (const L of lobes) lobeCards(Lf, r, K, 'bush', L, crown, { size: [0.55, 0.8], inner: 0.15, k: 0.9, skipBelow: 0.7, cy: 1.3, pts });
+    blobTo(Lf, K.uv('corebush'), 0, 0.55, 0, 0.6, 0.4, 0.6, o.seed + 4, 0, 0.12);
+    for (const L of lobes) lobeCards(Lf, r, K, 'bush', L, crown, { size: [0.55, 0.85], inner: 0.2, k: 0.9, skipBelow: 0.7, cy: 1.3, pts });
     if (kb > 0) for (let i = 0, n = 0; n < 16 && i < 200 && pts.length; i++) {
       const q = pts[Math.floor(r() * pts.length)]; if (q.d[1] < 0.0) continue; n++;
       card(Lf, [q.p[0] + q.d[0] * 0.1, q.p[1] + q.d[1] * 0.1, q.p[2] + q.d[2] * 0.1], q.d, r() * TAU, 0.42, 0.42, K.uv(kb === 1 ? 'flower' + (o.seed & 1) : 'berry'), () => NRM(q.d[0], q.d[1], q.d[2]));

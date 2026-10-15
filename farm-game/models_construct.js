@@ -81,9 +81,9 @@
     blotches(g, S, r, 18, 20, 60, [30, 40, 25], 0.05, 0.1);
   }, 256);
   C.addProc('cn_corr', (cv, g) => {
-    pix(256, (() => { const f = fbm(81, 4), st = pn(83, 32); return (u, v, x, y) => {
-      const s = 0.5 + 0.5 * Math.sin(u * TAU * 8), l = 0.5 + 0.46 * Math.pow(s, 0.8) + (st(u * 8, v) - 0.5) * 0.12, rust = Math.max(0, f(u, v) - 0.56) * 2.2, L = l * 255;
-      return [L * (1 + rust * 0.5), L * (1 - rust * 0.12), L * (1 - rust * 0.45)];
+    pix(256, (() => { const f = fbm(81, 4), st = pn(83, 32), rs = pn(85, 10); return (u, v, x, y) => {
+      const s = 0.5 + 0.5 * Math.sin(u * TAU * 8), l = 0.5 + 0.46 * Math.pow(s, 0.8) + (st(u * 8, v) - 0.5) * 0.12, rust = Math.max(0, rs(u * 4, v) - 0.6) * 1.1 + Math.max(0, f(u, v) - 0.64) * 0.8, L = l * 255;
+      return [L * (1 + rust * 0.35), L * (1 - rust * 0.1), L * (1 - rust * 0.4)];
     }; })())(cv, g);
     const r = lcg(87); g.fillStyle = rgb(0, 0, 0, 0.4); g.fillRect(0, 0, 256, 2); g.fillStyle = rgb(255, 255, 255, 0.22); g.fillRect(0, 2, 256, 2);
     for (let y = 40; y < 256; y += 120) for (let i = 0; i < 8; i += 2) { const x = (i + 0.5) * 32; g.fillStyle = rgb(25, 25, 28, 0.7); g.beginPath(); g.arc(x, y, 2.2, 0, TAU); g.fill(); g.fillStyle = rgb(255, 255, 255, 0.35); g.fillRect(x - 1, y - 3, 1.5, 1.5); }
@@ -185,7 +185,7 @@
     if (xa.lengthSq() < 1e-6) { u.set(0, 0, 1); xa.crossVectors(u, dir); if (xa.lengthSq() < 1e-6) { u.set(1, 0, 0); xa.crossVectors(u, dir); } }
     xa.normalize(); const ya = _d.crossVectors(dir, xa); _m.makeBasis(xa, ya, dir);
     const m = put(s, new T.BoxGeometry(w, h, L), (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, 0, 0, 0, 'z');
-    m.quaternion.setFromRotationMatrix(_m); m.rotation.order = 'XYZ'; return m;
+    m.quaternion.setFromRotationMatrix(_m); return m;
   }
   /** Круглая труба между двумя точками. */
   function tube(s, p, q, r, seg, open) {
@@ -511,7 +511,7 @@
   /** Стропила, обрешётка и покрытие двускатной крыши с коньком вдоль X (центр cx,cz). */
   function rafters(o) {
     const s = o.spec || M.pine(), dy = o.yR - o.yE, al = Math.atan2(dy, o.hs), off = o.d / 2 / Math.cos(al);
-    for (let i = 0; i < o.n; i++) { const x = lerp(o.x0, o.x1, i / (o.n - 1)); for (const sd of [1, -1]) beam(s, [x, o.yE - off, o.cz + sd * o.hs], [x, o.yR - off, o.cz], o.w, o.d, [0, 1, 0]); if (o.collar && i % 2 === 0) { const hh = o.collar, zz = hh / dy * o.hs; bx(s, o.w, 0.045, 2 * zz - 0.1, x, o.yR - hh - off, o.cz); } if (o.tie && i % 2 === 0) bx(s, o.w, 0.15, 2 * o.tie, x, o.plate - 0.075, o.cz); }
+    for (let i = 0; i < o.n; i++) { const x = lerp(o.x0, o.x1, i / (o.n - 1)); for (const sd of [1, -1]) beam(s, [x, o.yE - off, o.cz + sd * o.hs], [x, o.yR - off, o.cz], o.w, o.d, [0, 1, 0]); if (o.collar && i % 2 === 0 && i > 0 && i < o.n - 1) { const hh = o.collar, zz = hh / dy * o.hs; bx(s, o.w, 0.045, 2 * zz - 0.1, x, o.yR - hh - off, o.cz); } if (o.tie && i % 2 === 0 && i > 0 && i < o.n - 1) bx(s, o.w, 0.15, 2 * o.tie, x, o.plate - 0.075, o.cz); }
     bx(s, o.x1 - o.x0 + 0.5, 0.2, 0.05, (o.x0 + o.x1) / 2, o.yR - 0.12, o.cz);
   }
   function gableSlabs(s, o) {
@@ -587,7 +587,7 @@
       return finish(g);
     }
     // --- обшивка стен
-    const fresh = tex('cn_boards', 0xd9b47e, 1.6, 2.4, 'b'), stained = tex('cn_boards', 0xa97c4d, 1.6, 2.4, 'b'), WM = stage === 4 ? stained : fresh;
+    const fresh = tex('cn_boards', 0xd9b47e, 1.6, 2.4, 'b'), stained = tex('cn_boards', 0xb98c59, 1.6, 2.4, 'b'), WM = stage === 4 ? stained : fresh;
     onWall('front', () => cladWall(WM, 8, Hs, OPS.front, 0)); onWall('back', () => cladWall(WM, 8, Hs, OPS.back, 0));
     onWall('right', () => cladWall(WM, 6, Hs, OPS.right, 1.3)); onWall('left', () => cladWall(WM, 6, Hs, OPS.left, 1.3));
     // --- крыша
@@ -610,7 +610,7 @@
     onWall('back', () => win(OPS.back[0], { panes: 'cross', frame: FR })); onWall('right', () => win(OPS.right[0], { panes: 'two', frame: FR }));
     if (stage === 3) {
       onWall('front', () => { win(wq, { panes: 'cross', glass: false, frame: FR }); bx(K.steelDk, 6.4, 0.09, 0.1, 2.9, 2.34, 0.2); for (const hx of [1.5, 3.9]) bx(K.steelDk, 0.05, 0.12, 0.06, hx, 2.28, 0.16); });
-      sub(-4.22, 0.0, 0.3, -PI / 2, () => { cur.rotation.x = 0; sub(0, 0.0, 0, 0, () => { cur.rotation.x = -0.16; doorLeaf(wall0(fresh), 3.2, 2.2, 0, 1.1, 0.0); }); });
+      sub(-4.35, yb, 0.2, -PI / 2, () => { sub(0, 0, 0, 0, () => { cur.rotation.x = -0.2; doorLeaf(wall0(fresh), 3.2, 2.2, 0, 1.1, 0.0); }); });
       sub(5.9, 0, 4.2, 0.35, () => { cur.rotation.x = 0; sub(0, 0.0, 0, 0, () => { cur.rotation.x = -0.14; pane(1.2, 0.9, 0, 0.5, 0, 0); bx(col(0xd8c9a0), 1.28, 0.97, 0.03, 0, 0.5, -0.03); }); });
       sub(4.04, 0, 3.7, PI / 2, () => scaffold(7.4, 3, 2));
       bucket(-1.4, 4.0, 0x3c7a46, false); bucket(-0.9, 4.15, 0xeee9dc, true); bucket(-1.0, 3.7, 0x8b2f26, true); bucket(-1.9, 3.9, 0xeee9dc, false);
@@ -630,10 +630,10 @@
     });
     for (const [x, z] of [[-3.98, -2.98], [3.98, -2.98], [3.98, 2.98], [-3.98, 2.98]]) bx(trim, 0.13, Hs + 0.02, 0.13, x, yb + Hs / 2 + 0.01, z);
     rbx(conc, 4.2, 0.1, 1.5, 0.03, -1.3, 0.05, 3.8); rbx(conc, 3.4, 0.17, 0.5, 0.03, -1.3, 0.085, 3.35);
-    rbx(M.gravel(), 9.4, 0.04, 1.2, 0.015, 0, 0.02, 5.2);
+    rbx(M.gravel(), 9.0, 0.05, 2.5, 0.02, 0.0, 0.025, 4.5);
     cyl(col(0x777b80), 0.045, 0.045, P.yE - 0.1 - yb, -4.2, yb + (P.yE - 0.1 - yb) / 2, 3.5, 10); barrel(-4.2, 3.9, 0x2e6a52);
     woodpile(4.7, -0.4, PI / 2, 7, 4); rake(-4.1, 3.1);
-    bx(col(0xe9d9a0), 0.2, 0.26, 0.14, 0.5, 1.95, 3.1 + 0.06); sph(col(0xfff1c0), 0.0, 0, 0, 0);
+    bx(K.dark, 0.16, 0.22, 0.16, 0.6, yb + 2.0, 3.08); sph(col(0xffe9a8), 0.06, 0.6, yb + 1.92, 3.17, 1, 1.2, 1, 8, 6);
     return finish(g);
   }
 

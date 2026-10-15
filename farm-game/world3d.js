@@ -338,9 +338,9 @@
   const SLOT = { wild: [-150, -150], forest: [40, -150], home: [-200, -30], meadow: [-70, -30], grove: [60, -30], valley: [190, -30], lake: [-200, 30], hills: [-70, 30], orchard: [60, 30] };
   // Поля: каждое поле лежит отдельно от двора, домов и улиц — большим рядом в «полевом районе» на юге.
   // Дворы (дом, амбар, силосы, загон) остаются у дорог внутри карты.
-  const FIELD_POS = { home: [-264, 292], meadow: [-176, 292], grove: [-88, 292], valley: [0, 292], lake: [88, 292], hills: [176, 292], orchard: [264, 292] };
-  const FW_MAX = 24, ROAD_F = 243;                                  // самая широкая вспаханная часть, дорога вдоль полей
-  const DECO = [{ cx: 0, cz: 268, w: 700, d: 128 }];                   // здесь деревья и кусты не растут
+  const FIELD_POS = { home: [-450, 305], meadow: [-300, 305], grove: [-150, 305], valley: [0, 305], lake: [150, 305], hills: [300, 305], orchard: [450, 305] };   // поля растут до 42×24 клеток, поэтому стоят через 150 м
+  const FW_MAX = 42, ROAD_F = 243;                                  // самая широкая вспаханная часть, дорога вдоль полей
+  const DECO = [{ cx: 0, cz: 285, w: 1120, d: 150 }];                   // здесь деревья и кусты не растут
   const FIELD_LEFT = 8; // левый край поля от центра участка: поле растёт вправо
   const TOWN = { market: [-112, 82], seeds: [-76, 82], tech: [-40, 82], bank: [28, 82], casino: [64, 82] };
   const TOWN_MODEL = { market: 'market', seeds: 'seedshop', tech: 'techcenter', bank: 'bank', casino: 'casino' };
@@ -351,12 +351,12 @@
     center: [0, 30],
   };
   const VEH_KEYS = ['tractor', 'combine', 'waterer', 'spreader', 'logger', 'grinder'];
-  const VEH_START = { tractor: [-282, 255], combine: [-263, 255], waterer: [-244, 255], spreader: [-225, 255], logger: [-170, -116], grinder: [-188, -116] };  // стоянка у поля «Моя ферма»
+  const VEH_START = { tractor: [-468, 255], combine: [-449, 255], waterer: [-430, 255], spreader: [-411, 255], logger: [-170, -116], grinder: [-188, -116] };  // стоянка у поля «Моя ферма»
   const VEH_VER = 6;
   const ROAD_N = -100; // северная дорога вдоль леса и целины
   const SITE_POS = [[165, -135], [198, -135], [231, -135]]; // три стройплощадки
   const SAWMILL_POS = [-28, -128];
-  const POND = [214, 30], BAY = [-253, 255];                   // пруд и стоянка техники
+  const POND = [214, 30], BAY = [-439, 255];                   // пруд и стоянка техники
   const TOWN_ROT = {}, BIG_ROT = {};                           // повороты зданий (задаёт редактор карты)
   const DEF_BIG = (() => { // стандартные места больших объектов (для «сбросить к стандартной карте»)
     const o = {}; for (const [k, v] of Object.entries(TOWN)) o[k] = [v[0], v[1], 0];
@@ -562,7 +562,8 @@
     (function buildStatic() {
       const ZEND = ROAD_Z[ROAD_Z.length - 1], zTop = -100, zBot = ROAD_F + RW / 2, zMid = (zTop + zBot) / 2, zLen = zBot - zTop;
       const defRoad = (x0, z0, x1, z1, k) => { const h = Math.abs(x1 - x0) >= Math.abs(z1 - z0), len = h ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.max(1, Math.round(len / 31)); for (let i = 0; i < n; i++) DEFROADS.push([r1(x0 + (x1 - x0) * i / n), r1(z0 + (z1 - z0) * i / n), r1(x0 + (x1 - x0) * (i + 1) / n), r1(z0 + (z1 - z0) * (i + 1) / n), k]); };
-      for (const z of [ROAD_N, ...ROAD_Z, ROAD_F]) defRoad(-310, z, 310, z, 0);
+      for (const z of [ROAD_N, ...ROAD_Z]) defRoad(-310, z, 310, z, 0);
+      defRoad(-540, ROAD_F, 540, ROAD_F, 0);   // дорога вдоль полей длиннее: поля стоят шире города
       for (const x of ROAD_X) defRoad(x, zTop, x, zBot, 0);
       const bayG = new T.Group(); bayG.position.set(BAY[0], 0, BAY[1]); bayG.rotation.y = BIG_ROT.bay || 0; world.add(bayG); bGroups.bayG = bayG;   // стоянка техники рядом с полем
       { const bay = part('box', 0xb9b6ac, 0, 0.05, 0, 72, 0.1, 14); bay.material = texMat('concrete', 14, 3, 0xbdb9ad); bay.castShadow = false; bayG.add(bay);
@@ -816,7 +817,7 @@
       treeClear(fv); fv.w = w; fv.h = h; fv.cx = FP ? FP[0] - FW_MAX * TS / 2 + w * TS / 2 : fv.sx + FIELD_LEFT + w * TS / 2; fv.cz = FP ? FP[1] : fv.sz; fv.g.position.set(fv.cx, 0, fv.cz); treeInit(fv, w, h);
       const fenceC = 0x8a6a42;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const m = part('box', 0x74b84f, x - w / 2 + 0.5, 0.05, y - h / 2 + 0.5, 0.97, 0.1, 0.97); m.material = tileMaterial('grass', false, x, y); m.castShadow = false;
+        const m = part('box', 0x74b84f, x - w / 2 + 0.5, 0.05, y - h / 2 + 0.5, 1.0, 0.1, 1.0); m.material = tileMaterial('grass', false, x, y); m.castShadow = false;
         fv.tg.add(m); fv.tiles.push({ mesh: m, sig: '', model: null });
       }
       if (FP) {
@@ -923,7 +924,8 @@
         if (lv > 0 && (!vehs[k] || vehs[k].lv !== lv)) {
           const old = vehs[k], g = MODEL('vehicle', k, { level: lv }, () => { const q = vehicleModel(k, lv > 5); q.scale.setScalar(2.6); return q; });
           g.traverse((o) => { o.userData.veh = k; });
-          if (!S.veh[k]) S.veh[k] = { x: VEH_START[k][0], z: VEH_START[k][1], r: 0 };
+          if (!S.veh[k]) S.veh[k] = { x: VEH_START[k][0], z: VEH_START[k][1], r: 0, lv: 2 };
+          else if (!S.veh[k].lv) { const v0 = S.veh[k]; v0.lv = 2; if (Math.abs(v0.z - 255) < 14 && v0.x > -300 && v0.x < -205) v0.x += BAY[0] + 253; }   // старые сохранения: техника переезжает вслед за стоянкой
           g.position.set(S.veh[k].x, 0.1, S.veh[k].z); g.rotation.y = S.veh[k].r; world.add(g);
           if (old) { world.remove(old.g); old.g = g; old.lv = lv; } else vehs[k] = { g, key: k, lv, lab: addLabel('map', '', new T.Vector3(), 'vlbl'), anim: null };
           vehs[k].g = g; vehs[k].lv = lv;
@@ -1224,7 +1226,7 @@
     }
     function focusAll() { focus(-10, 30, 640); }
     window.addEventListener('resize', resize);
-    resize(); cam.gx = cam.tx = -282; cam.gz = cam.tz = 280; cam.gd = cam.dist = 125;
+    resize(); cam.gx = cam.tx = FIELD_POS.home[0] + 18; cam.gz = cam.tz = FIELD_POS.home[1] - 12; cam.gd = cam.dist = 125;
     // ============================================================ большие объекты (редактор карты их двигает)
     // get() → [x, z, поворот]; set() двигает «вживую», commit() — после того как отпустили палец
     const regBig = (id, o) => { BIG[id] = Object.assign({ id, canRot: false, rotStep: Math.PI / 2, area: 400, commit: null }, o); return BIG[id]; };
@@ -1297,7 +1299,7 @@
     const edApi = { T, scene, camera, canvas, cam, groundAt, panPx, BIG, DEC, DEC_R, PALETTE, TS, PATCH, decAdd, decRemove, decSet, decFlush, decNear, decModel, roadsAdd, roadsAddLine, roadsRemove, roadsFlush, ROADS, roadDist, roadBox, exportLayout, applyLayout, defaultLayout, cleanLayout, forestRebuild: () => forestRebuild && forestRebuild(), forestNear, forestIn, cutAdd, bigVis, setNoForest: (v) => { NOFOREST.v = !!v; }, noForest: () => NOFOREST.v, world, W, bumpRev: () => { layRev.n++; }, setLimits: (big) => { LIM.big = !!big; } };
     W.ed = root.FarmEditor ? root.FarmEditor.create(edApi) : null;
     W.screenAt = (x, z, y) => { const v = new T.Vector3(x, y || 0.5, z).project(camera), r = canvas.getBoundingClientRect(); return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top }; };
-    W.palette = PALETTE; W.patches = PATCH; W.cleanLayout = cleanLayout; W.exportLayout = exportLayout; W.applyLayout = applyLayout; W.defaultLayout = defaultLayout;
+    W.forestCount = () => FOREST.spots.length; W.palette = PALETTE; W.patches = PATCH; W.cleanLayout = cleanLayout; W.exportLayout = exportLayout; W.applyLayout = applyLayout; W.defaultLayout = defaultLayout;
     initWolves();
     Object.assign(W, { wolves, update, fx, highlight, resize, tileScreen, vehScreen, workAnim, arrive, focusWild, focusForest, focusSites, focusSawmill, focusHome, focusTown, focusFarm, focusAll, screenshot: () => canvas.toDataURL("image/png"), CITY, setVehPos, pickVehicle, pickFarm, groundAt, focus, cam });
     return W;

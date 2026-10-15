@@ -130,6 +130,20 @@
     for (let i = 0; i < 1400; i++) { g.fillStyle = rgb(30, 28, 24, r() * 0.12); g.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2); }
   });
 
+  // мелкая рябь воды (карта нормалей, бесшовная)
+  defTex('smw_ripple', 256, (cv, g, S) => {
+    const r = lcg(909), W = [], N = 14;
+    for (let i = 0; i < N; i++) W.push({ kx: Math.round((r() - 0.5) * 10), ky: Math.round((r() - 0.5) * 10), ph: r() * TAU, a: 0.4 + r() });
+    const im = g.createImageData(S, S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let dx = 0, dy = 0;
+      for (const w of W) { if (!w.kx && !w.ky) continue; const c = Math.cos(((w.kx * x + w.ky * y) / S) * TAU + w.ph) * w.a * TAU / S; dx += c * w.kx; dy += c * w.ky; }
+      dx *= 6; dy *= 6; const len = Math.sqrt(dx * dx + dy * dy + 1), i = (y * S + x) * 4;
+      im.data[i] = (-dx / len * 0.5 + 0.5) * 255; im.data[i + 1] = (-dy / len * 0.5 + 0.5) * 255; im.data[i + 2] = (1 / len * 0.5 + 0.5) * 255; im.data[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+  });
+
   // ================================================================== материалы
   function CVT(name) { const t = new T.CanvasTexture(CV[name]); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; return t; }
   const corrN = CVT('smw_corr_n');
@@ -536,4 +550,144 @@
     return out;
   }
   reg('building', 'loggerHut', buildHut);
+
+  // ================================================================== ПРУД
+  /** накопитель треугольников с вершинными цветами (для камней, камыша, листьев) */
+  function Acc() { this.p = []; this.n = []; this.c = []; }
+  Acc.prototype.geo = function (geo, mtx, colorFn) {
+    const pa = geo.attributes.position, na = geo.attributes.normal, idx = geo.index, nm = new T.Matrix3().getNormalMatrix(mtx), v = new T.Vector3(), n = new T.Vector3(), col = [], cnt = pa.count;
+    for (let i = 0; i < cnt; i++) { v.fromBufferAttribute(pa, i); n.fromBufferAttribute(na, i); const c = colorFn(v.clone(), n.clone(), i); v.applyMatrix4(mtx); n.applyMatrix3(nm).normalize(); col.push([v.x, v.y, v.z, n.x, n.y, n.z, c[0], c[1], c[2]]); }
+    const order = idx ? Array.from(idx.array) : Array.from({ length: cnt }, (_, i) => i);
+    for (const i of order) { const q = col[i]; this.p.push(q[0], q[1], q[2]); this.n.push(q[3], q[4], q[5]); this.c.push(q[6], q[7], q[8]); }
+  };
+  Acc.prototype.tri = function (a, b, c, n, ca, cb, cc) { for (const [v, cl] of [[a, ca], [b, cb], [c, cc]]) { this.p.push(v[0], v[1], v[2]); this.n.push(n[0], n[1], n[2]); this.c.push(cl[0], cl[1], cl[2]); } };
+  Acc.prototype.mesh = function (material) {
+    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(this.p, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(this.n, 3)); geo.setAttribute('color', new T.Float32BufferAttribute(this.c, 3));
+    const m = new T.Mesh(geo, material); m.castShadow = true; m.receiveShadow = true; return m;
+  };
+  const hexRGB = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+  const lerpRGB = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  function keyLerp(keys, s, fn) { if (s <= keys[0][0]) return keys[0][1]; for (let i = 1; i < keys.length; i++) if (s <= keys[i][0]) { const t = smooth((s - keys[i - 1][0]) / (keys[i][0] - keys[i - 1][0])); return fn(keys[i - 1][1], keys[i][1], t); } return keys[keys.length - 1][1]; }
+
+  function buildPond() {
+    const RX = 27, RZ = 21, NA = 72, R = lcg(5151), WL = 0.12;
+    const go = (a) => clamp(0.935 + 0.1 * (0.55 * pn(a, 4, 3) + 0.3 * pn(a, 9, 7) + 0.15 * pn(a, 17, 5) - 0.5), 0.88, 0.984);
+    const bw = (a) => 0.105 + 0.06 * (pn(a, 6, 21) - 0.5);
+    const at = (a, f) => [Math.cos(a) * RX * f, Math.sin(a) * RZ * f];
+    const KY = [[0, 0.012], [0.15, 0.09], [0.4, 0.26], [0.62, 0.19], [0.8, 0.125], [0.9, 0.085], [1.0, 0.05]];
+    const profY = (s) => keyLerp(KY, s, (a, b, t) => lerp(a, b, t));
+    const bankY = (s, x, z) => { const nz = ((vn(x * 0.17 + 3.1, z * 0.17 - 2.2) - 0.5) * 0.09 + (vn(x * 0.8, z * 0.8) - 0.5) * 0.03) * smooth(clamp(s / 0.2, 0, 1)); return Math.max(0.012, profY(s) + nz); };
+    const CK = [[0, hexRGB(0x4f7a35)], [0.1, hexRGB(0x58803a)], [0.22, hexRGB(0x76804a)], [0.38, hexRGB(0x938867)], [0.52, hexRGB(0x7d6c4d)], [0.68, hexRGB(0x5d4a31)], [0.8, hexRGB(0x3d3023)], [0.92, hexRGB(0x2f2c20)], [1.0, hexRGB(0x252d22)]];
+    const bankCol = (s, a, x, z) => {
+      let c = keyLerp(CK, s, lerpRGB); const m = 0.82 + 0.34 * vn(x * 0.5 + 7, z * 0.5) + (vn(x * 2.2, z * 2.2) - 0.5) * 0.18;
+      const moss = smooth(clamp((pn(a, 11, 77) - 0.45) * 4, 0, 1)) * smooth(clamp((s - 0.45) / 0.3, 0, 1)) * (1 - smooth(clamp((s - 0.85) / 0.15, 0, 1))); if (moss > 0) c = lerpRGB(c, hexRGB(0x5b7233), moss * 0.55);
+      return [c[0] * m, c[1] * m, c[2] * m];
+    };
+    const sRing = [0, 0.06, 0.13, 0.21, 0.3, 0.4, 0.5, 0.6, 0.7, 0.78, 0.84, 0.92, 1.0], iF = [0.8, 0.6, 0.4, 0.2];
+    // --- берег и дно: один меш с вершинными цветами и прозрачным внешним краем
+    const pos = [], col = [], idx = [], ringStart = [];
+    const pushV = (x, y, z, c, alpha) => { pos.push(x, y, z); col.push(c[0], c[1], c[2], alpha); };
+    for (const s of sRing) {
+      ringStart.push(pos.length / 3);
+      for (let i = 0; i < NA; i++) { const a = (i / NA) * TAU, f = go(a) - s * bw(a), [x, z] = at(a, f); pushV(x, bankY(s, x, z), z, bankCol(s, a, x, z), s < 0.001 ? 0 : clamp(0.15 + s / 0.1, 0, 1)); }
+    }
+    iF.forEach((u, k) => {
+      ringStart.push(pos.length / 3);
+      for (let i = 0; i < NA; i++) { const a = (i / NA) * TAU, f = (go(a) - bw(a)) * u, [x, z] = at(a, f), y = lerp(0.05, 0.032, (k + 1) / (iF.length + 1)) + (vn(x * 0.4, z * 0.4) - 0.5) * 0.012, c = lerpRGB(hexRGB(0x2c3528), hexRGB(0x1c2620), (k + 1) / iF.length), m = 0.9 + 0.2 * vn(x * 0.6 + 3, z * 0.6); pushV(x, y, z, [c[0] * m, c[1] * m, c[2] * m], 1); }
+    });
+    const cIdx = pos.length / 3; pushV(0, 0.03, 0, hexRGB(0x182019), 1);
+    const nR = ringStart.length;
+    for (let r = 0; r < nR - 1; r++) for (let i = 0; i < NA; i++) { const a0 = ringStart[r] + i, a1 = ringStart[r] + (i + 1) % NA, b0 = ringStart[r + 1] + i, b1 = ringStart[r + 1] + (i + 1) % NA; idx.push(a0, a1, b0, a1, b1, b0); }
+    for (let i = 0; i < NA; i++) idx.push(ringStart[nR - 1] + i, ringStart[nR - 1] + (i + 1) % NA, cIdx);
+    const bgeo = new T.BufferGeometry(); bgeo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); bgeo.setAttribute('color', new T.Float32BufferAttribute(col, 4)); bgeo.setIndex(idx); bgeo.computeVertexNormals();
+    const bank = new T.Mesh(bgeo, new T.MeshLambertMaterial({ vertexColors: true, transparent: true, depthWrite: true, side: T.DoubleSide })); bank.renderOrder = 1; bank.receiveShadow = true; bank.name = 'bank';
+    // --- вода: ряды от уреза к центру, цвет темнее к центру, прозрачнее у берега
+    const wpos = [], wuv = [], wcol = [], wnor = [], widx = [], wRing = [], sW = 0.84, wF = [1, 0.84, 0.66, 0.48, 0.3, 0.14];
+    const deep = hexRGB(0x0b2e30), shallow = hexRGB(0x426f5c);
+    wF.forEach((u, k) => {
+      wRing.push(wpos.length / 3);
+      for (let i = 0; i < NA; i++) {
+        const a = (i / NA) * TAU, fe = go(a) - sW * bw(a), [x, z] = at(a, fe * u), t = k / (wF.length - 1), c = lerpRGB(shallow, deep, smooth(clamp(t * 1.15, 0, 1))), m = 0.94 + 0.12 * vn(x * 0.12 + 5, z * 0.12);
+        wpos.push(x, WL, z); wuv.push(x / 7, z / 7); wcol.push(c[0] * m, c[1] * m, c[2] * m, lerp(0.4, 0.98, smooth(clamp(t * 2.2, 0, 1))));
+        const nx = (vn(x * 0.35 + 11, z * 0.35) - 0.5) * 0.07, nz = (vn(x * 0.35, z * 0.35 + 17) - 0.5) * 0.07, nl = Math.sqrt(1 + nx * nx + nz * nz); wnor.push(nx / nl, 1 / nl, nz / nl);
+      }
+    });
+    const wc = wpos.length / 3; wpos.push(0, WL, 0); wuv.push(0, 0); wcol.push(deep[0] * 0.9, deep[1] * 0.9, deep[2] * 0.9, 0.98); wnor.push(0, 1, 0);
+    for (let r = 0; r < wRing.length - 1; r++) for (let i = 0; i < NA; i++) { const a0 = wRing[r] + i, a1 = wRing[r] + (i + 1) % NA, b0 = wRing[r + 1] + i, b1 = wRing[r + 1] + (i + 1) % NA; widx.push(a0, b0, a1, a1, b0, b1); }
+    for (let i = 0; i < NA; i++) widx.push(wRing[wRing.length - 1] + i, wc, wRing[wRing.length - 1] + (i + 1) % NA);
+    const wgeo = new T.BufferGeometry(); wgeo.setAttribute('position', new T.Float32BufferAttribute(wpos, 3)); wgeo.setAttribute('color', new T.Float32BufferAttribute(wcol, 4)); wgeo.setAttribute('normal', new T.Float32BufferAttribute(wnor, 3)); wgeo.setAttribute('uv', new T.Float32BufferAttribute(wuv, 2)); wgeo.setIndex(widx);
+    const water = new T.Mesh(wgeo, new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.05, metalness: 0.1, envMapIntensity: 0.95, transparent: true, opacity: 0.88, depthWrite: false, normalMap: CVT('smw_ripple'), normalScale: new T.Vector2(0.28, 0.28) })); water.renderOrder = 3; water.name = 'water'; water.receiveShadow = true;
+    // --- камни, тростник, рогоз, кувшинки: один меш с вершинными цветами
+    const acc = new T.Group(), A = new Acc(), M4 = new T.Matrix4(), Q = new T.Quaternion(), S3 = new T.Vector3(), P3 = new T.Vector3();
+    const shore = (s, a) => { const f = go(a) - s * bw(a), [x, z] = at(a, f); return [x, z, bankY(s, x, z)]; };
+    const rockBase = new T.SphereGeometry(1, 6, 4);
+    function rock(a, s, rad, tone) {
+      const [x, z, y] = shore(s, a), g2 = rockBase.clone(), pa = g2.attributes.position, sd = R() * 50;
+      for (let i = 0; i < pa.count; i++) { const vx = pa.getX(i), vy = pa.getY(i), vz = pa.getZ(i), k = 1 + 0.32 * (vn(vx * 1.6 + sd, vz * 1.6 + vy * 1.3) - 0.5) * 2; pa.setXYZ(i, vx * k, vy * k * 0.66, vz * k); }
+      g2.computeVertexNormals();
+      M4.compose(P3.set(x, y + rad * 0.12, z), Q.setFromEuler(new T.Euler((R() - 0.5) * 0.4, R() * TAU, (R() - 0.5) * 0.4)), S3.set(rad * (0.9 + R() * 0.4), rad * (0.8 + R() * 0.3), rad * (0.9 + R() * 0.4)));
+      const base = tone[R() * tone.length | 0], vv = 0.85 + R() * 0.3;
+      A.geo(g2, M4, (v, n, i) => { const m = vv * (0.8 + 0.3 * vn(v.x * 3 + sd, v.z * 3)), moss = smooth(clamp((-v.y + 0.1) * 2.2, 0, 1)) * 0.7; const b = hexRGB(base), c = lerpRGB([b[0] * m, b[1] * m, b[2] * m], hexRGB(0x4f6a30), moss * 0.5 * (0.5 + 0.5 * n.y * -1)); return c; });
+    }
+    const tones = [0x8a8a84, 0x7a7a74, 0x9a968a, 0x6f6e68, 0xa49e90];
+    for (let i = 0; i < 6; i++) rock((i + R() * 0.7) / 6 * TAU, 0.55 + R() * 0.4, 0.55 + R() * 0.4, tones);
+    for (let i = 0; i < 14; i++) rock(R() * TAU, 0.45 + R() * 0.5, 0.25 + R() * 0.25, tones);
+    for (let i = 0; i < 14; i++) rock(R() * TAU, 0.3 + R() * 0.65, 0.1 + R() * 0.14, tones);
+    // лезвия тростника
+    const Gb = [hexRGB(0x4a6a2c), hexRGB(0x78a042), hexRGB(0xb5c25e)], Gy = [hexRGB(0x5a6a2a), hexRGB(0xa0b04a), hexRGB(0xd6c872)];
+    function blade(x, y, z, h, wd, lx, lz, phi, pal, nrm) {
+      const wx = Math.cos(phi), wz = Math.sin(phi), ts = [0, 0.4, 0.75, 1], ws = [1, 0.92, 0.55, 0], pts = ts.map((t, i) => ({ p: [x + lx * t * t, y + h * t * (1 - 0.1 * t), z + lz * t * t], w: wd * ws[i] * 0.5, c: t < 0.5 ? lerpRGB(pal[0], pal[1], t / 0.5) : lerpRGB(pal[1], pal[2], (t - 0.5) / 0.5) }));
+      const nv = (() => { const nx0 = -wz, nz0 = wx, l = Math.hypot(0.5, 1); return [nx0 * 0.4 / l, 1 / l * 0.92, nz0 * 0.4 / l]; })();
+      for (let i = 0; i < 3; i++) {
+        const a = pts[i], b = pts[i + 1], la = [a.p[0] - wx * a.w, a.p[1], a.p[2] - wz * a.w], ra = [a.p[0] + wx * a.w, a.p[1], a.p[2] + wz * a.w], lb = [b.p[0] - wx * b.w, b.p[1], b.p[2] - wz * b.w], rb = [b.p[0] + wx * b.w, b.p[1], b.p[2] + wz * b.w];
+        A.tri(la, ra, lb, nv, a.c, a.c, b.c); if (i < 2) A.tri(ra, rb, lb, nv, a.c, b.c, b.c);
+      }
+    }
+    function reedCluster(a, s, n, hMin, hMax, spread, cattail) {
+      const [cx, cz, cyy] = shore(s, a), dirA = a + PI;
+      for (let i = 0; i < n; i++) {
+        const ang = R() * TAU, d = Math.sqrt(R()) * spread, x = cx + Math.cos(ang) * d, z = cz + Math.sin(ang) * d, h = hMin + R() * (hMax - hMin);
+        const lean = 0.12 + R() * 0.5, lx = (Math.cos(R() * TAU) * 0.6 + Math.cos(dirA) * 0.3) * lean * h * 0.4, lz = (Math.sin(R() * TAU) * 0.6 + Math.sin(dirA) * 0.3) * lean * h * 0.4;
+        blade(x, Math.max(0.03, cyy - 0.04), z, h, cattail ? 0.07 : 0.045 + R() * 0.02, lx, lz, R() * PI, R() < 0.25 ? Gy : Gb);
+      }
+    }
+    const clusterAngs = []; for (let i = 0; i < 34; i++) { let a, tries = 0; do { a = R() * TAU; tries++; } while (pn(a, 7, 41) < 0.42 && tries < 12); clusterAngs.push(a); }
+    clusterAngs.forEach((a, i) => reedCluster(a, 0.72 + R() * 0.2, 9 + (R() * 5 | 0), 0.9, 1.9, 0.5 + R() * 0.3, false));
+    // рогоз: стебель + коричневый початок
+    function cattail(a, s) {
+      const [cx, cz, cyy] = shore(s, a); const n = 3 + (R() * 3 | 0);
+      for (let i = 0; i < n; i++) {
+        const x = cx + (R() - 0.5) * 1.1, z = cz + (R() - 0.5) * 1.1, h = 1.3 + R() * 0.8, lx = (R() - 0.5) * 0.4, lz = (R() - 0.5) * 0.4, y0 = Math.max(0.03, cyy - 0.04);
+        blade(x, y0, z, h * 0.55, 0.06, lx * 0.2, lz * 0.2, R() * PI, Gb); blade(x + 0.02, y0, z, h * 0.7, 0.06, -lx * 0.3, lz * 0.3, R() * PI, Gb);
+        const tx = x + lx, tz = z + lz, ty = y0 + h;
+        A.geo(new T.CylinderGeometry(0.012, 0.012, h, 4, 1, true), M4.compose(P3.set(x + lx * 0.5, y0 + h / 2, z + lz * 0.5), Q.setFromUnitVectors(new T.Vector3(0, 1, 0), new T.Vector3(lx, h, lz).normalize()), S3.set(1, 1, 1)), () => hexRGB(0x6c8a3c));
+        A.geo(new T.CylinderGeometry(0.036, 0.034, 0.24, 6, 1), M4.compose(P3.set(tx, ty - 0.1, tz), Q.identity(), S3.set(1, 1, 1)), (v) => lerpRGB(hexRGB(0x4a2f1c), hexRGB(0x6b4328), 0.5 + v.y * 2));
+        A.geo(new T.ConeGeometry(0.014, 0.16, 4, 1), M4.compose(P3.set(tx, ty + 0.1, tz), Q.identity(), S3.set(1, 1, 1)), () => hexRGB(0x7c8a3a));
+      }
+    }
+    for (let i = 0; i < 9; i++) { let a, tries = 0; do { a = R() * TAU; tries++; } while (pn(a, 7, 41) < 0.35 && tries < 12); cattail(a, 0.76 + R() * 0.16); }
+    // кувшинки с цветами
+    const padG = new T.CircleGeometry(1, 12, 0.35, TAU - 0.5); padG.rotateX(-PI / 2);
+    function padGroup(a, f, n, spread) {
+      const [cx, cz] = at(a, f);
+      for (let i = 0; i < n; i++) {
+        const x = cx + (R() - 0.5) * spread, z = cz + (R() - 0.5) * spread, rad = 0.22 + R() * 0.24, cc = lerpRGB(hexRGB(0x3c6b2c), hexRGB(0x5d8f3c), R());
+        M4.compose(P3.set(x, WL + 0.012 + R() * 0.006, z), Q.setFromEuler(new T.Euler(0, R() * TAU, 0)), S3.set(rad, 1, rad));
+        A.geo(padG, M4, (v) => { const k = 0.9 + 0.2 * Math.hypot(v.x, v.z); return [cc[0] * k, cc[1] * k, cc[2] * k]; });
+        if (R() < 0.3) {
+          const fx = x + (R() - 0.5) * 0.2, fz = z + (R() - 0.5) * 0.2, fy = WL + 0.03;
+          for (let k = 0; k < 8; k++) { const a1 = k / 8 * TAU, a2 = (k + 1) / 8 * TAU, ar = (a1 + a2) / 2; A.tri([fx + Math.cos(a1) * 0.04, fy, fz + Math.sin(a1) * 0.04], [fx + Math.cos(a2) * 0.04, fy, fz + Math.sin(a2) * 0.04], [fx + Math.cos(ar) * 0.11, fy + 0.07, fz + Math.sin(ar) * 0.11], [Math.cos(ar) * 0.6, 0.8, Math.sin(ar) * 0.6], hexRGB(0xf3f0e6), hexRGB(0xf3f0e6), hexRGB(0xffffff)); }
+          for (let k = 0; k < 5; k++) { const a1 = k / 5 * TAU + 0.3, a2 = (k + 1) / 5 * TAU + 0.3, ar = (a1 + a2) / 2; A.tri([fx + Math.cos(a1) * 0.025, fy + 0.02, fz + Math.sin(a1) * 0.025], [fx + Math.cos(a2) * 0.025, fy + 0.02, fz + Math.sin(a2) * 0.025], [fx + Math.cos(ar) * 0.05, fy + 0.1, fz + Math.sin(ar) * 0.05], [Math.cos(ar) * 0.3, 0.9, Math.sin(ar) * 0.3], hexRGB(0xfff7d0), hexRGB(0xfff7d0), hexRGB(0xf5d44e)); }
+        }
+      }
+    }
+    padGroup(2.2, 0.55, 6, 3.4); padGroup(3.0, 0.7, 4, 2.2); padGroup(5.4, 0.62, 4, 2.4);
+    const props = A.mesh(new T.MeshLambertMaterial({ vertexColors: true, side: T.DoubleSide }));
+    // плавающие брёвна
+    const logsG = new T.Group();
+    for (const [a, f, len, ry] of [[0.6, 0.55, 3.6, 0.7], [4.1, 0.5, 2.8, 2.4]]) { const [x, z] = at(a, f * (go(a) - sW * bw(a))), o = add(logsG, logGeo(0.2, 0.17, len, 10, 2, R), logM, x, WL - 0.04, z, 0, ry, 0); o.rotation.set(0, ry, PI / 2 + 0.05); o.rotation.order = 'YXZ'; }
+    const out = new T.Group(); out.add(bank); out.add(props); out.add(logsG); out.add(water);
+    return out;
+  }
+  reg('prop', 'pond', buildPond);
 })();

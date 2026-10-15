@@ -85,7 +85,7 @@
   const autoEvery = (k, lv) => Math.round(MACHINES[k].every * Math.pow(0.82, lv - 1) * 10) / 10;
   const autoN = (k, lv) => ({ drone: lv, collector: lv * 2, seeder: lv, courier: 1, sawmill: lv * 4 }[k]);
   const speedOf = (lv) => 1 + 0.08 * lv, doubleOf = (lv) => 0.04 * lv, feedUseOf = (lv) => Math.max(0.4, 1 - 0.06 * lv);
-  const plotsOf = (c, first) => ({ plots: [first || [12, 8], [16, 10], [20, 12], [24, 14]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900] });
+  const plotsOf = (c, first) => ({ plots: [first || [12, 8], [16, 10], [20, 12], [24, 14], [30, 17], [36, 20], [42, 24]], plotCost: [0, Math.round(c * 0.15) + 120, Math.round(c * 0.45) + 350, Math.round(c * 1.1) + 900, Math.round(c * 2.2) + 2500, Math.round(c * 4.5) + 6000, Math.round(c * 9) + 15000] });
   const FARM_DEFS = [  // фермы открываются с уровнем; новые участки пустые
     Object.assign({ id: 'home', name: 'Моя ферма', icon: '🏡', level: 1, cost: 0, bonus: 1 }, plotsOf(0)),
     Object.assign({ id: 'meadow', name: 'Цветочный луг', icon: '🌼', level: 3, cost: 500, bonus: 1.05 }, plotsOf(500)),

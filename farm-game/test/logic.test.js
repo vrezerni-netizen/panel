@@ -319,3 +319,11 @@ test('старые маленькие участки подрастают до �
   L.migrate(s); assert.equal(f.w, 12); assert.equal(f.h, 8); assert.equal(f.tiles.length, 96); assert.equal(L.tileAt(s, 2, 2).crop, 'wheat');
   assert.deepEqual(L.FARM_DEFS.filter((d) => !d.wild && !d.forestry).map((d) => d.plots[3]), Array(7).fill([24, 14]));
 });
+
+test('поле можно расширять дальше: семь ступеней до 42×24, посевы при росте не теряются', () => {
+  const s = fresh(); s.coins = 1e9; L.act(s, 'seed', 3, 3, 'wheat');
+  const sizes = [[12, 8]]; for (let i = 0; i < 6; i++) { const r = L.buyUpgrade(s, 'plot'); assert.ok(r.ok, 'ступень ' + (i + 1)); const f = L.farm(s); sizes.push([f.w, f.h]); assert.equal(f.tiles.length, f.w * f.h); }
+  assert.deepEqual(sizes, [[12, 8], [16, 10], [20, 12], [24, 14], [30, 17], [36, 20], [42, 24]]);
+  assert.equal(L.tileAt(s, 3, 3).crop, 'wheat'); assert.equal(L.upgradeCost(s, 'plot'), null); assert.equal(L.buyUpgrade(s, 'plot').ok, false);
+  const d = L.farmDef(s), cost = d.plotCost; assert.ok(cost[4] > cost[3] && cost[5] > cost[4] && cost[6] > cost[5]);
+});
