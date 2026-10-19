@@ -24,6 +24,8 @@ namespace FarmSim.Fields
         public readonly ushort[] FieldId = new ushort[Cells];
         public int FieldCells;                            // сколько клеток чанка принадлежит полям
         public bool GpuDirty, SaveDirty;
+        public int Version;                               // растёт при каждом изменении клеток (рендер растений пересчитывает только изменившиеся чанки)
+        public void Touch() { GpuDirty = SaveDirty = true; Version++; }
         public int GrowthPeriod;                          // какой период роста уже посчитан для чанка
         public FieldChunk(int index, int cx, int cz) { Index = index; Cx = cx; Cz = cz; }
     }
@@ -95,7 +97,7 @@ namespace FarmSim.Fields
             if (cx < 0 || cz < 0 || cx >= Width || cz >= Height) return false;
             var c = ChunkOf(cx, cz); if (c == null) return false; int i = Local(cx, cz);
             if (c.FieldId[i] == 0 || c.State[i] == s) return false;
-            c.State[i] = s; c.GpuDirty = c.SaveDirty = true; return true;
+            c.State[i] = s; c.Touch(); return true;
         }
 
         // ---------------------------------------------------------------- поля
@@ -118,7 +120,7 @@ namespace FarmSim.Fields
                     if (!InPolygon(polygonXZ, px, pz)) continue;
                     var c = EnsureChunk(cx, cz); int i = Local(cx, cz);
                     if (c.FieldId[i] != 0) continue;
-                    c.FieldId[i] = id; c.State[i] = fresh; c.FieldCells++; c.GpuDirty = c.SaveDirty = true; n++; touched.Add(c);
+                    c.FieldId[i] = id; c.State[i] = fresh; c.FieldCells++; c.Touch(); n++; touched.Add(c);
                 }
             if (!chunksByField.TryGetValue(id, out var list)) chunksByField[id] = list = new List<FieldChunk>();
             foreach (var c in touched) if (!list.Contains(c)) list.Add(c);
@@ -179,7 +181,7 @@ namespace FarmSim.Fields
                     int i = Local(cx, cz); if (ch.FieldId[i] == 0) continue;
                     float px = OriginX + (cx + 0.5f) * CellSize;
                     if (!InAnyTriangle(tris, px, pz)) continue;
-                    if (o.TryApply(ref ch.State[i], CellArea, ref yield)) { res.CellsChanged++; ch.GpuDirty = ch.SaveDirty = true; }
+                    if (o.TryApply(ref ch.State[i], CellArea, ref yield)) { res.CellsChanged++; ch.Touch(); }
                 }
             }
             res.AreaM2 = res.CellsChanged * CellArea; res.YieldLiters = yield;
@@ -232,7 +234,7 @@ namespace FarmSim.Fields
                 uint s = c.State[i], n = GrowCell(s, Hash(seedBase + (uint)i, (uint)period), rain);
                 if (n != s) { c.State[i] = n; changed = true; }
             }
-            if (changed) c.GpuDirty = c.SaveDirty = true;
+            if (changed) c.Touch();
         }
 
         /// <summary>Один период для одной клетки: влажность, культура на стадию дальше, сорняки.</summary>
@@ -335,7 +337,7 @@ namespace FarmSim.Fields
                     for (int got = 0; got < bytes.Length;) { int n = r.Read(bytes.Slice(got)); if (n <= 0) throw new EndOfStreamException(); got += n; }
                     if (c == null) continue;
                     for (int i = 0; i < FieldChunk.Cells; i++) if (c.FieldId[i] != 0) c.State[i] = buf[i];
-                    c.GpuDirty = true; c.SaveDirty = false;
+                    c.Touch(); c.SaveDirty = false;
                 }
                 foreach (var c in allocated) c.GrowthPeriod = GrowthPeriod;
             }

@@ -11,7 +11,9 @@
     <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldCrops.cs" />
     <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldOps.cs" />
     <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldGrid.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/Crops/CropChunkIndex.cs" />
     <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/FieldGridTests.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/CropChunkIndexTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
