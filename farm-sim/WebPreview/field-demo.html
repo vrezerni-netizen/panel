@@ -1,4 +1,4 @@
-<title>Поле · шаг 1</title>
+<title>Поле и трактор</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
@@ -32,7 +32,7 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
 .chip.on { background: var(--gold); color: #1e1a10; border-color: var(--gold); }
 .chip.crop.on { background: var(--ok); border-color: var(--ok); color: #13200d; }
 .chip:focus-visible, .btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-#status { padding: 10px 12px; display: grid; gap: 4px; max-width: 330px; font-size: 13px; }
+#status { padding: 10px 12px; display: grid; gap: 4px; max-width: 400px; font-size: 13px; }
 #status .t { font: 700 20px/1 var(--display); letter-spacing: .02em; display: flex; gap: 8px; align-items: baseline; }
 .pill { font: 600 12px/1 var(--display); text-transform: uppercase; letter-spacing: .06em; padding: 4px 7px; border-radius: 5px; background: rgba(255,255,255,.12); color: var(--mute); }
 .pill.work { background: var(--ok); color: #13200d; }
@@ -42,12 +42,21 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
 #status .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); margin-top: 4px; }
 #status .bar i { display: block; height: 100%; }
 #status .legend { color: var(--mute); font-size: 12px; }
+#dash { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 8px 12px; max-width: 400px; font-variant-numeric: tabular-nums; }
+#dash .g { display: grid; grid-template-rows: auto auto auto; min-width: 0; }
+#dash b { font: 700 24px/1 var(--display); letter-spacing: .01em; }
+#dash span { font: 600 11px/1.3 var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#dash small { font-size: 11px; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 3px; }
+.meter u { display: block; height: 100%; width: 0; background: var(--ok); text-decoration: none; transition: width .1s linear; }
+.meter u.hot { background: var(--warn); }
 #joy { left: max(14px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 132px; height: 132px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); touch-action: none; }
 #knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(241,238,228,.92); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
 #joy .lbl { position: absolute; left: 0; right: 0; top: -18px; text-align: center; font: 600 11px/1 var(--display); color: var(--ink); text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
-#act { right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: min(270px, 52vw); }
+#act { right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: min(330px, 56vw); }
 .btn { font: 700 15px/1.1 var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 8px; cursor: pointer; text-align: center; }
-.btn.big { grid-column: span 2; font-size: 19px; padding: 15px 8px; }
+.btn.big { grid-column: span 3; font-size: 19px; padding: 15px 8px; }
+.btn:disabled { opacity: .45; cursor: default; }
 .btn.lower { background: var(--soil); border-color: var(--soil); }
 .btn.on { background: var(--gold); border-color: var(--gold); color: #1e1a10; }
 .btn small { display: block; font: 500 11px/1.2 var(--body); text-transform: none; letter-spacing: 0; color: inherit; opacity: .8; margin-top: 2px; }
@@ -57,7 +66,7 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
 #help .mute { color: var(--mute); font-size: 12.5px; }
 #help .btn { justify-self: start; padding: 10px 16px; background: var(--gold); color: #1e1a10; border-color: var(--gold); }
 #nogl { inset: 0; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); background: var(--panel-solid); text-align: center; font-size: 16px; }
-@media (max-width: 520px) { #status { max-width: 62vw; font-size: 12px; } #status .t { font-size: 18px; } #joy { width: 118px; height: 118px; } .btn { font-size: 13.5px; padding: 10px 6px; } .btn.big { font-size: 17px; padding: 13px 6px; } }
+@media (max-width: 520px) { #status { max-width: none; font-size: 12px; padding: 8px 10px; } #status .t { font-size: 18px; } #status .legend { display: none; } #status .legend[style] { display: block; } #dash { gap: 6px; padding: 7px 10px; } #dash b { font-size: 20px; } #dash span { font-size: 10px; letter-spacing: .03em; } #joy { width: 118px; height: 118px; } .btn { font-size: 13px; padding: 9px 4px; } .btn small { font-size: 10px; } .btn.big { font-size: 17px; padding: 12px 6px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -65,21 +74,29 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
 <div id="top" class="hud">
   <div class="row" id="tools" role="toolbar" aria-label="Орудие"></div>
   <div class="row" id="crops" role="toolbar" aria-label="Что сеять" hidden></div>
+  <div id="dash" class="panel" aria-label="Приборы">
+    <div class="g"><b id="dSpd">0</b><span>км/ч</span><small id="dLim">поле</small></div>
+    <div class="g"><b id="dRpm">850</b><span>об/мин</span><i class="meter"><u id="mRpm"></u></i></div>
+    <div class="g"><b id="dLoad">0%</b><span>нагрузка</span><i class="meter"><u id="mLoad"></u></i></div>
+    <div class="g"><b id="dSlip">0%</b><span>буксуют</span><i class="meter"><u id="mSlip"></u></i></div>
+  </div>
   <div id="status" class="panel" aria-live="polite"></div>
 </div>
 <div id="joy" class="hud" aria-label="Руль и газ"><div id="knob"></div><div class="lbl">Руль · газ</div></div>
 <div id="act" class="hud">
   <button class="btn big lower" id="bLower" type="button">▼ Опустить</button>
-  <button class="btn" id="bAuto" type="button">Авто<small>сам пройдёт поле</small></button>
-  <button class="btn" id="bView" type="button">Вид<small>сзади / сверху</small></button>
-  <button class="btn" id="bGrow" type="button">+1 период<small>рост на стадию</small></button>
-  <button class="btn" id="bGrow4" type="button">+4 периода<small>с дождём</small></button>
+  <button class="btn" id="bPto" type="button">ВОМ<small>выкл</small></button>
+  <button class="btn" id="bRange" type="button">Поле<small>до 25 км/ч</small></button>
+  <button class="btn" id="bAuto" type="button">Авто<small>челнок</small></button>
+  <button class="btn" id="bView" type="button">Вид<small>сзади/сверху</small></button>
+  <button class="btn" id="bGrow" type="button">Рост<small>+1 период</small></button>
+  <button class="btn" id="bGrow4" type="button">Дождь<small>+4 периода</small></button>
 </div>
 <div id="help" class="hud panel" role="dialog" aria-labelledby="helpT" hidden>
-  <h2 id="helpT">Поле из шага 1: та же логика, что в Unity</h2>
-  <p>Трактор уже пашет сам. Каждая клетка поля 0,5 м хранит своё состояние, а земля и растения рисуются прямо из этой карты.</p>
-  <p>Выбери орудие сверху, жми «Опустить» и веди джойстиком. Или «Авто»: трактор сам пройдёт поле челноком.</p>
-  <p class="mute">На компьютере: W A S D — ехать, пробел — опустить или поднять.</p>
+  <h2 id="helpT">Шаг 2: трактор, навеска и ВОМ</h2>
+  <p>Трактор едет по той же физике, что код для Unity: мотор 150 кВт, сцепление колёс зависит от земли под ними, орудие в земле тянет назад.</p>
+  <p>Выбери орудие сверху, жми «Опустить» и газуй джойстиком. Фрезе нужен ВОМ. Приборы показывают скорость, обороты, нагрузку и буксование.</p>
+  <p class="mute">На компьютере: W A S D — ехать, пробел — навеска, E — ВОМ, G — поле или дорога.</p>
   <button class="btn" id="helpOk" type="button">Понятно</button>
 </div>
 <div id="nogl" class="hud" hidden>Этот показ требует WebGL 2. Открой страницу в Safari или Chrome поновее.</div>
@@ -90,6 +107,7 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
 <!--INLINE:../../farm-game/models_machines.js-->
 <!--INLINE:../../farm-game/models_machines2.js-->
 <!--INLINE:field.js-->
+<!--INLINE:vehicle.js-->
 <script>
 (function () {
   'use strict';
@@ -296,31 +314,86 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
     }
   }
 
-  // ---------------------------------------------------------------- техника и орудия
+  // ---------------------------------------------------------------- техника и орудия (шаг 2: трактор отдельно, орудие на навеске или дышле)
+  //  hitch: '3pt' — 3-точечная навеска (курс как у трактора, гидравлика поднимает), 'bar' — дышло (орудие идёт следом, ±75°)
+  //  limit — предел скорости в работе, км/ч (как в FS); ptoKW — мощность на ВОМ; machKW — молотилка комбайна при опущенной жатке
   const TOOLS = [
-    { id: 'plow', name: 'Плуг', op: OP.Plow, width: 4, model: 'tractor', level: 4, front: false, depth: 1.2 },
-    { id: 'cult', name: 'Культиватор', op: OP.Cultivate, width: 6, model: 'tractor', level: 2, front: false, depth: 1.2 },
-    { id: 'sow', name: 'Сеялка', op: OP.Sow, width: 6, model: 'tractor', level: 6, front: false, depth: 1.0 },
-    { id: 'fert', name: 'Удобрение', op: OP.Fertilize, width: 12, model: 'spreader', level: 3, front: false, depth: 1.5 },
-    { id: 'harv', name: 'Комбайн', op: OP.Harvest, width: 6, model: 'combine', level: 4, front: true, depth: 1.2 },
+    { id: 'plow', name: 'Плуг', op: OP.Plow, width: 3, impl: 'plow', hitch: '3pt', depth: 0.24, mass: 1600, limit: 12 },
+    { id: 'disc', name: 'Дискатор', op: OP.Cultivate, width: 6, impl: 'disc', hitch: 'bar', depth: 0.08, mass: 3500, limit: 15 },
+    { id: 'till', name: 'Фреза', op: OP.Cultivate, width: 3, impl: 'tiller', hitch: '3pt', depth: 0.1, mass: 1200, limit: 10, ptoKW: 55 },
+    { id: 'sow', name: 'Сеялка', op: OP.Sow, width: 3, impl: 'seeder', hitch: '3pt', depth: 0.03, mass: 1100, limit: 15 },
+    { id: 'fert', name: 'Удобрение', op: OP.Fertilize, width: 12, model: 'spreader', level: 3, depth: 1.5, mass: 9000, limit: 15, ptoKW: 12 },
+    { id: 'harv', name: 'Комбайн', op: OP.Harvest, width: 6, model: 'combine', level: 4, front: true, depth: 1.2, mass: 14000, limit: 10, machKW: 60 },
   ];
+  const TRACTOR_KG = 8000;
   const CROPS = [[C.Wheat, 'Пшеница'], [C.Corn, 'Кукуруза'], [C.Canola, 'Рапс']];
-  const veh = { x: -38, z: FIELD.z0 - 10, th: 0, v: 0, steer: 0, lowered: false, tool: TOOLS[0], crop: C.Wheat, obj: null, local: null, prevL: null, prevR: null, area: 0, yield: 0, working: false };
-  const shadow = new T.Mesh(new T.CircleGeometry(1, 32), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 1; scene.add(shadow);
+  const VS = window.VehicleSim, dtr = new VS.Drivetrain(), lift = new VS.HydraulicLift(0.7), pto = new VS.PtoShaft();
+  // x, z — середина заднего моста (вокруг неё поворачивает трактор), th — курс
+  const veh = { x: -38, z: FIELD.z0 - 10, th: 0, v: 0, steer: 0, thr: 0, rev: false, sink: 0, tool: TOOLS[0], crop: C.Wheat, body: null, P: null, imp: null, wf: null, prevL: null, prevR: null, area: 0, yield: 0, working: false, workT: 0 };
+  const tele = { rpm: 850, load: 0, slip: 0, draft: 0, soil: VS.ROAD, cell: 0, limit: 0 };
+  const shadowMat = new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false });
+  const mkShadow = () => { const m = new T.Mesh(new T.CircleGeometry(1, 32), shadowMat); m.rotation.x = -Math.PI / 2; m.renderOrder = 1; scene.add(m); return m; };
+  const shadow = mkShadow(), shadowI = mkShadow();
+
+  // тяги навески и карданный вал: цилиндры между двумя точками, пересчитываются каждый кадр
+  const rodGeo = new T.CylinderGeometry(1, 1, 1, 10), UP = new T.Vector3(0, 1, 0), tv = new T.Vector3();
+  const rodMat = window.FarmCore ? window.FarmCore.metal(0x4a4f55, { roughness: 0.4 }) : new T.MeshStandardMaterial({ color: 0x4a4f55 });
+  const ptoMat = window.FarmCore ? window.FarmCore.paint(0xf2c418) : new T.MeshStandardMaterial({ color: 0xf2c418 });
+  const mkRod = (r, m) => { const o = new T.Mesh(rodGeo, m || rodMat); o.userData.r = r; o.visible = false; scene.add(o); return o; };
+  const rods = { lowL: mkRod(0.045), lowR: mkRod(0.045), top: mkRod(0.04), armL: mkRod(0.022), armR: mkRod(0.022), pto: mkRod(0.055, ptoMat) };
+  function setRod(o, a, b) { tv.subVectors(b, a); const L = tv.length(); o.position.addVectors(a, b).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(UP, tv.divideScalar(L || 1)); o.scale.set(o.userData.r, L, o.userData.r); o.visible = true; }
+
   function setTool(t) {
     veh.tool = t;
-    if (veh.obj) scene.remove(veh.obj);
-    let o = null; try { o = window.FarmModels.make('vehicle', t.model, { level: t.level }); } catch (e) { o = null; }
-    if (!o) { o = new T.Mesh(new T.BoxGeometry(2.5, 2.5, 5), new T.MeshStandardMaterial({ color: 0x3d7a2f })); o.position.y = 1.25; const g2 = new T.Group(); g2.add(o); o = g2; }
-    const box = new T.Box3().setFromObject(o); veh.box = box; veh.obj = o; scene.add(o);
-    // рабочая зона в осях машины: у прицепных — у заднего края, у комбайна — жатка впереди
-    const hw = t.width / 2, zf = t.front ? box.max.z - 0.4 : box.min.z + t.depth, zb = zf - t.depth;
-    veh.local = { l: [-hw, zf], r: [hw, zf], bl: [-hw, zb] };
+    for (const o of [veh.body, veh.imp && veh.imp.pivot]) if (o) scene.remove(o);
+    for (const k in rods) rods[k].visible = false;
+    const FM = window.FarmModels; let o = null, P = null;
+    try { o = FM.make('vehicle', t.impl ? 'tractorBody' : t.model, { level: t.impl ? 5 : t.level }); P = o.userData.points || null; } catch (e) { o = null; }
+    if (!o) { o = new T.Group(); const b = new T.Mesh(new T.BoxGeometry(2.5, 2.5, 5), new T.MeshStandardMaterial({ color: 0x3d7a2f })); b.position.y = 1.25; o.add(b); }
+    veh.body = o; veh.P = P && P.axle ? P : null; scene.add(o);
+    const box = new T.Box3().setFromObject(o); veh.box = box;
+    veh.axleZ = veh.P ? veh.P.axle.z : 0; veh.WB = veh.P ? veh.P.front.z - veh.P.axle.z : 3.0;
     shadow.scale.set((box.max.x - box.min.x) * 0.42, (box.max.z - box.min.z) * 0.45, 1);
-    veh.prevL = null; renderUI();
+    veh.imp = null; shadowI.visible = false;
+    if (t.impl && veh.P) {
+      let m = null; try { m = FM.make('implement', t.impl, { level: 2 }); } catch (e) { m = null; }
+      if (m) {
+        const ip = m.userData.points, pivot = new T.Group(); pivot.rotation.order = 'YXZ';
+        m.position.set(-ip.hitch.x, -ip.hitch.y, -ip.hitch.z); pivot.add(m); scene.add(pivot);
+        const ib = new T.Box3().setFromObject(m);
+        veh.imp = { pivot, m, ip, spin: m.getObjectByName('spin'), L: ip.axle ? ip.hitch.z - ip.axle.z : 0, ax: 0, az: 0, th: veh.th, x: 0, z: 0, dep: 0,
+          zc: (ib.min.z + ib.max.z) / 2 - ip.hitch.z, sx: (ib.max.x - ib.min.x) * 0.45, sz: (ib.max.z - ib.min.z) * 0.45 };
+        shadowI.visible = true; shadowI.scale.set(veh.imp.sx, veh.imp.sz, 1);
+        if (t.hitch === 'bar') { const H = tw(0, veh.P.hitch.z); veh.imp.ax = H[0] - Math.sin(veh.th) * veh.imp.L; veh.imp.az = H[1] - Math.cos(veh.th) * veh.imp.L; }
+        // рабочая зона в осях орудия, от точки сцепки: захват по ширине, от переднего до заднего края рабочих органов
+        const hw = t.width / 2, zf = ip.workF.z - ip.hitch.z, zb = ip.workB.z - ip.hitch.z;
+        veh.local = { l: [-hw, zf], r: [hw, zf], bl: [-hw, zb] };
+      }
+    }
+    if (!veh.imp) {
+      // самоходные: у разбрасывателя зона у заднего края, у комбайна — жатка впереди (в осях машины)
+      const hw = t.width / 2, zf = t.front ? box.max.z - 0.4 : box.min.z + t.depth, zb = zf - t.depth;
+      veh.local = { l: [-hw, zf], r: [hw, zf], bl: [-hw, zb] };
+    }
+    lift.pos = lift.target = 1; pto.on = false; pto.rpm = 0;
+    updateImplement(0); veh.prevL = null; renderUI();
   }
-  const toWorld = (lx, lz) => { const c = Math.cos(veh.th), s = Math.sin(veh.th); return [veh.x + lx * c + lz * s, veh.z - lx * s + lz * c]; };
+  /** Точка машины (ось X вправо, Z вперёд, от центра модели) → мир. */
+  function tw(lx, lz) { const c = Math.cos(veh.th), s = Math.sin(veh.th), z = lz - veh.axleZ; return [veh.x + lx * c + z * s, veh.z - lx * s + z * c]; }
+  /** Положение орудия: на навеске — курс трактора, на дышле — идёт следом за точкой сцепки (как прицеп). */
+  function updateImplement(dt) {
+    const I = veh.imp; if (!I) { veh.wf = { x: veh.x, z: veh.z, th: veh.th, off: veh.axleZ }; return; }
+    if (veh.tool.hitch === '3pt') { const B = tw(0, veh.P.ball.z); I.x = B[0]; I.z = B[1]; I.th = veh.th; }
+    else {
+      const H = tw(0, veh.P.hitch.z); let dx = H[0] - I.ax, dz = H[1] - I.az; const d = Math.hypot(dx, dz) || 1;
+      let th = Math.atan2(dx, dz), rel = th - veh.th; while (rel > Math.PI) rel -= 2 * Math.PI; while (rel < -Math.PI) rel += 2 * Math.PI;
+      const lim = 75 * Math.PI / 180; if (Math.abs(rel) > lim) th = veh.th + Math.sign(rel) * lim;
+      if (d > 1e-6 || Math.abs(rel) > lim) { I.ax = H[0] - Math.sin(th) * I.L; I.az = H[1] - Math.cos(th) * I.L; }
+      I.x = H[0]; I.z = H[1]; I.th = th;
+    }
+    veh.wf = { x: I.x, z: I.z, th: I.th, off: 0 };
+  }
+  const toWorld = (lx, lz) => { const f = veh.wf, c = Math.cos(f.th), s = Math.sin(f.th), z = lz - f.off; return [f.x + lx * c + z * s, f.z - lx * s + z * c]; };
 
   // ---------------------------------------------------------------- авто-челнок (заготовка шага 5: проходы вдоль поля, пустые пропускаются)
   const auto = { on: false, path: [], i: 0, laneDone: 0, lanes: 0 };
@@ -337,6 +410,7 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
     });
     auto.path = path; auto.i = 0; auto.lanes = work.length; return path.length > 0;
   }
+  function startAuto() { if (!buildAuto(FIELD.x0, FIELD.x1)) return false; auto.on = true; if (veh.tool.ptoKW) pto.on = true; dtr.road = false; veh.rev = false; return true; }
   function currentOp(angle) { return { kind: veh.tool.op, angle, crop: veh.tool.op === OP.Sow ? veh.crop : 0, direct: false }; }
 
   // ---------------------------------------------------------------- управление
@@ -347,13 +421,18 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
   joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) joyMove(e); });
   const joyEnd = (e) => { if (e.pointerId !== joyId) return; joyId = null; knob.style.transform = ''; input.str = input.thr = 0; };
   joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
-  addEventListener('keydown', (e) => { input.keys[e.code] = true; if (e.code === 'Space') { toggleLower(); e.preventDefault(); } if (/Key[WASD]|Arrow/.test(e.code)) stopAuto(); });
+  addEventListener('keydown', (e) => {
+    input.keys[e.code] = true; if (e.repeat) return;
+    if (e.code === 'Space' || e.code === 'KeyQ') { stopAuto(); toggleLower(); e.preventDefault(); }
+    if (e.code === 'KeyE') togglePto(); if (e.code === 'KeyG') toggleRange();
+    if (/Key[WASD]|Arrow/.test(e.code)) stopAuto();
+  });
   addEventListener('keyup', (e) => { input.keys[e.code] = false; });
 
   // камера: сзади (крутить пальцем по полю) или сверху; колёсико / два пальца — ближе-дальше
-  const cam = { mode: 'chase', yaw: 0, dist: innerWidth < innerHeight ? 38 : 26, pitch: innerWidth < innerHeight ? 0.6 : 0.42, x: 0, y: 30, z: 0, tx: 0, tz: 0 };
-  let drag = null; const touches = new Map();
-  canvas.addEventListener('pointerdown', (e) => { touches.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+  const cam = { mode: 'chase', yaw: 0, dist: innerWidth < innerHeight ? 34 : 21, pitch: innerWidth < innerHeight ? 0.6 : 0.42, x: 0, y: 30, z: 0, tx: 0, tz: 0 };
+  const touches = new Map();
+  canvas.addEventListener('pointerdown', (e) => { touches.set(e.pointerId, [e.clientX, e.clientY]); canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener('pointermove', (e) => {
     if (!touches.has(e.pointerId)) return; const prev = touches.get(e.pointerId); touches.set(e.pointerId, [e.clientX, e.clientY]);
     if (touches.size === 2) { const [a, b] = [...touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (cam.pd) cam.dist = Math.min(140, Math.max(8, cam.dist * cam.pd / d)); cam.pd = d; return; }
@@ -363,20 +442,24 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
   canvas.addEventListener('pointerup', ptrEnd); canvas.addEventListener('pointercancel', ptrEnd);
   canvas.addEventListener('wheel', (e) => { cam.dist = Math.min(140, Math.max(8, cam.dist * (e.deltaY > 0 ? 1.1 : 0.9))); e.preventDefault(); }, { passive: false });
 
-  function toggleLower() { veh.lowered = !veh.lowered; renderUI(); }
+  function toggleLower() { lift.toggle(); renderUI(); }
+  function togglePto() { if (!veh.tool.machKW) { pto.on = !pto.on; renderUI(); } }
+  function toggleRange() { dtr.road = !dtr.road; renderUI(); }
   function stopAuto() { if (auto.on) { auto.on = false; renderUI(); } }
   $('bLower').onclick = () => { stopAuto(); toggleLower(); };
-  $('bAuto').onclick = () => { if (auto.on) { stopAuto(); return; } if (buildAuto(FIELD.x0, FIELD.x1)) { auto.on = true; } else flash('Здесь этому орудию нечего делать'); renderUI(); };
+  $('bPto').onclick = togglePto;
+  $('bRange').onclick = toggleRange;
+  $('bAuto').onclick = () => { if (auto.on) { stopAuto(); return; } if (!startAuto()) flash('Здесь этому орудию нечего делать'); renderUI(); };
   $('bView').onclick = () => { cam.mode = cam.mode === 'chase' ? 'top' : 'chase'; renderUI(); };
   $('bGrow').onclick = () => { grid.grow(false); flash('Прошёл период: всё подросло на стадию, земля подсохла'); };
-  $('bGrow4').onclick = () => { for (let k = 0; k < 4; k++) grid.grow(true); flash('Прошло 4 периода с дождём'); };
+  $('bGrow4').onclick = () => { for (let k = 0; k < 4; k++) grid.grow(true); flash('Прошло 4 периода с дождём: земля мокрая, колёса держат хуже'); };
   let flashMsg = '', flashT = 0; function flash(m) { flashMsg = m; flashT = 3; renderUI(); }
 
   // ---------------------------------------------------------------- интерфейс
   const toolsEl = $('tools'), cropsEl = $('crops');
   toolsEl.innerHTML = TOOLS.map((t, i) => `<button type="button" class="chip" data-t="${i}">${t.name}</button>`).join('');
   cropsEl.innerHTML = CROPS.map(([c, n]) => `<button type="button" class="chip crop" data-c="${c}">${n}</button>`).join('');
-  toolsEl.onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; stopAuto(); veh.lowered = false; setTool(TOOLS[+b.dataset.t]); };
+  toolsEl.onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; stopAuto(); setTool(TOOLS[+b.dataset.t]); };
   cropsEl.onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; veh.crop = +b.dataset.c; renderUI(); };
   const GN = ['не поле', 'трава', 'стерня', 'культивировано', 'вспахано', 'засеяно'];
   function cellText(s) {
@@ -387,24 +470,52 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
     if (Cell.straw(s)) parts.push('солома');
     return parts.join(' · ');
   }
+  const f2 = (v) => v.toFixed(2).replace('.', ',');
+  function soilText() {
+    const s = tele.cell, g = s ? Cell.ground(s) : 0, wet = s && Cell.moisture(s) >= 6;
+    return (s ? GN[g] : 'грунтовка') + (wet ? ', мокро' : '') + ' · сцепление ' + f2(tele.soil.grip) + ' · качение ' + f2(tele.soil.roll);
+  }
+  function liftText() {
+    if (veh.tool.machKW) return lift.isDown ? 'жатка опущена · молотилка работает' : lift.moving ? 'жатка опускается…' : 'жатка поднята';
+    const what = veh.tool.hitch === 'bar' ? 'дышло · ' : veh.tool.impl ? 'навеска · ' : '';
+    const st = lift.isDown ? (veh.imp && veh.imp.dep > 0.01 ? 'в земле' : 'опущено') : lift.moving ? (lift.target < 0.5 ? 'опускается…' : 'поднимается…') : 'поднято';
+    return what + st + ' · ВОМ ' + (pto.on ? Math.round(pto.rpm) + ' об/мин' : 'выкл');
+  }
   let lastUI = '';
   function renderUI() {
     for (const b of toolsEl.children) b.classList.toggle('on', TOOLS[+b.dataset.t] === veh.tool);
     cropsEl.hidden = veh.tool.op !== OP.Sow;
     for (const b of cropsEl.children) b.classList.toggle('on', +b.dataset.c === veh.crop);
-    const bl = $('bLower'); bl.textContent = veh.lowered ? '▲ Поднять' : '▼ Опустить'; bl.classList.toggle('lower', !veh.lowered);
+    const wantDown = lift.target < 0.5, bl = $('bLower');
+    bl.textContent = wantDown ? '▲ Поднять' : '▼ Опустить'; bl.classList.toggle('lower', !wantDown);
+    const bp = $('bPto'); bp.disabled = !!veh.tool.machKW; bp.classList.toggle('on', pto.on);
+    bp.innerHTML = 'ВОМ<small>' + (veh.tool.machKW ? 'нет' : pto.on ? Math.round(pto.rpm) + ' об/мин' : 'выкл') + '</small>';
+    $('bRange').innerHTML = (dtr.road ? 'Дорога' : 'Поле') + '<small>до ' + (dtr.road ? dtr.roadKmh : dtr.fieldKmh) + ' км/ч</small>';
     $('bAuto').classList.toggle('on', auto.on); $('bView').classList.toggle('on', cam.mode === 'top');
     const [mx, mz] = toWorld((veh.local.l[0] + veh.local.r[0]) / 2, (veh.local.l[1] + veh.local.bl[1]) / 2);
-    const st = grid.stats(1), pc = (n) => (100 * n / st.cells);
-    const state = veh.working ? ['work', 'Работает'] : veh.lowered ? ['idle', Math.abs(veh.v) < 0.14 ? 'Опущено · едь вперёд' : 'Опущено · нет работы'] : ['', 'Поднято'];
-    const html = `<div class="t">${veh.tool.name}${veh.tool.op === OP.Sow ? ' · ' + FS.cropDef(veh.crop).name : ''} <span class="pill ${state[0]}">${auto.on ? 'Авто · ' : ''}${state[1]}</span></div>
-      <div class="kv"><span>Скорость</span><span>${(Math.abs(veh.v) * 3.6).toFixed(1)} км/ч · захват ${veh.tool.width} м</span>
+    const st = grid.stats(1), pc = (n) => (100 * n / st.cells), t = veh.tool;
+    const needPto = t.ptoKW && !pto.ok;
+    const state = veh.working ? ['work', 'Работает'] : lift.isDown ? ['idle', needPto ? 'Включи ВОМ' : Math.abs(veh.v) < 0.14 ? 'Опущено · едь вперёд' : 'Опущено · нет работы'] : ['', lift.moving ? (wantDown ? 'Опускается' : 'Поднимается') : 'Поднято'];
+    const html = `<div class="t">${t.name}${t.op === OP.Sow ? ' · ' + FS.cropDef(veh.crop).name : ''} <span class="pill ${state[0]}">${auto.on ? 'Авто · ' : ''}${state[1]}</span></div>
+      <div class="kv"><span>Сцепка</span><span>${liftText()}</span>
+      ${t.impl ? `<span>Тяга орудия</span><span>${(tele.draft / 1000).toFixed(1).replace('.', ',')} кН · захват ${t.width} м · масса ${(t.mass / 1000).toFixed(1).replace('.', ',')} т</span>` : `<span>Захват</span><span>${t.width} м${t.machKW ? ' · молотилка ' + t.machKW + ' кВт' : ''}${t.ptoKW ? ' · ВОМ ' + t.ptoKW + ' кВт' : ''}</span>`}
+      <span>Под колёсами</span><span>${soilText()}</span>
       <span>Под орудием</span><span>${cellText(grid.getAt(mx, mz))}</span>
       <span>Обработано</span><span>${Math.round(veh.area).toLocaleString('ru')} м² (${(veh.area / 10000).toFixed(2)} га)${veh.yield ? ' · собрано ' + Math.round(veh.yield).toLocaleString('ru') + ' л' : ''}</span></div>
       <div class="bar" aria-hidden="true"><i style="width:${pc(st.stubble)}%;background:#c9b277"></i><i style="width:${pc(st.cult)}%;background:#8a6544"></i><i style="width:${pc(st.plowed)}%;background:#5d3e28"></i><i style="width:${pc(st.seeded)}%;background:#86c46b"></i><i style="width:${pc(st.grass)}%;background:#4f7d33"></i></div>
       <div class="legend">Поле 80×56 м: стерня ${pc(st.stubble).toFixed(0)}% · культ. ${pc(st.cult).toFixed(0)}% · пахота ${pc(st.plowed).toFixed(0)}% · посевы ${pc(st.seeded).toFixed(0)}% (спелые ${pc(st.ready).toFixed(0)}%)</div>
       ${flashT > 0 ? `<div class="legend" style="color:var(--gold)">${flashMsg}</div>` : ''}`;
     if (html !== lastUI) { $('status').innerHTML = html; lastUI = html; }
+  }
+  // приборы: обновляются чаще и без пересборки разметки
+  const D = { spd: $('dSpd'), lim: $('dLim'), rpm: $('dRpm'), load: $('dLoad'), slip: $('dSlip'), mRpm: $('mRpm'), mLoad: $('mLoad'), mSlip: $('mSlip') };
+  function renderDash() {
+    const kmh = Math.abs(veh.v) * 3.6;
+    D.spd.textContent = kmh.toFixed(kmh < 10 ? 1 : 0).replace('.', ',');
+    D.lim.textContent = (veh.rev ? 'назад · ' : '') + (tele.limit ? 'предел ' + tele.limit : (dtr.road ? 'дорога' : 'поле'));
+    D.rpm.textContent = Math.round(tele.rpm / 10) * 10; D.mRpm.style.width = (100 * (tele.rpm - 800) / 1500).toFixed(0) + '%';
+    D.load.textContent = Math.round(tele.load * 100) + '%'; D.mLoad.style.width = (tele.load * 100).toFixed(0) + '%'; D.mLoad.classList.toggle('hot', tele.load > 0.92);
+    D.slip.textContent = Math.round(tele.slip * 100) + '%'; D.mSlip.style.width = Math.min(100, tele.slip * 100).toFixed(0) + '%'; D.mSlip.classList.toggle('hot', tele.slip > 0.15);
   }
 
   // ---------------------------------------------------------------- частицы пыли за орудием
@@ -413,37 +524,68 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
   let dustI = 0;
   function puff(x, z) { const d = dust[dustI++ % dust.length]; d.life = 1.4; d.s.position.set(x, 0.4, z); d.s.scale.setScalar(1.2); d.s.visible = true; d.vx = (Math.random() - 0.5) * 0.6; d.vz = (Math.random() - 0.5) * 0.6; }
 
-  // ---------------------------------------------------------------- шаг физики 50 Гц: движение + рабочая зона (как ImplementWorkArea.FixedUpdate)
-  const DT = 1 / 50, WB = 3.0;
+  // ---------------------------------------------------------------- шаг физики 50 Гц: Drivetrain + почва + тяга орудия (как TractorController/TractorHitch), рабочая зона (ImplementWorkArea)
+  const DT = 1 / 50, GRAV = 9.81;
   function physics() {
     let thr = input.thr, str = input.str;
-    if (input.keys.KeyW || input.keys.ArrowUp) thr = 1; if (input.keys.KeyS || input.keys.ArrowDown) thr = -0.6;
+    if (input.keys.KeyW || input.keys.ArrowUp) thr = 1; if (input.keys.KeyS || input.keys.ArrowDown) thr = -1;
     if (input.keys.KeyA || input.keys.ArrowLeft) str = -1; if (input.keys.KeyD || input.keys.ArrowRight) str = 1;
     if (auto.on) {
       // преследование точки пути (pure pursuit) — заготовка наёмного рабочего из шага 5
       while (auto.i < auto.path.length && Math.hypot(auto.path[auto.i][0] - veh.x, auto.path[auto.i][1] - veh.z) < 4.5) auto.i++;
-      if (auto.i >= auto.path.length) { auto.on = false; veh.lowered = false; flash('Готово: поле пройдено'); thr = 0; }
+      if (auto.i >= auto.path.length) { auto.on = false; lift.target = 1; pto.on = false; flash('Готово: поле пройдено'); thr = 0; }
       else {
         const p = auto.path[auto.i], ang = Math.atan2(p[0] - veh.x, p[1] - veh.z); let d = ang - veh.th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
-        str = Math.max(-1, Math.min(1, d * 1.8)); thr = p[2] ? 0.62 : 0.5; veh.lowered = p[2] && Math.abs(d) < 0.35;
+        str = Math.max(-1, Math.min(1, d * 1.8)); thr = p[2] ? 1 : 0.42; lift.target = p[2] && Math.abs(d) < 0.35 ? 0 : 1;
       }
     }
-    const vmax = veh.lowered ? 4.2 : 8.3, target = thr * vmax;
-    veh.v += Math.max(-4 * DT, Math.min(4 * DT, target - veh.v)); if (!thr && Math.abs(veh.v) < 0.05) veh.v = 0;
+    const t = veh.tool;
+    // газ/тормоз как TractorInput: «назад» на ходу — тормоз, на месте — задний ход
+    const fwd = thr > 0.08, back = thr < -0.08;
+    if (fwd && veh.rev && veh.v > -0.14) veh.rev = false;
+    if (back && !veh.rev && veh.v < 0.14) veh.rev = true;
+    const accel = veh.rev ? back : fwd, brake = veh.rev ? fwd : back;
+    veh.thr += Math.max(-3 * DT, Math.min(3 * DT, (accel ? Math.abs(thr) : 0) - veh.thr));
+    lift.step(DT); pto.step(dtr.rpm, DT);
+    updateImplement(DT);
+    // почва под задним мостом (μ, качение, просадка) и у передней кромки орудия — там ещё необработанная земля (тяга)
+    const cell = grid.getAt(veh.x, veh.z), soil = VS.soilFromCell(cell, false);
+    const lf = veh.local, F = toWorld(0, lf.l[1] + 0.3);
+    const icell = grid.getAt(F[0], F[1]), down = lift.isDown;
+    const draft = t.impl && down ? VS.draftN(t.op, t.width, Math.abs(veh.v) * 3.6, icell) : 0;
+    const bodyKg = t.impl ? TRACTOR_KG : t.mass, mass = bodyKg + (t.impl ? t.mass : 0);
+    const resist = soil.roll * mass * GRAV + draft;
+    const traction = soil.grip * (bodyKg + (t.hitch === '3pt' ? 0.6 * t.mass : 0)) * GRAV;
+    const ptoW = (t.ptoKW ? pto.loadW(t.ptoKW * 1000) : 0) + (t.machKW && down ? t.machKW * 1000 : 0);
+    // в работе скорость ограничена пределом орудия (Implement.speedLimitKmh): режется желаемая скорость, не газ
+    const limited = down && t.limit && t.limit / 3.6 < dtr.maxSpeed(veh.rev);
+    const o = dtr.step({ throttle: veh.thr, brake: brake ? 1 : 0, reverse: veh.rev, v: veh.v, mass, resist, traction, ptoW, limit: limited ? t.limit / 3.6 : 0, dt: DT });
+    // интегрирование скорости — то же, что в тестах VehicleLogicTests.Sim
+    if (Math.abs(veh.v) < 0.02 && Math.abs(o.drive) <= resist) veh.v = 0;
+    else {
+      const sg = Math.abs(veh.v) > 0.02 ? Math.sign(veh.v) : Math.sign(o.drive);
+      const nv = veh.v + (o.drive - sg * (resist + o.brake)) / mass * DT;
+      veh.v = Math.sign(nv) !== Math.sign(veh.v) && veh.v !== 0 && (brake || veh.thr < 0.01) ? 0 : nv;
+    }
+    tele.rpm = o.rpm; tele.load = o.load; tele.slip = o.slip; tele.draft = draft; tele.soil = soil; tele.cell = cell; tele.limit = limited ? t.limit : 0;
+    veh.sink += (soil.sink - veh.sink) * Math.min(1, DT * 3);
+    // руль и движение: велосипедная модель вокруг заднего моста
     veh.steer += (str * 0.6 - veh.steer) * Math.min(1, DT * 6);
-    veh.th += veh.v / WB * Math.tan(veh.steer) * DT;
+    veh.th += veh.v / veh.WB * Math.tan(veh.steer) * DT;
     veh.x += Math.sin(veh.th) * veh.v * DT; veh.z += Math.cos(veh.th) * veh.v * DT;
     veh.x = Math.max(-110, Math.min(110, veh.x)); veh.z = Math.max(-110, Math.min(110, veh.z));
-    // рабочая зона
-    const L = toWorld(...veh.local.l), R = toWorld(...veh.local.r), BL = toWorld(...veh.local.bl), BR = [R[0] + BL[0] - L[0], R[1] + BL[1] - L[1]];
-    const forward = veh.v > 0.14; veh.workT = Math.max(0, (veh.workT || 0) - DT);
-    if (veh.lowered && forward) {
-      if (!veh.prevL) { veh.prevL = L; veh.prevR = R; }
-      const op = currentOp(Cell.angleFromHeading(veh.th * 180 / Math.PI));
+    updateImplement(DT);
+    if (veh.imp) veh.imp.dep += ((down && icell ? t.depth : 0) - veh.imp.dep) * Math.min(1, DT * 4);
+    // рабочая зона: работает только опущенное орудие, на ходу вперёд, с ВОМ, если он нужен
+    const L2 = toWorld(...veh.local.l), R2 = toWorld(...veh.local.r), BL2 = toWorld(...veh.local.bl), BR2 = [R2[0] + BL2[0] - L2[0], R2[1] + BL2[1] - L2[1]];
+    const ready = down && (!t.ptoKW || pto.ok), forward = veh.v > 0.14; veh.workT = Math.max(0, veh.workT - DT);
+    if (ready && forward) {
+      if (!veh.prevL) { veh.prevL = L2; veh.prevR = R2; }
+      const op = currentOp(Cell.angleFromHeading(veh.wf.th * 180 / Math.PI));
       const P = veh.prevL, Q = veh.prevR;
-      const r = grid.applyTriangles(op, [P[0], P[1], Q[0], Q[1], R[0], R[1], P[0], P[1], R[0], R[1], L[0], L[1], L[0], L[1], R[0], R[1], BR[0], BR[1], L[0], L[1], BR[0], BR[1], BL[0], BL[1]]);
-      veh.prevL = L; veh.prevR = R;
-      if (r.cells) { veh.workT = 0.6; veh.area += r.area; veh.yield += r.yield; if (Math.random() < 0.6) { const t = Math.random(); puff(BL[0] + (BR[0] - BL[0]) * t, BL[1] + (BR[1] - BL[1]) * t); } }
+      const r = grid.applyTriangles(op, [P[0], P[1], Q[0], Q[1], R2[0], R2[1], P[0], P[1], R2[0], R2[1], L2[0], L2[1], L2[0], L2[1], R2[0], R2[1], BR2[0], BR2[1], L2[0], L2[1], BR2[0], BR2[1], BL2[0], BL2[1]]);
+      veh.prevL = L2; veh.prevR = R2;
+      if (r.cells) { veh.workT = 0.6; veh.area += r.area; veh.yield += r.yield; if (Math.random() < 0.6) { const q = Math.random(); puff(BL2[0] + (BR2[0] - BL2[0]) * q, BL2[1] + (BR2[1] - BL2[1]) * q); } }
     } else { veh.prevL = null; veh.workT = 0; }
     veh.working = veh.workT > 0;
   }
@@ -451,36 +593,66 @@ body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflo
   // ---------------------------------------------------------------- кадр
   function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
-  let last = performance.now(), acc = 0, uiT = 0;
+  const va = new T.Vector3(), vb = new T.Vector3(), vc = new T.Vector3();
+  function placeMachines(dt, time) {
+    const b = veh.body; if (!b) return;
+    const c = Math.cos(veh.th), s = Math.sin(veh.th), z0 = -veh.axleZ;
+    b.position.set(veh.x + z0 * s, -veh.sink, veh.z + z0 * c); b.rotation.y = veh.th; b.updateMatrixWorld();
+    const zc = (veh.box.max.z + veh.box.min.z) / 2 - veh.axleZ;
+    shadow.position.set(veh.x + s * zc, 0.03, veh.z + c * zc); shadow.rotation.z = -veh.th;
+    const I = veh.imp, P = veh.P; if (!P) return;
+    if (I) {
+      const t = veh.tool, wob = I.dep > 0.01 && Math.abs(veh.v) > 0.3 ? Math.sin(time * 9.0 + veh.x) * 0.006 : 0;
+      if (t.hitch === '3pt') { I.pivot.position.set(I.x, I.ip.hitch.y - I.dep + lift.pos * 0.72 - veh.sink * 0.5, I.z); I.pivot.rotation.set(lift.pos * 0.07 + wob, I.th, wob * 0.6); }
+      else { I.pivot.position.set(I.x, P.hitch.y - veh.sink, I.z); I.pivot.rotation.set((lift.pos * 0.3 - I.dep * (1 - lift.pos)) / Math.max(I.L, 1) + wob, I.th, 0); }
+      I.pivot.updateMatrixWorld();
+      shadowI.position.set(I.x + Math.sin(I.th) * I.zc, 0.025, I.z + Math.cos(I.th) * I.zc); shadowI.rotation.z = -I.th;
+      if (I.spin && pto.rpm > 0) I.spin.rotation.x += pto.rpm * 0.25 / 60 * Math.PI * 2 * dt;
+    }
+    // тяги навески: от трактора к пальцам орудия (или в покое, если орудие на дышле)
+    const three = I && veh.tool.hitch === '3pt', ip = I && I.ip;
+    for (const sd of [-1, 1]) {
+      b.localToWorld(va.set(sd * P.lower.x, P.lower.y, P.lower.z));
+      if (three) I.m.localToWorld(vb.set(sd * ip.pin.x, ip.pin.y, ip.pin.z)); else b.localToWorld(vb.set(sd * P.ball.x, P.ball.y + 0.32, P.ball.z));
+      setRod(sd < 0 ? rods.lowL : rods.lowR, va, vb);
+      b.localToWorld(vc.set(sd * P.arm.x, P.arm.y, P.arm.z)); va.lerp(vb, 0.6); setRod(sd < 0 ? rods.armL : rods.armR, vc, va);
+    }
+    b.localToWorld(va.set(0, P.top.y, P.top.z));
+    if (three) I.m.localToWorld(vb.set(0, ip.top.y, ip.top.z)); else b.localToWorld(vb.set(0, P.top.y - 0.22, P.top.z - 0.42));
+    setRod(rods.top, va, vb);
+    if (three && ip.ptoIn) { b.localToWorld(va.set(0, P.pto.y, P.pto.z)); I.m.localToWorld(vb.set(0, ip.ptoIn.y, ip.ptoIn.z)); setRod(rods.pto, va, vb); } else rods.pto.visible = false;
+  }
+  let last = performance.now(), acc = 0, uiT = 0, dashT = 0, time = 0;
   let frames = 0;
   function frame(now) {
     frames++; if (window.__demo) window.__demo.frames = frames;
-    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; acc += dt;
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; acc += dt; time += dt;
     while (acc >= DT) { physics(); acc -= DT; }
     if (grid.dirty) { stateTex.needsUpdate = true; grid.dirty = false; }    // в Unity — только изменённые чанки
     U.uTime.value += dt;
-    if (veh.obj) { veh.obj.position.set(veh.x, 0, veh.z); veh.obj.rotation.y = veh.th; shadow.position.set(veh.x + Math.sin(veh.th) * (veh.box.max.z + veh.box.min.z) / 2, 0.03, veh.z + Math.cos(veh.th) * (veh.box.max.z + veh.box.min.z) / 2); shadow.rotation.z = -veh.th; }
+    placeMachines(dt, time);
     for (const d of dust) if (d.life > 0) { d.life -= dt; d.s.position.x += d.vx * dt; d.s.position.z += d.vz * dt; d.s.position.y += dt * 0.9; d.s.scale.setScalar(1.2 + (1.4 - d.life) * 2.2); d.s.material.opacity = Math.max(0, d.life / 1.4); if (d.life <= 0) d.s.visible = false; }
-    // камера
-    const fx = Math.sin(veh.th), fz = Math.cos(veh.th);
-    let px, py, pz, lx = veh.x + fx * 3, lz = veh.z + fz * 3;
+    // камера: смотрит чуть позади трактора, чтобы было видно орудие
+    const fx = Math.sin(veh.th), fz = Math.cos(veh.th), back = veh.imp ? -1.5 : 2;
+    let px, py, pz, lx = veh.x + fx * back, lz = veh.z + fz * back;
     if (cam.mode === 'top') { px = veh.x + 0.01; pz = veh.z - 0.01 - 8; py = cam.dist * 2.4 + 20; lx = veh.x; lz = veh.z; }
     else { const yaw = veh.th + Math.PI + cam.yaw, hd = Math.cos(cam.pitch) * cam.dist; px = lx + Math.sin(yaw) * hd; pz = lz + Math.cos(yaw) * hd; py = Math.sin(cam.pitch) * cam.dist + 2; }
     const k = Math.min(1, dt * 4); cam.x += (px - cam.x) * k; cam.y += (py - cam.y) * k; cam.z += (pz - cam.z) * k; cam.tx += (lx - cam.tx) * k; cam.tz += (lz - cam.tz) * k;
     camera.position.set(cam.x, cam.y, cam.z); camera.lookAt(cam.tx, 0.5, cam.tz); U.uCam.value.copy(camera.position);
     renderer.render(scene, camera);
-    uiT += dt; if (uiT > 0.2) { uiT = 0; if (flashT > 0) flashT -= 0.2; renderUI(); }
+    dashT += dt; if (dashT > 0.1) { dashT = 0; renderDash(); }
+    uiT += dt; if (uiT > 0.25) { uiT = 0; if (flashT > 0) flashT -= 0.25; renderUI(); }
     requestAnimationFrame(frame);
   }
 
-  // старт: плуг сам пашет стерню челноком — картина живая сразу
+  // старт: трактор с плугом сам пашет стерню челноком — картина живая сразу
   setTool(TOOLS[0]);
-  if (buildAuto(FIELD.x0, -10)) auto.on = true;
+  if (buildAuto(FIELD.x0, -10)) { auto.on = true; }
   cam.x = veh.x - 20; cam.y = 22; cam.z = veh.z - 24; cam.tx = veh.x; cam.tz = veh.z;
-  renderUI();
-  try { if (!localStorage.getItem('fieldDemoHelp')) $('help').hidden = false; } catch (e) { $('help').hidden = false; }
-  $('helpOk').onclick = () => { $('help').hidden = true; try { localStorage.setItem('fieldDemoHelp', '1'); } catch (e) { /* ничего */ } };
-  window.__demo = { grid, veh, auto, setTool, TOOLS, sim: (n) => { for (let k = 0; k < n; k++) physics(); }, cam };
+  renderUI(); renderDash();
+  try { if (!localStorage.getItem('fieldDemoHelp2')) $('help').hidden = false; } catch (e) { $('help').hidden = false; }
+  $('helpOk').onclick = () => { $('help').hidden = true; try { localStorage.setItem('fieldDemoHelp2', '1'); } catch (e) { /* ничего */ } };
+  window.__demo = { grid, veh, auto, setTool, TOOLS, sim: (n) => { for (let k = 0; k < n; k++) physics(); }, cam, lift, pto, dtr, tele, input, startAuto };
   requestAnimationFrame(frame);
 })();
 </script>

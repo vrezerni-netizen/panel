@@ -20,6 +20,8 @@ namespace FarmSim.Vehicles
         public ImplementWorkArea workArea;
         [Tooltip("Множитель тягового сопротивления (тяжёлый плуг > 1)")]
         public float draftMultiplier = 1f;
+        [Tooltip("Предел скорости опущенного орудия, км/ч (как в FS: плуг 12, культиватор и сеялка 15, фреза 10). 0 — без предела")]
+        public float speedLimitKmh = 0f;
         [Header("ВОМ")]
         public bool needsPto;
         [Tooltip("Сколько мощности забирает орудие при номинальных оборотах ВОМ, кВт")]

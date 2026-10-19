@@ -45,6 +45,8 @@ namespace FarmSim.Vehicles
         public float PtoLoadW { get; private set; }
         public float DraftEstimateN { get; private set; }
         public float AttachedMassKg { get; private set; }
+        /// <summary>Предел скорости от опущенных орудий, м/с (0 — нет предела). Берётся самый строгий.</summary>
+        public float SpeedLimitMs { get; private set; }
 
         void Awake()
         {
@@ -133,7 +135,7 @@ namespace FarmSim.Vehicles
         {
             float dt = Time.fixedDeltaTime;
             pto.Step(tractor != null ? tractor.EngineRpm : 0f, dt);
-            float ptoW = 0f, draft = 0f;
+            float ptoW = 0f, draft = 0f, limit = 0f;
             foreach (var hp in points)
             {
                 hp.lift.Step(dt);
@@ -156,8 +158,9 @@ namespace FarmSim.Vehicles
                 }
                 if (im.needsPto) { ptoW += pto.LoadW(im.ptoPowerKW * 1000f); im.SetPtoRpm(pto.Rpm); }
                 draft += im.CurrentDraftN;
+                if (hp.lift.IsDown && im.speedLimitKmh > 0f) { float l = im.speedLimitKmh / 3.6f; limit = limit > 0f ? Mathf.Min(limit, l) : l; }
             }
-            PtoLoadW = ptoW; DraftEstimateN = draft;
+            PtoLoadW = ptoW; DraftEstimateN = draft; SpeedLimitMs = limit;
         }
 
         void RecountMass() { float m = 0f; foreach (var hp in points) if (hp.attached) m += hp.attached.Body.mass; AttachedMassKg = m; }

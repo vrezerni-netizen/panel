@@ -13,13 +13,13 @@ namespace FarmSim.Vehicles.Tests
         struct SimResult { public float V, Dist; public DriveOutput Last; }
 
         // Прямолинейное движение: тяга − (качение + орудие) − тормоз. Стоящий трактор не сдвигается, пока тяга не больше сопротивления.
-        static SimResult Sim(Drivetrain d, float seconds, float throttle, float crr, float grip, float draftN = 0f, float ptoW = 0f, bool reverse = false, float brake = 0f, float v0 = 0f)
+        static SimResult Sim(Drivetrain d, float seconds, float throttle, float crr, float grip, float draftN = 0f, float ptoW = 0f, bool reverse = false, float brake = 0f, float v0 = 0f, float limitMs = 0f)
         {
             var r = new SimResult { V = v0 };
             for (float t = 0; t < seconds; t += Dt)
             {
                 float resist = crr * Mass * G + draftN;
-                var o = d.Step(new DriveInput { Throttle = throttle, Brake = brake, Reverse = reverse, SpeedMs = r.V, MassKg = Mass, ResistanceN = resist, TractionLimitN = grip * Mass * G, PtoLoadW = ptoW, Dt = Dt });
+                var o = d.Step(new DriveInput { Throttle = throttle, Brake = brake, Reverse = reverse, SpeedMs = r.V, MassKg = Mass, ResistanceN = resist, TractionLimitN = grip * Mass * G, PtoLoadW = ptoW, SpeedLimitMs = limitMs, Dt = Dt });
                 r.Last = o;
                 if (Math.Abs(r.V) < 0.02f && Math.Abs(o.DriveForceN) <= resist) { r.V = 0f; continue; }
                 float sign = Math.Abs(r.V) > 0.02f ? Math.Sign(r.V) : Math.Sign(o.DriveForceN);
@@ -75,6 +75,20 @@ namespace FarmSim.Vehicles.Tests
             var noPto = Sim(new Drivetrain(), 40f, 1f, s.RollingCoef, s.Grip, draft);
             var withPto = Sim(new Drivetrain(), 40f, 1f, s.RollingCoef, s.Grip, draft, ptoW: 70000f);
             Assert.Less(withPto.V, noPto.V - 0.5f, "ротор на ВОМ забирает мощность — едем медленнее");
+        }
+
+        [Test]
+        public void ImplementSpeedLimit_CapsSpeed_EngineStaysAtRated()
+        {
+            // сеялка 3 м по культивации: тянуть легко, но в работе — не быстрее 15 км/ч, как в FS
+            var s = Soil(GroundType.Cultivated);
+            uint cell = FieldCell.WithGround(0u, GroundType.Cultivated);
+            float draft = ImplementDraft.ForceN(FieldOpKind.Sow, 3f, 15f, cell);
+            var free = Sim(new Drivetrain(), 30f, 1f, s.RollingCoef, s.Grip, draft);
+            var lim = Sim(new Drivetrain(), 30f, 1f, s.RollingCoef, s.Grip, draft, limitMs: 15f / 3.6f);
+            Assert.That(Kmh(free.V), Is.GreaterThan(22f), "без предела едет почти на максимуме диапазона");
+            Assert.That(Kmh(lim.V), Is.InRange(14.5f, 15.2f));
+            Assert.That(lim.Last.EngineRpm, Is.GreaterThan(2000f), "предел режет скорость, а не газ: обороты не падают");
         }
 
         [Test]

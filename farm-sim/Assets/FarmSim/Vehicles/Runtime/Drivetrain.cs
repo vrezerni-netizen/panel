@@ -37,6 +37,7 @@ namespace FarmSim.Vehicles
         public float ResistanceN;     // качение + тяговое сопротивление орудий (известно миру) — для упреждения
         public float TractionLimitN;  // сколько сил шины могут передать без пробуксовки: μ × вес на ведущих колёсах
         public float PtoLoadW;        // мощность, которую забирает ВОМ
+        public float SpeedLimitMs;    // предел скорости опущенного орудия (плуг 12 км/ч и т.п.), 0 — без предела
         public float Dt;
     }
 
@@ -72,6 +73,8 @@ namespace FarmSim.Vehicles
             var o = new DriveOutput();
             float dir = i.Reverse ? -1f : 1f;
             float vTarget = dir * Clamp01(i.Throttle) * MaxSpeedMs(i.Reverse);
+            // предел орудия режет только желаемую скорость, обороты остаются от педали газа — мощности хватает тянуть
+            if (i.SpeedLimitMs > 0f && Math.Abs(vTarget) > i.SpeedLimitMs) vTarget = dir * i.SpeedLimitMs;
             o.TargetSpeedMs = vTarget;
             float v = i.SpeedMs, absV = Math.Abs(v);
 

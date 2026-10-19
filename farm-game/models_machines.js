@@ -402,19 +402,22 @@
       if (ex >= 2) for (let i = 0; i < 3; i++) put(g, rb(0.95, 0.13, 0.3, 0.03), mt.steel, 0, 0.7 + i * 0.14, H.z1 + 0.7);
     }
     // задняя навеска, ВОМ, прицепная скоба
-    const hz = D.hitchZ, hy = D.hitchY;
+    // o.links3: нижние тяги, раскосы и верхняя тяга не запекаются — их рисует тот, кто двигает навеску (показ шага 2)
+    const hz = D.hitchZ, hy = D.hitchY, zc0 = c.zc - c.L / 2;
     for (const s of [-1, 1]) {
-      beam(g, mt.steel, [s * 0.46, 0.64, c.zc - c.L / 2 - 0.02], [s * 0.62, 0.52, hz + 0.25], 0.075, 0.07, 0);
-      put(g, cyg(0.05, 0.05, 0.1, 8), mt.chrome, s * 0.62, 0.52, hz + 0.25, 0, 0, PI / 2);
-      beam(g, mt.body, [s * 0.74, 1.05, c.zc - c.L / 2 + 0.2], [s * 0.74, 1.12, hz + 0.5], 0.09, 0.07, 0);
-      rod(g, mt.steel, [s * 0.74, 1.08, hz + 0.55], [s * 0.66, 0.6, hz + 0.28], 0.025, 6);
-      hyd(g, mt.dark, mt.chrome, [s * 0.5, 0.78, c.zc - c.L / 2 + 0.25], [s * 0.72, 1.02, hz + 1.05], 0.045);
+      if (!o.links3) {
+        beam(g, mt.steel, [s * 0.46, 0.64, zc0 - 0.02], [s * 0.62, 0.52, hz + 0.25], 0.075, 0.07, 0);
+        put(g, cyg(0.05, 0.05, 0.1, 8), mt.chrome, s * 0.62, 0.52, hz + 0.25, 0, 0, PI / 2);
+        rod(g, mt.steel, [s * 0.74, 1.08, hz + 0.55], [s * 0.66, 0.6, hz + 0.28], 0.025, 6);
+      }
+      beam(g, mt.body, [s * 0.74, 1.05, zc0 + 0.2], [s * 0.74, 1.12, hz + 0.5], 0.09, 0.07, 0);
+      hyd(g, mt.dark, mt.chrome, [s * 0.5, 0.78, zc0 + 0.25], [s * 0.72, 1.02, hz + 1.05], 0.045);
     }
-    beam(g, mt.steel, [0, 1.15, c.zc - c.L / 2 - 0.02], [0, 0.98, hz + 0.45], 0.07, 0.07, 0);
-    put(g, rb(0.12, 0.16, 0.2, 0.03), mt.dark, 0, 0.72, c.zc - c.L / 2 + 0.02);
-    const ptoZ = c.zc - c.L / 2 - 0.1; cylZ(g, mt.chrome, 0.035, 0.22, 0, 0.84, ptoZ, 10);
+    if (!o.links3) beam(g, mt.steel, [0, 1.15, zc0 - 0.02], [0, 0.98, hz + 0.45], 0.07, 0.07, 0);
+    put(g, rb(0.12, 0.16, 0.2, 0.03), mt.dark, 0, 0.72, zc0 + 0.02);
+    const ptoZ = zc0 - 0.1; cylZ(g, mt.chrome, 0.035, 0.22, 0, 0.84, ptoZ, 10);
     put(g, rb(0.3, 0.06, 0.8, 0.02), mt.steel, 0, hy, hz + 0.46); put(g, cyg(0.035, 0.035, 0.12, 10), mt.chrome, 0, hy + 0.04, hz + 0.18);
-    return { g, mt, hz, hy, pto: { z: ptoZ - 0.1, y: 0.84 } };
+    return { g, mt, hz, hy, WB, pto: { z: ptoZ - 0.1, y: 0.84 }, links: { lower: [0.46, 0.64, zc0 - 0.02], ball: [0.62, 0.52, hz + 0.25], arm: [0.74, 1.08, hz + 0.55], top: [0, 1.15, zc0 - 0.02] } };
   }
 
   // ------------------------------------------------------------------ навесное/прицепное: дисковая борона (L1-3)
@@ -668,6 +671,127 @@
     buildBar(ig, w.mt, { W, Wc: 6.2, L1: 3.6, hy: w.hy, big: true, lv });
     return finish(root, 0x5e7d8a, 1);
   }
+  // ------------------------------------------------------------------ трактор без орудия и отдельные орудия (показ шага 2: навеска, дышло, ВОМ)
+  /** finish() + точки сцепки в координатах готовой модели (userData.points). extras — подвижные части (не запекаются вместе с остальным). */
+  function finishAt(root, tint, gscale, pts, extras) {
+    const out = finish(root, tint, gscale), sh = out.children[0].position;   // finish() сдвинул запечённые части на (0, -y0, -cz)
+    out.userData.points = {};
+    for (const [key, p] of Object.entries(pts)) out.userData.points[key] = { x: p[0], y: p[1] + sh.y, z: p[2] + sh.z };
+    for (const e of extras || []) { const o = C.bakeTex(e.g); o.name = e.name; o.position.set(e.at[0], e.at[1] + sh.y, e.at[2] + sh.z); out.add(o); }
+    return out;
+  }
+  reg('vehicle', 'tractorBody', (lv) => {
+    const root = begin(), t = tOf(lv), old = lv <= 3, k = old ? lerp(0.94, 1.05, t) : lerp(0.96, 1.06, t);
+    const w = old
+      ? buildWheeled({ modern: false, links3: true, lv, lights: lv >= 3 ? 2 : (lv >= 2 ? 1 : 0), label: 'N' + (110 + lv * 20), col: { body: 0x2a7d32, trim: 0xf2c418, roof: 'body' }, accent: '#f2c418', stripe: '#f2c418' })
+      : buildWheeled({ modern: true, links3: true, lv: Math.min(lv, 6), extra: lv >= 6 ? 2 : lv >= 5 ? 1 : 0, lights: lv >= 6 ? 3 : lv >= 5 ? 2 : 1, label: 'M' + (200 + lv * 15), bar: 'SD ' + (80 + lv * 5), col: { body: 0x7cb518, trim: 0xc8201a, roof: 'dark' }, accent: '#c8201a', stripe: '#c8201a' });
+    w.g.scale.setScalar(k); root.add(w.g);
+    const s = (p) => p.map((v) => v * k), L = w.links;
+    return finishAt(root, old ? 0x86aebd : 0x5e7d8a, k, { hitch: s([0, w.hy + 0.04, w.hz + 0.18]), pto: s([0, w.pto.y, w.pto.z]), axle: [0, 0, 0], front: s([0, 0, w.WB]),
+      lower: s(L.lower), ball: s(L.ball), arm: s(L.arm), top: s(L.top) });
+  });
+  /** Рама навески орудия: пальцы нижних тяг (±px, hy, 0), палец верхней тяги (0, hy + mh, -0.08), брусья к раме орудия на (zB, yB). */
+  function headstock(g, mt, hy, px, mh, zB, yB) {
+    for (const s of [-1, 1]) {
+      put(g, cyg(0.028, 0.028, 0.2, 8), mt.chrome, s * (px + 0.04), hy, 0, 0, 0, PI / 2);
+      beam(g, mt.body, [s * px, hy, -0.03], [s * 0.09, hy + mh, -0.14], 0.09, 0.07, 0);
+      beam(g, mt.body, [s * px, hy, -0.03], [s * px * 0.9, yB, zB], 0.1, 0.09, 0);
+    }
+    put(g, rb(0.22, 0.16, 0.12, 0.03), mt.body, 0, hy + mh, -0.14);
+    put(g, cyg(0.025, 0.025, 0.26, 8), mt.chrome, 0, hy + mh, -0.08, 0, 0, PI / 2);
+    beam(g, mt.body, [0, hy + mh, -0.14], [0, yB, zB - 0.1], 0.1, 0.09, 0);
+  }
+  /** Отвал плуга: изогнутый лист, носок спереди слева, кромка уходит назад и вправо, верх заворачивает пласт. */
+  const MOULD = (() => { let c; return () => c || (c = (() => {
+    const S = 7, Tn = 5, pos = [], idx = [];
+    for (let j = 0; j <= Tn; j++) for (let i = 0; i <= S; i++) { const s = i / S, t = j / Tn; pos.push(-0.2 + 0.36 * s + 0.2 * t * s * s + 0.04 * t, 0.02 + 0.44 * t * (0.55 + 0.45 * s), 0.28 - 0.64 * s + 0.1 * t); }
+    for (let j = 0; j < Tn; j++) for (let i = 0; i < S; i++) { const a = j * (S + 1) + i, b2 = a + 1, c2 = a + S + 1, d = c2 + 1; idx.push(a, c2, b2, b2, c2, d); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  })()); })();
+  reg('implement', 'disc', (lv) => {
+    const root = begin(), mt = tMats({ body: 0x2a7d32, trim: 0xf2c418, roof: 'body' }), hy = 0.55;
+    mt.sh = makeSheet({ modern: false, accent: '#f2c418', stripe: '#f2c418', label: 'D' + (5 + lv) });
+    buildDisc(root, mt, 5.4 + 0.6 * (lv - 1), hy);
+    return finishAt(root, 0, 1, { hitch: [0, hy, 0], axle: [0, 0, -3.3], workF: [0, 0, -2.5], workB: [0, 0, -4.6] });
+  });
+  /** Навесной плуг: 6 корпусов по 0.5 м (захват 3 м), дисковые ножи, опорное колесо. */
+  reg('implement', 'plow', (lv) => {
+    const g = begin(), mt = tMats({ body: 0x2f5fa8, trim: 0xe8e8e8, roof: 'body' }), hy = 0.62, n = 6, bw = 0.5, dz = 0.62, yb = 0.92;
+    mt.sh = makeSheet({ modern: true, accent: '#e8e8e8', stripe: '#e8e8e8', label: 'P' + (4 + lv) });
+    const xs = (i) => -((n - 1) * bw) / 2 + i * bw, zs = (i) => -1.0 - i * dz;
+    headstock(g, mt, hy, 0.6, 0.66, -0.75, yb);
+    beam(g, mt.body, [xs(0) - 0.3, yb, zs(0) + 0.35], [xs(n - 1) + 0.15, yb, zs(n - 1) - 0.25], 0.16, 0.16, 0.02);
+    beam(g, mt.body, [-0.6, yb, -0.75], [0.6, yb, -0.75], 0.14, 0.14, 0);
+    beam(g, mt.body, [0.5, yb, -0.75], [xs(2) + 0.05, yb, zs(2)], 0.12, 0.12, 0);
+    for (let i = 0; i < n; i++) {
+      const x = xs(i), z = zs(i);
+      beam(g, mt.body, [x, yb, z], [x, 0.3, z - 0.12], 0.07, 0.14, 0);
+      put(g, MOULD(), mt.disc, x, 0, z - 0.2);
+      put(g, rb(0.5, 0.035, 0.13, 0.01), mt.dark, x - 0.08, 0.025, z - 0.12, 0, rad(60));
+      put(g, rb(0.035, 0.2, 0.6, 0.01), mt.dark, x - 0.21, 0.12, z - 0.3);
+      put(g, cyg(0.24, 0.24, 0.02, 18), mt.disc, x - 0.18, 0.26, z + 0.42, 0, 0, PI / 2);
+      beam(g, mt.dark, [x - 0.18, 0.26, z + 0.42], [x - 0.12, yb, z + 0.28], 0.05, 0.06, 0);
+    }
+    const wg = new T.Group(); wg.position.y = 0.22; wheelS(wg, mt, 1, xs(n - 1) + 0.6, zs(n - 1) + 0.25, 0.34, 0.24, mt.trim); g.add(wg);
+    beam(g, mt.body, [xs(n - 1) + 0.12, yb, zs(n - 1) + 0.1], [xs(n - 1) + 0.5, 0.22 + 0.34, zs(n - 1) + 0.25], 0.08, 0.08, 0);
+    put(g, rb(0.9, 0.3, 0.04, 0.01), mt.dark, xs(n - 1) - 0.2, yb + 0.28, zs(n - 1) - 0.42); decalS(g, mt.sh, 'haz', 0.84, 0.24, xs(n - 1) - 0.2, yb + 0.28, zs(n - 1) - 0.445, PI);
+    return finishAt(g, 0, 1, { hitch: [0, hy, 0], pin: [0.6, hy, 0], top: [0, hy + 0.66, -0.08], workF: [0, 0, zs(0) + 0.3], workB: [0, 0, zs(n - 1) - 0.35] });
+  });
+  /** Почвофреза на ВОМ: кожух, редуктор, ротор с Г-образными ножами (крутится отдельно), выравнивающая доска, каток. */
+  reg('implement', 'tiller', (lv) => {
+    const g = begin(), mt = tMats({ body: 0xc8201a, trim: 0x30353b, roof: 'body' }), hy = 0.62, W = 3.0, hw = W / 2, rz = -0.85, ry = 0.27;
+    mt.sh = makeSheet({ modern: true, accent: '#e8e8e8', stripe: '#e8e8e8', label: 'R' + (25 + lv * 5) });
+    headstock(g, mt, hy, 0.6, 0.66, -0.42, 0.66);
+    put(g, rb(W + 0.08, 0.08, 1.0, 0.03), mt.body, 0, 0.64, rz);
+    put(g, rb(W + 0.08, 0.36, 0.06, 0.02), mt.body, 0, 0.47, rz + 0.5, rad(-25));
+    for (const s of [-1, 1]) put(g, rb(0.04, 0.56, 1.1, 0.02), mt.body, s * (hw + 0.05), 0.36, rz);
+    put(g, rb(0.44, 0.36, 0.46, 0.06), mt.dark, 0, 0.86, rz + 0.2);
+    cylZ(g, mt.chrome, 0.05, 0.36, 0, 0.84, -0.26, 12);
+    put(g, rb(W * 0.9, 0.12, 0.12, 0.03), mt.dark, 0, 0.75, rz + 0.1);
+    put(g, rb(0.18, 0.5, 0.36, 0.04), mt.dark, hw - 0.05, 0.42, rz);
+    put(g, rb(W, 0.3, 0.05, 0.02), mt.body, 0, 0.34, rz - 0.6, rad(18));
+    const cz = rz - 1.0;
+    for (const s of [-1, 1]) { put(g, cyg(0.27, 0.27, 0.04, 16), mt.dark, s * (hw - 0.05), 0.27, cz, 0, 0, PI / 2); beam(g, mt.body, [s * (hw - 0.05), 0.64, rz - 0.4], [s * (hw - 0.05), 0.27, cz], 0.08, 0.1, 0); }
+    for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; cylX(g, mt.steel, 0.022, W - 0.12, 0, 0.27 + Math.sin(a) * 0.25, cz + Math.cos(a) * 0.25, 6); }
+    cylX(g, mt.steel, 0.05, W, 0, 0.27, cz, 10);
+    put(g, rb(0.9, 0.3, 0.04, 0.01), mt.dark, 0, 0.82, rz - 0.52); decalS(g, mt.sh, 'haz', 0.84, 0.24, 0, 0.82, rz - 0.545, PI);
+    const rot = new T.Group(), nfl = 12;
+    cylX(rot, mt.dark, 0.06, W - 0.1, 0, 0, 0, 10);
+    for (let i = 0; i < nfl; i++) {
+      const x = -hw + 0.14 + i * (W - 0.28) / (nfl - 1);
+      put(rot, cyg(0.1, 0.1, 0.02, 10), mt.steel, x, 0, 0, 0, 0, PI / 2);
+      for (let b2 = 0; b2 < 4; b2++) {
+        const a = b2 * PI / 2 + i * 0.7, sd = b2 % 2 ? 1 : -1;
+        put(rot, rb(0.025, 0.2, 0.07, 0.008), mt.disc, x + sd * 0.02, Math.sin(a) * 0.15, Math.cos(a) * 0.15, PI / 2 - a);
+        put(rot, rb(0.11, 0.025, 0.07, 0.008), mt.disc, x + sd * 0.07, Math.sin(a) * 0.245, Math.cos(a) * 0.245, PI / 2 - a);
+      }
+    }
+    return finishAt(g, 0, 1, { hitch: [0, hy, 0], pin: [0.6, hy, 0], top: [0, hy + 0.66, -0.08], ptoIn: [0, 0.84, -0.08], workF: [0, 0, rz + 0.3], workB: [0, 0, cz - 0.2] },
+      [{ g: rot, name: 'spin', at: [0, ry, rz] }]);
+  });
+  /** Навесная сеялка 3 м: бункер, 24 дисковых сошника в два ряда, прикатывающие колёса, сложенные маркеры. */
+  reg('implement', 'seeder', (lv) => {
+    const g = begin(), mt = tMats({ body: 0x2a7d32, trim: 0xf2c418, roof: 'body' }), hy = 0.62, W = 3.0, hw = W / 2, n = 24;
+    mt.sh = makeSheet({ modern: false, accent: '#f2c418', stripe: '#f2c418', label: 'S' + (2 + lv) });
+    headstock(g, mt, hy, 0.6, 0.66, -0.5, 0.62);
+    for (const z of [-0.5, -1.15]) put(g, rb(W, 0.12, 0.12, 0.02), mt.dark, 0, 0.62, z);
+    for (const x of [-1.3, -0.45, 0.45, 1.3]) beam(g, mt.dark, [x, 0.62, -0.5], [x, 0.62, -1.15], 0.1, 0.1, 0);
+    put(g, sx([[-0.55, 0.74], [-1.1, 0.74], [-1.32, 1.5], [-0.34, 1.5]], W - 0.1), mt.body, 0, 0, 0);
+    put(g, rb(W - 0.04, 0.05, 1.02, 0.02), mt.trim, 0, 1.52, -0.83);
+    for (const x of [-1.0, 0, 1.0]) put(g, rb(0.06, 0.62, 0.06, 0.01), mt.dark, x, 0.98, -0.45);
+    for (let i = 0; i < n; i++) {
+      const x = -hw + (i + 0.5) * W / n, z = i % 2 ? -1.0 : -0.78;
+      put(g, cyg(0.17, 0.17, 0.015, 14), mt.disc, x, 0.17, z, 0, 0, PI / 2);
+      beam(g, mt.dark, [x, 0.17, z], [x, 0.62, z + 0.24], 0.03, 0.05, 0);
+      rod(g, mt.rubber, [x, 0.76, -0.72], [x, 0.26, z - 0.06], 0.012, 5);
+    }
+    for (let i = 0; i < n / 2; i++) put(g, cyg(0.14, 0.14, 0.08, 12), mt.rubber, -hw + (i + 0.5) * W / (n / 2), 0.14, -1.45, 0, 0, PI / 2);
+    cylX(g, mt.steel, 0.03, W - 0.1, 0, 0.14, -1.45, 8);
+    for (const x of [-1.3, 0, 1.3]) beam(g, mt.dark, [x, 0.62, -1.15], [x, 0.14, -1.45], 0.06, 0.08, 0);
+    for (const s of [-1, 1]) { beam(g, mt.trim, [s * hw, 0.7, -0.6], [s * (hw - 0.12), 1.9, -0.62], 0.06, 0.06, 0); put(g, cyg(0.16, 0.16, 0.02, 12), mt.disc, s * (hw - 0.12), 1.95, -0.62, 0, 0, PI / 2); }
+    put(g, rb(0.9, 0.3, 0.04, 0.01), mt.dark, 0, 1.05, -1.36); decalS(g, mt.sh, 'haz', 0.84, 0.24, 0, 1.05, -1.385, PI);
+    return finishAt(g, 0, 1, { hitch: [0, hy, 0], pin: [0.6, hy, 0], top: [0, hy + 0.66, -0.08], workF: [0, 0, -0.7], workB: [0, 0, -1.55] });
+  });
   reg('vehicle', 'tractor', (lv) => tierOf(lv) === 0 ? tractorTier0(lv) : tierOf(lv) === 1 ? tractorTier1(lv) : tractorTier2(lv));
 
   // ------------------------------------------------------------------ разбрасыватель: синий колёсный трактор + орудие (кузов / роторы / цистерна со штангой)

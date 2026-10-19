@@ -122,7 +122,7 @@ namespace FarmSim.Vehicles
             var o = drivetrain.Step(new DriveInput
             {
                 Throttle = Throttle, Brake = Brake, Reverse = Reverse, SpeedMs = vFwd, MassKg = Body.mass + (hitch != null ? hitch.AttachedMassKg : 0f),
-                ResistanceN = rollingN + draft, TractionLimitN = drivenLoad, PtoLoadW = ptoW, Dt = dt,
+                ResistanceN = rollingN + draft, TractionLimitN = drivenLoad, PtoLoadW = ptoW, SpeedLimitMs = hitch != null ? hitch.SpeedLimitMs : 0f, Dt = dt,
             });
             Last = o;
 
