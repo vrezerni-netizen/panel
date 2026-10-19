@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ферма и Город</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="stage"><canvas id="gl"></canvas><div id="labels"></div><div id="floats"></div></div>
+  <header id="hud"></header>
+  <div id="toasts"></div>
+  <div id="seedbar"></div>
+  <nav id="bar"></nav>
+  <div id="edtop" hidden></div><div id="edsel" hidden></div><nav id="edbar" hidden></nav>
+  <div id="modal" hidden><div class="mwrap"><div class="mhead"><b id="mtitle"></b><div class="mtabs" id="mtabs"></div><button class="x" data-act="close">✕</button></div><div class="mbody" id="mbody"></div></div></div>
+  <div id="fade"></div>
+  <div id="loading"><div class="ld"><b>Ферма и Город</b><span>Строим карту…</span><i></i></div></div>
+  <div id="desktop"><div><div style="font-size:64px">🖥️</div><b>Игра сделана для компьютера</b><br>На телефоне она работает в запасном режиме: может тормозить, интерфейс тесный.<br><button id="skipdesk">Всё равно открыть</button><small>Управление пальцами: один палец — действие, два пальца — двигать, приближать и вращать карту</small></div></div>
+  <div id="nogl" hidden>Для 3D нужен браузер с WebGL. Обнови браузер или включи аппаратное ускорение.</div>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="logic.js"></script>
+<script src="textures.js" onerror="void 0"></script>
+<script src="layout.js" onerror="void 0"></script>
+<script src="world3d.js"></script>
+<script src="editor.js"></script>
+<script src="models_buildings.js" onerror="void 0"></script>
+<script src="models_vehicles.js" onerror="void 0"></script>
+<script src="models_props.js" onerror="void 0"></script>
+<script src="models_crops.js" onerror="void 0"></script>
+<script src="models_machines.js" onerror="void 0"></script>
+<script src="models_machines2.js" onerror="void 0"></script>
+<script src="models_trucks.js" onerror="void 0"></script>
+<script src="models_forestry.js" onerror="void 0"></script>
+<script src="models_forest.js" onerror="void 0"></script>
+<script src="models_sawmill.js" onerror="void 0"></script>
+<script src="models_construct.js" onerror="void 0"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,614 @@
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ICON = {
+  live: '<path d="M8 5v14l11-7z"/>',
+  rec: '<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  users: '<path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a7 7 0 0 1 14 0zm15-5a6 6 0 0 1 5 5h-4a8 8 0 0 0-1-5z"/>',
+  key: '<path d="M7 14a4 4 0 1 1 3.9-5H21v3h-2v2h-3v-2h-5.1A4 4 0 0 1 7 14zm0-5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>',
+  log: '<path d="M5 4h14v2H5zm0 7h14v2H5zm0 7h14v2H5z"/>',
+  out: '<path d="M10 4h8v16h-8v-2h6V6h-6zM3 12l4-4v3h7v2H7v3z"/>',
+  image: '<path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2 11h12l-3.5-4.5-3 3.8L9 12zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
+  shot: '<path d="M9 4l-1.8 2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2.2L15 4zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/>',
+  cam: '<path d="M4 7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>',
+};
+const svg = (n, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="currentColor">${ICON[n]}</svg>`;
+const root = $('#root');
+let me = null;
+let hls = null;
+let poll = null;
+
+function toast(msg, bad) {
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'toast' + (bad ? ' bad' : ''); t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 3500);
+}
+
+async function api(path, method = 'GET', body) {
+  const r = await fetch(path, {
+    method, credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : (method !== 'GET' ? { 'Content-Type': 'application/json' } : undefined),
+    body: body ? JSON.stringify(body) : (method !== 'GET' ? '{}' : undefined),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error || r.statusText), { status: r.status });
+  return data;
+}
+const fmtSize = (b) => (b > 1073741824 ? (b / 1073741824).toFixed(2) + ' ГБ' : (b / 1048576).toFixed(1) + ' МБ');
+const fmtDate = (ms) => new Date(ms).toLocaleString('ru-RU');
+
+/* ---------- login ---------- */
+const brandHtml = `<div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span class="n">Ахмат Запад</span></div>`;
+
+function loginView() {
+  stopPoll(); destroyHls();
+  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span>Ахмат Запад</span></div>
+    <div class="card"><h2 style="margin-bottom:14px">Вход</h2>
+    <form id="f1"><input name="u" placeholder="Логин" autocomplete="username" required>
+    <input name="p" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <button class="btn">Далее</button><div class="err" id="e"></div></form></div></div></div>`;
+  $('#f1').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const f = ev.target;
+    try {
+      const { pending } = await api('/api/login', 'POST', { username: f.u.value, password: f.p.value });
+      totpView(pending);
+    } catch { $('#e').textContent = 'Неверный логин или пароль'; }
+  };
+}
+
+function totpView(pending) {
+  root.innerHTML = `<div class="auth"><div class="box"><div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span>Ахмат Запад</span></div>
+    <div class="card"><h2 style="margin-bottom:6px">Код подтверждения</h2>
+    <p class="mut" style="margin:0 0 14px">Введите 6 цифр из приложения Authenticator</p>
+    <form id="f2"><input name="c" inputmode="numeric" pattern="\\d{6}" maxlength="6" autocomplete="one-time-code" required autofocus style="font-size:1.4rem;text-align:center;letter-spacing:8px">
+    <button class="btn">Войти</button><div class="err" id="e"></div></form></div></div></div>`;
+  $('#f2').onsubmit = async (ev) => {
+    ev.preventDefault();
+    try { await api('/api/login/totp', 'POST', { pending, code: ev.target.c.value }); start(); }
+    catch (e) {
+      $('#e').textContent = e.message === 'expired' ? 'Время вышло, войдите заново' : 'Неверный код';
+      if (e.message === 'expired') setTimeout(loginView, 1500);
+    }
+  };
+}
+
+/* ---------- shell ---------- */
+const PAGES = [
+  { id: 'live', label: 'Эфир', icon: 'live', admin: false },
+  { id: 'rec', label: 'Записи', icon: 'rec', admin: true },
+  { id: 'shots', label: 'Скриншоты', icon: 'shot', admin: true },
+  { id: 'users', label: 'Пользователи', icon: 'users', admin: true },
+  { id: 'keys', label: 'Ключи эфира', icon: 'key', admin: true },
+  { id: 'look', label: 'Оформление', icon: 'image', admin: true },
+  { id: 'log', label: 'Журнал', icon: 'log', admin: true },
+];
+
+function shell(page) {
+  const items = PAGES.filter((p) => !p.admin || me.role === 'admin');
+  root.innerHTML = `<div class="shell"><aside class="side">
+    <div class="brand"><div class="logo"><img src="/emblem.png" alt=""></div><span class="n">Ахмат Запад</span></div>
+    <nav>${items.map((p) => `<button data-p="${p.id}" class="${p.id === page ? 'on' : ''}">${svg(p.icon)}<span class="lbl">${p.label}</span></button>`).join('')}</nav>
+    <div class="spacer"></div>
+    <div class="me"><div class="avatar">${esc(me.username[0].toUpperCase())}</div>
+      <div><div class="nm">${esc(me.username)}</div><small>${me.role === 'admin' ? 'администратор' : 'зритель'}</small></div>
+      <button id="out" title="Выйти">${svg('out')}</button></div>
+    </aside><main class="content" id="c"></main></div>`;
+  root.querySelectorAll('nav button').forEach((b) => (b.onclick = () => { location.hash = '#/' + b.dataset.p; }));
+  $('#out').onclick = async () => { await api('/api/logout', 'POST'); me = null; loginView(); };
+  return $('#c');
+}
+
+function stopPoll() { clearInterval(poll); poll = null; clearInterval(ticker); ticker = null; if (cleanup) { cleanup(); cleanup = null; } }
+function destroyHls() { if (hls) { hls.destroy(); hls = null; } }
+
+async function route() {
+  if (!me) return;
+  stopPoll(); destroyHls();
+  const [page = 'live', ...args] = location.hash.replace(/^#\//, '').split('/').map(decodeURIComponent);
+  const p = PAGES.find((x) => x.id === page && (!x.admin || me.role === 'admin')) || PAGES[0];
+  const c = shell(p.id);
+  try { await ({ live: livePage, rec: recPage, shots: shotsPage, users: usersPage, keys: keysPage, look: lookPage, log: logPage }[p.id])(c, args); }
+  catch (e) { if (e.status === 401) { me = null; loginView(); } else c.innerHTML = `<div class="card err">Ошибка: ${esc(e.message)}</div>`; }
+}
+window.addEventListener('hashchange', route);
+
+/* ---------- live ---------- */
+let ticker = null;
+let cleanup = null; // called when leaving the live page: stops all players
+const POSN = { tl: 'Слева вверху', tr: 'Справа вверху', bl: 'Слева внизу', br: 'Справа внизу' };
+const COLORS = ['#3b82f6', '#22d3ee', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#e6ebf6'];
+const fmtClock = (sec) => {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(x)}` : `${pad(m)}:${pad(x)}`;
+};
+
+function dockHtml(o) {
+  const tog = (k, label) => `<button class="tg ${o[k] ? 'on' : ''}" data-t="${k}"><span class="sw"></span>${label}</button>`;
+  const corners = (k) => `<div class="corners">${['tl', 'tr', 'bl', 'br'].map((p) => `<button class="${o[k] === p ? 'on' : ''}" data-c="${k}" data-p="${p}" title="${POSN[p]}"></button>`).join('')}</div>`;
+  return `<aside class="dock"><div class="card dockc">
+    <div class="dockhead"><h3>Оформление эфира</h3><button class="x" id="dClose" title="Свернуть">✕</button></div><div class="mut sm">Меняется сразу у всех зрителей</div>
+    <div class="grp">Показывать</div>${tog('showTitle', 'Название')}${tog('showTimer', 'Таймер эфира')}${tog('showFrame', 'Рамка')}
+    <div class="grp">Название на экране</div>
+    <div class="form-row"><input id="dTitle" maxlength="40" value="${esc(o.title)}"><button class="btn sm" id="dSave">Применить</button></div>
+    <div class="grp">Где название</div>${corners('titlePos')}
+    <div class="grp">Где таймер</div>${corners('timerPos')}
+    <div class="grp">Цвет рамки</div><div class="sw-row">${COLORS.map((c) => `<button class="clr ${o.frameColor === c ? 'on' : ''}" data-col="${c}" style="background:${c}"></button>`).join('')}</div>
+    <div class="grp">Толщина рамки</div><div class="seg">${[[2, 'Тонкая'], [4, 'Средняя'], [8, 'Толстая'], [12, 'Очень']].map(([w, l]) => `<button class="${o.frameWidth === w ? 'on' : ''}" data-w="${w}">${l}</button>`).join('')}</div>
+    <div class="grp">Режим показа</div><div class="seg">
+      <button class="${o.mode === 'fast' ? 'on' : ''}" data-mode="fast">Быстрый ≈0,5 с<br><small>без звука</small></button>
+      <button class="${o.mode === 'hls' ? 'on' : ''}" data-mode="hls">Обычный ≈2 с<br><small>со звуком</small></button></div>
+    <div class="grp">Формат видео</div><div class="seg">${[['auto', 'Как у экрана'], ['16:9', '16:9 широкий'], ['4:3', '4:3'], ['1:1', 'Квадрат'], ['3:4', 'Вертикально 3:4'], ['9:16', 'Вертикально 9:16']].map(([a, l]) => `<button class="${o.aspect === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div>
+    <div class="grp">Быстрые действия</div>
+    <div class="quick"><button class="btn sec sm" data-go="keys">Новый ключ эфира</button><button class="btn sec sm" data-go="users">Новый зритель</button>
+    <button class="btn sec sm" data-go="look">Фон сайта</button><button class="btn sec sm" data-go="rec">Записи</button><button class="btn sec sm" data-go="shots">Скриншоты</button><button class="btn sec sm" data-go="log">Журнал</button></div>
+  </div></aside>`;
+}
+
+async function livePage(c) {
+  let overlay = await api('/api/settings');
+  let skew = 0, focus = null, streams = [];
+  const admin = me.role === 'admin';
+  const tiles = new Map(); // channel name -> {el, v, box, hls, live, since, missed}
+  c.classList.add('wide');
+  c.innerHTML = `<div class="head"><div><h2>Эфир</h2><div class="sub" id="sub"></div></div>
+    <div class="row">${admin ? '<button class="btn sec" id="dockToggle">⚙ Оформление</button>' : ''}</div></div>
+    <div class="live-layout ${admin ? 'withdock' : ''}"><div class="main"><div class="wall" id="wall"></div></div>${admin ? dockHtml(overlay) : ''}</div>`;
+  const wall = $('#wall');
+  const layout = $('.live-layout');
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enterFs = (el) => (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+
+  // ---------- overlay (title / timer / frame) and shape of one tile ----------
+  function applyTile(t) {
+    const o = overlay, el = t.el, big = focus === t.name;
+    let ar = 16 / 9;
+    if (o.aspect && o.aspect !== 'auto') { const [a, b] = o.aspect.split(':').map(Number); ar = a / b; }
+    else if (t.v.videoWidth) ar = t.v.videoWidth / t.v.videoHeight;
+    if (!big) ar = Math.min(1.9, Math.max(0.75, ar)); // keep the wall tidy; the picture itself is never stretched
+    el.style.setProperty('--ar', ar.toFixed(4));
+    const frame = $('.frame', el), title = $('.ov-title', el), timer = $('.ov-timer', el);
+    frame.style.display = o.showFrame && t.live ? 'block' : 'none';
+    frame.style.borderColor = o.frameColor; frame.style.borderWidth = o.frameWidth + 'px';
+    title.hidden = !(o.showTitle && o.title && t.live); title.textContent = o.title; title.className = 'ov ov-title pos-' + o.titlePos;
+    const showT = o.showTimer && t.live && t.since;
+    timer.hidden = !showT; timer.className = 'ov ov-timer pos-' + o.timerPos;
+    if (showT) $('.clock', el).textContent = fmtClock((Date.now() - t.since) / 1000);
+  }
+  const applyAll = () => tiles.forEach(applyTile);
+
+  // ---------- one player per channel ----------
+  function playHls(t) {
+    if (t.hls || t.native) return;
+    const src = `/hls/${encodeURIComponent(t.name)}/index.m3u8`;
+    if (window.Hls && Hls.isSupported()) {
+      const h = new Hls({ lowLatencyMode: true, liveSyncDuration: 1.5, liveMaxLatencyDuration: 4, maxLiveSyncPlaybackRate: 1.2, backBufferLength: 10, manifestLoadingMaxRetry: 8, levelLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
+      t.hls = h;
+      h.on(Hls.Events.ERROR, (_, d) => {
+        if (d.response && d.response.code === 401) { me = null; loginView(); return; }
+        if (!d.fatal) return;
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+        else { stopTile(t); setTimeout(() => { if (t.live && tiles.get(t.name) === t) playTile(t); }, 3000); }
+      });
+      h.loadSource(src); h.attachMedia(t.v); t.v.play().catch(() => {});
+    } else { t.native = true; t.v.src = src; t.v.play().catch(() => {}); }
+  }
+
+  /** Fast mode: WebRTC (WHEP) through the authenticated proxy. Any problem -> falls back to HLS automatically. */
+  async function playRtc(t) {
+    if (t.pc || t.rtcBusy) return;
+    t.rtcBusy = true;
+    const fallback = () => { if (tiles.get(t.name) !== t || t.hls || t.native) return; stopTile(t); t.noRtc = true; if (t.live) playHls(t); };
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      t.pc = pc;
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      pc.ontrack = (e) => {
+        if (e.track.kind === 'video') {
+          t.v.srcObject = e.streams[0] || new MediaStream([e.track]);
+          const r = e.receiver; if ('jitterBufferTarget' in r) r.jitterBufferTarget = 0; if ('playoutDelayHint' in r) r.playoutDelayHint = 0;
+          t.v.play().catch(() => {});
+        }
+      };
+      pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState) && t.pc === pc) fallback(); else if (pc.connectionState === 'disconnected') setTimeout(() => { if (t.pc === pc && pc.connectionState !== 'connected') fallback(); }, 4000); };
+      await pc.setLocalDescription(await pc.createOffer());
+      await new Promise((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const done = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', done); res(); } };
+        pc.addEventListener('icegatheringstatechange', done); setTimeout(res, 2000);
+      });
+      const r = await fetch(`/whep/${encodeURIComponent(t.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp, credentials: 'same-origin' });
+      if (r.status === 401) { me = null; loginView(); return; }
+      if (!r.ok) throw new Error('whep ' + r.status);
+      await pc.setRemoteDescription({ type: 'answer', sdp: await r.text() });
+      // watchdog: no picture within 6 s -> use HLS instead
+      setTimeout(() => { if (t.pc === pc && t.v.readyState < 2) fallback(); }, 6000);
+    } catch { fallback(); }
+    finally { t.rtcBusy = false; }
+  }
+
+  function playTile(t) {
+    if (t.pc || t.hls || t.native || t.rtcBusy) return;
+    if (overlay.mode === 'fast' && !t.noRtc && window.RTCPeerConnection) playRtc(t); else playHls(t);
+  }
+  function stopTile(t) {
+    if (t.hls) { t.hls.destroy(); t.hls = null; }
+    if (t.pc) { const pc = t.pc; t.pc = null; try { pc.close(); } catch { /* ignore */ } }
+    t.native = false;
+    t.v.srcObject = null; t.v.removeAttribute('src'); t.v.load();
+  }
+  cleanup = () => tiles.forEach(stopTile);
+
+  function setFocus(name) {
+    focus = name;
+    wall.classList.toggle('focusmode', !!name);
+    tiles.forEach((t) => {
+      const big = t.name === name;
+      t.el.classList.toggle('big', big);
+      t.v.controls = big; t.v.muted = !big;      // sound only for the enlarged channel
+      $('[data-act=focus]', t.el).textContent = big ? 'Свернуть' : 'Увеличить';
+      applyTile(t);
+    });
+    if (name) tiles.get(name)?.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function makeTile(name) {
+    const el = document.createElement('div');
+    el.className = 'vtile'; el.dataset.n = name;
+    el.innerHTML = `<div class="vbox"><video muted playsinline autoplay></video><div class="frame"></div>
+      <div class="ov ov-title" hidden></div><div class="ov ov-timer" hidden><span class="rd"></span><span class="clock">00:00</span></div>
+      <div class="offmsg">${svg('cam', '')}<div>Не в эфире</div></div>
+      <button class="exitfs" type="button">✕ Выйти из полного экрана</button></div>
+      <div class="vcap"><b>${esc(name)}</b><span class="chip st">Не в эфире</span><span class="spacer"></span>
+      ${admin ? '<button class="btn sm sec" data-act="shot" title="Скриншот">📷</button>' : ''}
+      <button class="btn sm sec" data-act="focus">Увеличить</button><button class="btn sm sec" data-act="fs" title="Во весь экран">⛶</button></div>`;
+    const t = { name, el, v: $('video', el), box: $('.vbox', el), hls: null, native: false, live: false, since: null, missed: 0 };
+    t.v.addEventListener('loadedmetadata', () => applyTile(t));
+    t.v.addEventListener('resize', () => applyTile(t));
+    const toggleFs = () => (fsEl() === t.box ? exitFs() : enterFs(t.box));
+    $('.exitfs', el).onclick = (e) => { e.stopPropagation(); exitFs(); };
+    t.box.onclick = (e) => { if (focus !== t.name && !e.target.closest('.exitfs')) setFocus(t.name); };
+    t.box.ondblclick = toggleFs;
+    el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => {
+      e.stopPropagation();
+      const act = b.dataset.act;
+      if (act === 'focus') setFocus(focus === name ? null : name);
+      else if (act === 'fs') toggleFs();
+      else if (act === 'shot') {
+        if (!t.live || !t.v.videoWidth) return toast('У этого канала сейчас нет эфира', true);
+        const cv = document.createElement('canvas'); cv.width = t.v.videoWidth; cv.height = t.v.videoHeight;
+        cv.getContext('2d').drawImage(t.v, 0, 0);
+        try { const r = await api('/api/admin/screenshots', 'POST', { data: cv.toDataURL('image/png'), stream: name }); toast('Скриншот сохранён в папку ' + r.name.split('/')[0].split('-').reverse().join('.')); }
+        catch (err) { toast(err.message, true); }
+      }
+    }));
+    wall.append(el); tiles.set(name, t);
+    return t;
+  }
+
+  // ---------- admin dock (settings on the right, closed with the cross, open by default) ----------
+  const setDock = (open) => {
+    layout.classList.toggle('collapsed', !open);
+    if ($('#dockToggle')) $('#dockToggle').classList.toggle('on', open);
+    try { localStorage.setItem('dock2', open ? 'open' : 'closed'); } catch { /* ignore */ }
+  };
+  if (admin) {
+    let open = true;
+    try { open = localStorage.getItem('dock2') !== 'closed'; } catch { /* default open */ }
+    setDock(open);
+    $('#dockToggle').onclick = () => setDock(layout.classList.contains('collapsed'));
+    const save = async (patch) => { try { overlay = await api('/api/admin/settings', 'PUT', patch); applyAll(); redock(); if (patch.mode) tiles.forEach((t) => { stopTile(t); t.noRtc = false; if (t.live) playTile(t); }); } catch (e) { toast(e.message, true); } };
+    const redock = () => { const d = $('.dock'); d.outerHTML = dockHtml(overlay); wireDock(); };
+    const wireDock = () => {
+      const d = $('.dock');
+      $('#dClose').onclick = () => setDock(false);
+      d.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => save({ [b.dataset.t]: !overlay[b.dataset.t] })));
+      d.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => save({ [b.dataset.c]: b.dataset.p })));
+      d.querySelectorAll('[data-col]').forEach((b) => (b.onclick = () => save({ frameColor: b.dataset.col })));
+      d.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => save({ aspect: b.dataset.a })));
+      d.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => save({ mode: b.dataset.mode })));
+      d.querySelectorAll('[data-w]').forEach((b) => (b.onclick = () => save({ frameWidth: Number(b.dataset.w) })));
+      d.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => { location.hash = '#/' + b.dataset.go; }));
+      $('#dSave').onclick = () => save({ title: $('#dTitle').value });
+      $('#dTitle').onkeydown = (e) => { if (e.key === 'Enter') save({ title: e.target.value }); };
+    };
+    wireDock();
+  }
+
+  async function refresh() {
+    const r = await api('/api/streams');
+    skew = r.now - Date.now(); streams = r.streams;
+    const liveN = streams.filter((s) => s.live).length;
+    $('#sub').textContent = streams.length ? `В эфире: ${liveN} из ${streams.length}` : 'Каналов пока нет';
+    for (const [n, t] of tiles) if (!streams.find((s) => s.name === n)) { stopTile(t); t.el.remove(); tiles.delete(n); if (focus === n) setFocus(null); }
+    const empty = $('#none');
+    if (!streams.length && !empty) wall.insertAdjacentHTML('beforeend', `<div class="card empty" id="none" style="grid-column:1/-1">Нет каналов.${admin ? ' Создайте ключ эфира в разделе «Ключи эфира».' : ''}</div>`);
+    if (streams.length && empty) empty.remove();
+    for (const s of streams) {
+      const t = tiles.get(s.name) || makeTile(s.name);
+      t.live = s.live; t.since = s.live && s.since ? s.since - skew : null;
+      t.el.classList.toggle('live', s.live);
+      t.el.style.order = s.live ? 0 : 1;
+      const st = $('.st', t.el);
+      st.className = 'chip st' + (s.live ? ' live' : '');
+      st.innerHTML = s.live ? '<span class="dot"></span>Идёт эфир' : 'Не в эфире';
+      if (s.live) { t.missed = 0; playTile(t); } else if (++t.missed >= 2) stopTile(t);
+      applyTile(t);
+    }
+  }
+  await refresh();
+  poll = setInterval(() => refresh().catch(() => {}), 5000);
+  ticker = setInterval(applyAll, 1000);
+}
+
+/* ---------- date folders (recordings, screenshots): year -> month -> day ---------- */
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const pad2 = (n) => String(n).padStart(2, '0');
+function dateParts(item) {
+  let m = /^(\d{4})-(\d{2})-(\d{2})\//.exec(item.name) || /^(\d{4})\/(\d{2})\/(\d{2})\//.exec(item.name) || /(\d{4})-(\d{2})-(\d{2})_/.exec(item.name);
+  if (m) return [m[1], m[2], m[3]];
+  const d = new Date(item.mtime); return [String(d.getFullYear()), pad2(d.getMonth() + 1), pad2(d.getDate())];
+}
+const baseName = (n) => n.split('/').pop();
+const timeOf = (item) => {
+  const m = /_(\d{2})-(\d{2})-(\d{2})/.exec(baseName(item.name)) || /^(\d{2})-(\d{2})-(\d{2})_/.exec(baseName(item.name));
+  return m ? `${m[1]}:${m[2]}:${m[3]}` : new Date(item.mtime).toLocaleTimeString('ru-RU');
+};
+const chanOf = (item) => { const n = baseName(item.name); const m = /^live_(.+?)-\d{4}-/.exec(n) || /^\d{2}-\d{2}-\d{2}_(.+?)\.(png|jpg)$/.exec(n); return m ? m[1] : '—'; };
+
+/** Generic date browser: one folder per day (newest first), files inside. */
+function dateBrowser(c, items, args, opts) {
+  const day = args.length >= 3 ? args.join('-') : args[0]; // old links #/rec/2026/10/08 still work
+  const withDay = items.map((it) => { const [y, m, d] = dateParts(it); return { ...it, day: `${y}-${m}-${d}` }; });
+  const count = (arr) => `${arr.length} · ${fmtSize(arr.reduce((s, x) => s + x.size, 0))}`;
+  const label = (k) => { const [y, m, d] = k.split('-'); return `${+d} ${MONTHS_GEN[+m - 1]} ${y}`; };
+  const head = `<div class="head"><div><h2>${opts.title}</h2><div class="sub">${opts.sub}</div></div></div>${opts.intro || ''}`;
+  if (!items.length) { c.innerHTML = head + `<div class="card empty">${opts.emptyText}</div>`; return; }
+  if (!day) {
+    const days = [...new Set(withDay.map((i) => i.day))].sort().reverse();
+    c.innerHTML = head + `<div class="grid">${days.map((k) => `<button class="tile folder" data-h="#/${opts.page}/${k}"><div class="big">${svg('rec', '')}</div>
+      <div class="t">${label(k)}</div><span class="chip">${count(withDay.filter((i) => i.day === k))}</span></button>`).join('')}</div>`;
+  } else {
+    const arr = withDay.filter((i) => i.day === day).sort((a, b) => timeOf(b).localeCompare(timeOf(a)));
+    c.innerHTML = `<div class="crumbs"><button data-h="#/${opts.page}">${opts.title}</button> / <b style="color:var(--fg)">${label(day)}</b></div>` +
+      (arr.length ? opts.files(arr) : '<div class="card empty">В этой папке пусто</div>');
+  }
+  c.querySelectorAll('[data-h]').forEach((b) => (b.onclick = () => { location.hash = b.dataset.h; }));
+}
+
+function pathCardHtml(st) {
+  const chip = !st.effective ? '<span class="chip off">папка не задана</span>'
+    : st.ok ? `<span class="chip ok"><span class="dot"></span>доступна${st.free != null ? ' · свободно ' + fmtSize(st.free) : ''}</span>`
+    : '<span class="chip off">недоступна — вставьте флешку</span>';
+  return `<div class="card"><h3 style="margin-bottom:6px">Куда сохранять записи</h3>
+    <div class="mut sm" style="margin-bottom:10px">Сейчас: <code>${esc(st.effective || '—')}</code> ${chip}${st.custom ? '' : ' <span class="mut">(стандартная папка программы)</span>'}</div>
+    <div class="form-row"><input id="rp" placeholder="Например: E:\\Ахмат Запад" value="${esc(st.path || '')}"><button class="btn" id="rpSave">Сохранить</button>
+      <button class="btn sec" id="rpReset">Стандартная</button></div>
+    <div class="mut sm" style="margin-top:8px">Откройте свою папку «Ахмат Запад» на флешке в проводнике, нажмите на адресную строку, скопируйте путь и вставьте сюда.
+      Если флешку вынуть, записи подождут в защищённом месте на компьютере и перенесутся, когда вы её вставите обратно.</div></div>`;
+}
+
+async function recPage(c, args) {
+  const [rst, recs] = await Promise.all([api('/api/admin/recpath'), api('/api/admin/recordings')]);
+  const note = `<div class="note">🔒 Записи зашифрованы. Скачайте файл и откройте его на компьютере с флешкой: запустите
+    <code>decrypt-recording.bat</code>, перетащите файл записи и ключ <code>streamvault.key</code>. Результат — обычное видео MP4 (H.264 + AAC),
+    открывается в VLC и любом плеере. Без флешки с ключом посмотреть запись нельзя никому, даже администратору.
+    Папка на каждый день (например, 8 октября 2026) создаётся сама, когда эфир записан.</div>`;
+  dateBrowser(c, recs, args, {
+    page: 'rec', title: 'Записи', sub: 'Одна папка на каждый день',
+    intro: (args.length ? '' : pathCardHtml(rst)) + note,
+    emptyText: 'Записей пока нет.<br>Запись включается при первом запуске, если указать флешку для ключа. Когда эфир будет записан, здесь сама появится папка с датой.',
+    files: (arr) => `${note}<div class="card tbl-wrap"><table><thead><tr><th>Время</th><th>Канал</th><th>Размер</th><th></th></tr></thead><tbody>
+      ${arr.map((r) => `<tr><td>${esc(timeOf(r))}</td><td>${esc(chanOf(r))}</td><td>${fmtSize(r.size)}</td><td><div class="row">
+        <a class="btn sm" href="/api/admin/recordings/file?f=${encodeURIComponent(r.name)}">Скачать</a>
+        <button class="btn danger sm" data-d="${esc(r.name)}">Удалить</button></div></td></tr>`).join('')}</tbody></table></div>`,
+  });
+  c.querySelectorAll('[data-d]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('Удалить запись безвозвратно?')) return;
+    await api('/api/admin/recordings/file?f=' + encodeURIComponent(b.dataset.d), 'DELETE'); route();
+  }));
+  const sv = $('#rpSave');
+  if (sv) {
+    sv.onclick = async () => { try { await api('/api/admin/recpath', 'PUT', { path: $('#rp').value }); toast('Папка сохранена'); route(); } catch (e) { toast(e.message, true); } };
+    $('#rpReset').onclick = async () => { await api('/api/admin/recpath', 'DELETE'); toast('Возвращена стандартная папка'); route(); };
+  }
+}
+
+/* ---------- picture viewer (lightbox) inside the app ---------- */
+function openViewer(items, start) {
+  let i = start;
+  const ov = document.createElement('div');
+  ov.className = 'lb';
+  ov.innerHTML = `<button class="lb-x" title="Закрыть (Esc)">✕</button>
+    <button class="lb-nav lb-prev" title="Назад">‹</button><img class="lb-img" alt=""><button class="lb-nav lb-next" title="Вперёд">›</button>
+    <div class="lb-bar"><span class="lb-cap"></span><span class="spacer"></span>
+      <a class="btn sm" id="lbDl">Скачать</a><button class="btn danger sm" id="lbDel">Удалить</button></div>`;
+  document.body.append(ov);
+  const img = $('.lb-img', ov);
+  const url = (n) => `/api/admin/screenshots/file?f=${encodeURIComponent(n)}`;
+  const show = () => {
+    img.src = url(items[i].name);
+    $('.lb-cap', ov).textContent = `${items[i].title}  ·  ${i + 1} из ${items.length}`;
+    $('#lbDl', ov).href = url(items[i].name) + '&dl=1';
+    $('.lb-prev', ov).style.visibility = items.length > 1 ? 'visible' : 'hidden';
+    $('.lb-next', ov).style.visibility = items.length > 1 ? 'visible' : 'hidden';
+  };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const step = (d) => { i = (i + d + items.length) % items.length; show(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') step(1); else if (e.key === 'ArrowLeft') step(-1); };
+  document.addEventListener('keydown', onKey);
+  $('.lb-x', ov).onclick = close;
+  $('.lb-prev', ov).onclick = (e) => { e.stopPropagation(); step(-1); };
+  $('.lb-next', ov).onclick = (e) => { e.stopPropagation(); step(1); };
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  $('#lbDel', ov).onclick = async () => {
+    if (!confirm('Удалить скриншот?')) return;
+    await api('/api/admin/screenshots/file?f=' + encodeURIComponent(items[i].name), 'DELETE');
+    close(); route();
+  };
+  show();
+}
+
+/* ---------- screenshots ---------- */
+async function shotsPage(c, args) {
+  const shots = await api('/api/admin/screenshots');
+  dateBrowser(c, shots, args, {
+    page: 'shots', title: 'Скриншоты', sub: 'Одна папка на каждый день',
+    intro: '<div class="note">Чтобы сделать снимок, откройте «Эфир» и нажмите «Скриншот» под видео. Снимок сохранится сюда, в папку с сегодняшней датой.</div>',
+    emptyText: 'Скриншотов пока нет.<br>Откройте «Эфир» и нажмите «Скриншот» под видео.',
+    files: (arr) => `<div class="shots">${arr.map((r) => `<figure class="shot" data-name="${esc(r.name)}" data-title="${esc(timeOf(r))} · ${esc(chanOf(r))}">
+      <img loading="lazy" src="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}" alt="" title="Открыть">
+      <figcaption><div><b>${esc(timeOf(r))}</b> <span class="mut">${esc(chanOf(r))}</span></div><div class="row" style="margin:6px 0 0">
+      <a class="btn sec sm" href="/api/admin/screenshots/file?f=${encodeURIComponent(r.name)}&dl=1">Скачать</a>
+      <button class="btn danger sm" data-sd="${esc(r.name)}">Удалить</button></div></figcaption></figure>`).join('')}</div>`,
+  });
+  // click on a picture opens a viewer on top of this page (no new tab)
+  const figs = [...c.querySelectorAll('.shot')];
+  figs.forEach((f, i) => { f.querySelector('img').onclick = () => openViewer(figs.map((x) => ({ name: x.dataset.name, title: x.dataset.title })), i); });
+  c.querySelectorAll('[data-sd]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('Удалить скриншот?')) return;
+    await api('/api/admin/screenshots/file?f=' + encodeURIComponent(b.dataset.sd), 'DELETE'); route();
+  }));
+}
+
+/* ---------- users ---------- */
+async function usersPage(c) {
+  const users = await api('/api/admin/users');
+  c.innerHTML = `<div class="head"><div><h2>Пользователи</h2><div class="sub">Кто может смотреть эфир. Регистрации нет, всех создаёте вы.</div></div></div>
+    <div class="card tbl-wrap"><table><thead><tr><th>Логин</th><th>Роль</th><th>Статус</th><th></th></tr></thead><tbody>
+    ${users.map((u) => `<tr><td><b>${esc(u.username)}</b></td><td>${u.role === 'admin' ? 'администратор' : 'зритель'}</td>
+      <td>${u.disabled ? '<span class="chip off">отключён</span>' : '<span class="chip ok"><span class="dot"></span>активен</span>'}</td>
+      <td>${u.role === 'admin' ? '' : `<div class="row">
+        <button class="btn sec sm" data-a="dis" data-i="${u.id}" data-v="${u.disabled ? 0 : 1}">${u.disabled ? 'Включить' : 'Отключить'}</button>
+        <button class="btn sec sm" data-a="2fa" data-i="${u.id}" data-u="${esc(u.username)}">Сбросить 2FA</button>
+        <button class="btn sec sm" data-a="pw" data-i="${u.id}">Пароль</button>
+        <button class="btn danger sm" data-a="del" data-i="${u.id}">Удалить</button></div>`}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="card"><h3 style="margin-bottom:12px">Новый зритель</h3>
+      <form id="nu" class="form-row"><input name="u" placeholder="Логин (латиница)" required><input name="p" type="password" placeholder="Пароль, минимум 12 символов" minlength="12" required>
+      <button class="btn">Создать</button></form><div id="enroll"></div></div>`;
+  c.querySelectorAll('[data-a]').forEach((b) => (b.onclick = async () => {
+    const { a, i } = b.dataset;
+    try {
+      if (a === 'dis') { await api(`/api/admin/users/${i}/disable`, 'POST', { disabled: b.dataset.v === '1' }); route(); }
+      if (a === '2fa') showEnroll(b.dataset.u, await api(`/api/admin/users/${i}/reset-2fa`, 'POST'));
+      if (a === 'pw') { const p = prompt('Новый пароль (минимум 12 символов)'); if (p) { await api(`/api/admin/users/${i}/password`, 'POST', { password: p }); toast('Пароль изменён'); } }
+      if (a === 'del' && confirm('Удалить пользователя?')) { await api(`/api/admin/users/${i}`, 'DELETE'); route(); }
+    } catch (e) { toast(e.message, true); }
+  }));
+  $('#nu').onsubmit = async (ev) => {
+    ev.preventDefault();
+    try { const r = await api('/api/admin/users', 'POST', { username: ev.target.u.value, password: ev.target.p.value }); showEnroll(ev.target.u.value, r); ev.target.reset(); }
+    catch (e) { toast(e.message === 'exists' ? 'Такой логин уже есть' : e.message, true); }
+  };
+}
+
+function showEnroll(username, r) {
+  $('#enroll').innerHTML = `<div class="note" style="margin-top:16px">Покажите этот QR пользователю <b>${esc(username)}</b> (виден только сейчас):</div>
+    <div class="row" style="align-items:flex-start"><img class="qr" src="${esc(r.qr)}" alt="QR">
+    <div><div class="mut">Если сканировать нельзя, введите секрет вручную:</div><div class="keybox"><code>${esc(r.secret)}</code></div></div></div>`;
+}
+
+/* ---------- stream keys ---------- */
+async function keysPage(c) {
+  const streams = await api('/api/admin/streams');
+  c.innerHTML = `<div class="head"><div><h2>Ключи эфира</h2><div class="sub">Ключ вводится в приложении на планшете. Показывается один раз.</div></div></div>
+    <div class="card tbl-wrap"><table><thead><tr><th>Канал</th><th>Статус</th><th></th></tr></thead><tbody>
+    ${streams.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td>${s.revoked ? '<span class="chip off">отозван</span>' : '<span class="chip ok"><span class="dot"></span>действует</span>'}</td>
+      <td><div class="row">${s.revoked ? '' : `<button class="btn sec sm" data-r="${s.id}">Отозвать</button>`}<button class="btn danger sm" data-x="${s.id}" data-n="${esc(s.name)}">Удалить</button></div></td></tr>`).join('') || '<tr><td colspan="3" class="empty">Ключей нет</td></tr>'}
+    </tbody></table></div>
+    <div class="card"><h3 style="margin-bottom:12px">Новый канал</h3>
+      <form id="ns" class="form-row"><input name="n" placeholder="Имя, например tablet1" pattern="[a-z0-9_-]{1,32}" required><button class="btn">Создать ключ</button></form>
+      <div id="key"></div></div>`;
+  c.querySelectorAll('[data-r]').forEach((b) => (b.onclick = async () => {
+    if (confirm('Отозвать ключ? Эфир с него сразу перестанет приниматься.')) { await api(`/api/admin/streams/${b.dataset.r}/revoke`, 'POST'); route(); }
+  }));
+  c.querySelectorAll('[data-x]').forEach((b) => (b.onclick = async () => {
+    if (!confirm(`Удалить канал «${b.dataset.n}» полностью? Ключ перестанет работать, канал пропадёт из списка.`)) return;
+    try { await api(`/api/admin/streams/${b.dataset.x}`, 'DELETE'); toast('Канал удалён'); route(); } catch (e) { toast(e.message, true); }
+  }));
+  $('#ns').onsubmit = async (ev) => {
+    ev.preventDefault();
+    try {
+      const r = await api('/api/admin/streams', 'POST', { name: ev.target.n.value });
+      $('#key').innerHTML = `<div class="note" style="margin-top:16px">Канал создан. Скопируйте ключ сейчас, потом он не покажется.</div>
+        <div class="mut">Имя в приложении:</div><div class="keybox"><code>${esc(r.name)}</code></div>
+        <div class="mut">Ключ эфира:</div><div class="keybox"><code id="kv">${esc(r.key)}</code><button class="btn sec sm" id="cp">Копировать</button></div>
+        <div class="mut" style="margin-top:8px">Сервер в приложении: <code>rtmp://адрес-этого-компьютера</code> (адрес показан в чёрном окне запуска)</div>`;
+      $('#cp').onclick = () => { navigator.clipboard?.writeText(r.key); toast('Ключ скопирован'); };
+    } catch (e) { toast(e.message === 'exists' ? 'Такое имя уже есть' : e.message, true); }
+  };
+}
+
+/* ---------- appearance: background photo ---------- */
+async function lookPage(c) {
+  let t = await api('/api/theme');
+  c.innerHTML = `<div class="head"><div><h2>Оформление сайта</h2><div class="sub">Фоновое фото для входа и всех страниц</div></div></div>
+    <div class="look-grid"><div class="card"><h3 style="margin-bottom:12px">Фоновое фото</h3>
+      <div class="bgprev" id="prev"><span class="chip" id="cur"></span></div>
+      <div class="row" style="margin-top:14px"><label class="btn" for="file">Загрузить своё фото</label>
+        <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <button class="btn sec" id="reset">Вернуть стандартный фон</button></div>
+      <div class="mut sm" style="margin-top:10px">JPG, PNG или WEBP до 10 МБ. Лучше всего подходит фото 1920×1080 и больше.</div></div>
+      <div class="card"><h3 style="margin-bottom:12px">Настройка</h3>
+      <div class="grp" style="margin-top:0">Затемнение фона: <b id="dv"></b></div><input type="range" id="dim" min="0" max="90" step="5" style="width:100%">
+      <div class="grp">Размытие фона: <b id="bv"></b></div><input type="range" id="blur" min="0" max="20" step="1" style="width:100%">
+      <div class="mut sm" style="margin-top:12px">Затемнение делает текст читаемее, размытие смягчает фото.</div></div></div>`;
+  const paint = () => {
+    $('#prev').style.backgroundImage = `url("${t.bg}")`;
+    $('#prev').style.setProperty('--dim', t.dim);
+    $('#cur').textContent = t.custom ? 'Ваше фото' : 'Стандартный фон';
+    $('#dim').value = Math.round(t.dim * 100); $('#dv').textContent = Math.round(t.dim * 100) + '%';
+    $('#blur').value = t.blur; $('#bv').textContent = t.blur + ' px';
+    applyTheme(t);
+  };
+  paint();
+  const saveLook = async () => { try { await api('/api/admin/theme', 'PUT', { dim: t.dim, blur: t.blur }); } catch (e) { toast(e.message, true); } };
+  $('#dim').oninput = (e) => { t.dim = e.target.value / 100; paint(); };
+  $('#dim').onchange = saveLook;
+  $('#blur').oninput = (e) => { t.blur = Number(e.target.value); paint(); };
+  $('#blur').onchange = saveLook;
+  $('#file').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) return toast('Файл больше 10 МБ', true);
+    const fr = new FileReader();
+    fr.onload = async () => {
+      try { await api('/api/admin/background', 'POST', { data: fr.result }); t = await api('/api/theme'); paint(); toast('Фон обновлён'); }
+      catch (err) { toast(err.message, true); }
+    };
+    fr.readAsDataURL(f);
+  };
+  $('#reset').onclick = async () => { await api('/api/admin/background', 'DELETE'); t = await api('/api/theme'); paint(); toast('Возвращён стандартный фон'); };
+}
+
+/* ---------- audit log ---------- */
+const EV = { 'login.ok': 'Вход выполнен', 'login.fail': 'Неверный пароль', 'login.totp_fail': 'Неверный код', 'login.locked': 'Вход заблокирован',
+  'user.create': 'Создан пользователь', 'user.delete': 'Удалён пользователь', 'user.disable': 'Пользователь отключён', 'user.enable': 'Пользователь включён',
+  'user.reset2fa': 'Сброшена 2FA', 'user.password': 'Сменён пароль', 'stream.create': 'Создан ключ эфира', 'stream.revoke': 'Ключ отозван',
+  'publish.denied': 'Телефон не принят', 'publish.ok': 'Телефон подключился, эфир начат', 'settings.update': 'Изменено оформление эфира', 'theme.background': 'Загружен фон', 'theme.background.reset': 'Сброшен фон', 'theme.update': 'Изменён фон', 'recording.download': 'Скачана запись', 'screenshot.save': 'Сохранён скриншот', 'screenshot.device': 'Скриншот с телефона', 'device.denied': 'Отказ телефону (неверный ключ)', 'screenshot.delete': 'Удалён скриншот', 'stream.delete': 'Канал удалён', 'recpath.set': 'Изменена папка записей', 'recpath.reset': 'Папка записей сброшена', 'recording.delete': 'Удалена запись' };
+async function logPage(c) {
+  const rows = await api('/api/admin/audit');
+  c.innerHTML = `<div class="head"><div><h2>Журнал</h2><div class="sub">Последние 200 событий безопасности</div></div></div>
+    <div class="card tbl-wrap"><table><thead><tr><th>Время</th><th>Кто</th><th>Событие</th><th>Детали</th><th>IP</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${fmtDate(r.ts)}</td><td>${esc(r.actor || '—')}</td><td>${esc(EV[r.event] || r.event)}</td><td class="mut">${esc(r.detail || '')}</td><td class="mut">${esc(r.ip || '')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function applyTheme(t) {
+  const r = document.documentElement.style;
+  r.setProperty('--bg-img', `url("${t.bg}")`);
+  r.setProperty('--dim', String(t.dim));
+  r.setProperty('--blur', (t.blur || 0) + 'px');
+}
+async function loadTheme() { try { applyTheme(await api('/api/theme')); } catch { /* default css */ } }
+
+async function start() {
+  await loadTheme();
+  try { me = await api('/api/me'); if (!location.hash) location.hash = '#/live'; route(); }
+  catch { me = null; loginView(); }
+}
+start();

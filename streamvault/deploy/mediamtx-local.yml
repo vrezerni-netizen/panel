@@ -1,0 +1,37 @@
+# Локальная проверка (домашняя сеть). Без записи и без шифрования — НЕ для интернета.
+logLevel: info
+# Неподвижный экран шлёт мало данных — не рвём соединение по тишине
+readTimeout: 60s
+writeTimeout: 60s
+authMethod: http
+authHTTPAddress: http://127.0.0.1:3000/internal/mediamtx/auth
+
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: no
+# WebRTC: быстрый режим просмотра (≈0,5 с). Сигнализация только на localhost — наружу её отдаёт StreamVault после проверки входа
+webrtc: yes
+webrtcAddress: 127.0.0.1:8889
+webrtcEncryption: no
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: yes
+srt: no
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: 127.0.0.1:8888
+hlsVariant: lowLatency
+hlsAlwaysRemux: yes
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentCount: 7
+
+pathDefaults:
+  source: publisher
+paths:
+  "~^live/[a-z0-9_-]+$": {}

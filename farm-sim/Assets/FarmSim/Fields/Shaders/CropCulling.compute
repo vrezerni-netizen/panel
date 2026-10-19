@@ -1,0 +1,113 @@
+// Отбор видимых растений на видеокарте (раз в кадр).
+// Вход: список видимых засеянных чанков (CPU уже отсёк чанки целиком), текстура состояний поля.
+// Каждый поток = одна «кочка» стеблей: читает свою клетку, решает, есть ли тут растение этой культуры,
+// отсекает по дальности (с прореживанием вдали) и по пирамиде камеры, и записывает компактные данные
+// в общий буфер, разбитый на участки по культурам. Ничего не пересоздаётся: комбайн срезал — пиксель
+// текстуры поменялся — в следующем кадре этих стеблей нет.
+#pragma kernel ClearCounters
+#pragma kernel CullStems
+#pragma kernel WriteArgs
+
+#define MAX_CROPS 32
+
+struct StemData
+{
+    float4 posYaw;   // xyz — основание в мире, w — поворот вокруг Y (рад)
+    float4 shape;    // x — высота (м), y — ширина (м), z — рост 0..1, w — флаги: 1 = погибло, 2 = цветёт
+};
+
+// ---- поле (то же, что _FieldStateTex/_FieldParams у FieldManager)
+Texture2D<float4> _FieldStateTex;
+float4 _FieldParams;      // originX, originZ, 1/cellSize, cellSize
+float4 _FieldSizeCells;   // ширина, высота, 1/ширина, 1/высота
+
+// ---- кадр
+StructuredBuffer<float4> _VisibleChunks;   // x, z — левый нижний угол чанка в мире; z — расстояние до камеры
+uint _VisibleCount;
+uint _TuftsPerCell;        // 1, 2 или 4 кочки на клетку
+uint _TuftsPerChunk;       // 64*64*_TuftsPerCell
+uint _ThreadsPerRow;       // для 2D-диспатча (больше 65535 групп)
+float4 _CameraPos;         // xyz
+float4 _FrustumPlanes[6];
+float _MaxDistance, _LodStart, _LodMinKeep, _Jitter;
+// по культуре (индекс = CropType): x — участок буфера (-1 = не рисуется), y — стадия созревания, z — высота, w — ширина
+float4 _CropParams[MAX_CROPS];
+
+// ---- выход
+RWStructuredBuffer<StemData> _Stems;       // участок культуры: [slot * _Capacity, slot * _Capacity + _Capacity)
+RWStructuredBuffer<uint> _Counters;        // сколько стеблей записано в участок
+RWBuffer<uint> _Args;                      // аргументы непрямой отрисовки: по 5 uint на участок
+uint _Capacity, _SlotCount;
+
+uint LoadState(int2 c)
+{
+    c = clamp(c, int2(0, 0), int2(_FieldSizeCells.xy) - 1);
+    uint4 b = (uint4)round(_FieldStateTex.Load(int3(c, 0)) * 255.0);
+    return b.r | (b.g << 8) | (b.b << 16) | (b.a << 24);
+}
+float Hash(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float2 Hash2(float2 p) { return float2(Hash(p), Hash(p + 19.19)); }
+bool InFrustum(float3 c, float r)
+{
+    [unroll] for (int i = 0; i < 6; i++) if (dot(_FrustumPlanes[i].xyz, c) + _FrustumPlanes[i].w < -r) return false;
+    return true;
+}
+
+[numthreads(32, 1, 1)]
+void ClearCounters(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < MAX_CROPS) _Counters[id.x] = 0;
+}
+
+[numthreads(64, 1, 1)]
+void CullStems(uint3 id : SV_DispatchThreadID)
+{
+    uint t = id.y * _ThreadsPerRow + id.x;
+    uint chunkSlot = t / _TuftsPerChunk;
+    if (chunkSlot >= _VisibleCount) return;
+    uint local = t - chunkSlot * _TuftsPerChunk;
+    uint cellLocal = local / _TuftsPerCell, sub = local - cellLocal * _TuftsPerCell;
+    float4 ch = _VisibleChunks[chunkSlot];
+    float cell = _FieldParams.w;
+    float2 cellMin = ch.xy + float2(cellLocal & 63u, cellLocal >> 6u) * cell;
+
+    // место кочки внутри клетки: 1 — центр, 2 — две половины, 4 — сетка 2×2; плюс разброс
+    float2 off = _TuftsPerCell == 1u ? float2(0.5, 0.5) : _TuftsPerCell == 2u ? float2(0.25 + 0.5 * sub, 0.5) : float2(0.25 + 0.5 * (sub & 1u), 0.25 + 0.5 * (sub >> 1u));
+    float2 h = Hash2(cellMin * 3.17 + sub * 1.31);
+    float spread = _TuftsPerCell == 1u ? 1.0 : 0.5;
+    float2 pos = cellMin + (off + (h - 0.5) * _Jitter * spread) * cell;
+
+    uint s = LoadState(int2(floor((pos - _FieldParams.xy) * _FieldParams.z)));
+    if ((s & 15u) != 5u) return;                         // не засеяно
+    uint crop = (s >> 8) & 31u; if (crop == 0u) return;
+    float4 cp = _CropParams[crop]; if (cp.x < 0.0) return;   // для этой культуры нет модели
+    uint slot = (uint)cp.x;
+
+    // дальность: после _LodStart остаётся всё меньше кочек (до _LodMinKeep), оставшиеся шире — поле не «лысеет»
+    float3 base = float3(pos.x, 0.0, pos.y);
+    float d = distance(base, _CameraPos.xyz);
+    if (d > _MaxDistance) return;
+    float keep = lerp(1.0, _LodMinKeep, saturate((d - _LodStart) / max(_MaxDistance - _LodStart, 0.001)));
+    if (Hash(pos * 7.7 + 3.3) > keep) return;
+
+    float stage = (float)((s >> 13) & 15u), ready = max(cp.y, 1.0);
+    float g = saturate(stage / ready);
+    float height = cp.z * (0.1 + 0.9 * g) * (0.85 + 0.3 * h.x);
+    float width = cp.w * (0.75 + 0.5 * g) * rsqrt(max(keep, 0.05));
+    if (!InFrustum(base + float3(0, height * 0.5, 0), height * 0.5 + width)) return;
+
+    float flags = (stage > ready ? 1.0 : 0.0) + (crop == 4u && g > 0.62 && g < 0.97 ? 2.0 : 0.0);   // 4 = рапс: цветёт перед созреванием
+    StemData o;
+    o.posYaw = float4(base, Hash(pos * 1.7) * 6.2831853);
+    o.shape = float4(height, width, g, flags);
+
+    uint idx; InterlockedAdd(_Counters[slot], 1u, idx);
+    if (idx < _Capacity) _Stems[slot * _Capacity + idx] = o;   // переполнение не пишет за край буфера
+}
+
+[numthreads(32, 1, 1)]
+void WriteArgs(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _SlotCount) return;
+    _Args[id.x * 5u + 1u] = min(_Counters[id.x], _Capacity);   // instanceCount; остальные поля заполнены с CPU
+}

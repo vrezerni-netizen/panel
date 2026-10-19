@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Тесты логики (поля, техника) без Unity: dotnet test Tools/FieldTests. Берёт те же исходники, что и Unity (кроме MonoBehaviour). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldCell.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldCrops.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldOps.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/FieldGrid.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Runtime/Crops/CropChunkIndex.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/FieldGridTests.cs" />
+    <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/CropChunkIndexTests.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/Drivetrain.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/SoilAndDraft.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/HitchLogic.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Tests/Editor/VehicleLogicTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+  </ItemGroup>
+</Project>

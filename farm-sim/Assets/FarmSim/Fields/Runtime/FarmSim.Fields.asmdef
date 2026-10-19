@@ -1,0 +1,10 @@
+{
+    "name": "FarmSim.Fields",
+    "rootNamespace": "FarmSim.Fields",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true,
+    "noEngineReferences": false
+}
