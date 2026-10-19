@@ -100,6 +100,51 @@ void FieldFurrowNormal_float(float3 NormalTS, float2 FurrowDir, out float3 Out)
     Out = normalize(float3(xz.x, xz.y, NormalTS.z));
 }
 
+// ---------------------------------------------------------------- готовая поверхность поля (один узел в Shader Graph)
+// Входы-текстуры в узле Custom Function объявлять как Texture2D (в коде это UnityTexture2D).
+// Tiling — повторов текстуры на метр (0.25 = раз в 4 м); FurrowSpacing — метров между бороздами плуга (~1.2);
+// EdgeNoise — рваность края полосы в клетках (0.35).
+// Выход: Albedo, NormalTS (tangent space ландшафта), Smoothness и FieldMask (1 — поле, 0 — не поле: там можно показать свои слои террейна).
+void FieldSoilSurface_float(float3 WorldPos,
+    UnityTexture2D GrassTex, UnityTexture2D StubbleTex, UnityTexture2D CultivatedTex, UnityTexture2D PlowedTex, UnityTexture2D SeededTex,
+    UnityTexture2D FurrowNormalTex, float Tiling, float FurrowSpacing, float EdgeNoise,
+    out float3 Albedo, out float3 NormalTS, out float Smoothness, out float FieldMask)
+{
+    float4 wA; float2 wB; float2 dir; float rolled, moist, fert, weeds, straw;
+    FieldGround_float(WorldPos, EdgeNoise, wA, wB, dir, rolled, moist, fert, weeds, straw);
+
+    // цвет: у каждого слоя свой сдвиг UV, чтобы повторы текстур не совпадали; пахота — вдоль борозд
+    float2 uv = WorldPos.xz * Tiling;
+    float2 uvPlow, uvCult, uvSeed;
+    FieldFurrowUV_float(WorldPos, dir, FurrowSpacing, uvPlow);
+    FieldFurrowUV_float(WorldPos, dir, FurrowSpacing * 0.45, uvCult);   // культиватор — мельче и чаще
+    FieldFurrowUV_float(WorldPos, dir, FurrowSpacing * 0.25, uvSeed);   // рядки сеялки ~30 см
+    float3 cGrass = SAMPLE_TEXTURE2D(GrassTex.tex, GrassTex.samplerstate, uv).rgb;
+    float3 cStub  = SAMPLE_TEXTURE2D(StubbleTex.tex, StubbleTex.samplerstate, uv + 0.37).rgb;
+    float3 cCult  = SAMPLE_TEXTURE2D(CultivatedTex.tex, CultivatedTex.samplerstate, uv + 0.71).rgb;
+    float3 cPlow  = SAMPLE_TEXTURE2D(PlowedTex.tex, PlowedTex.samplerstate, uvPlow * float2(1.0, 0.25)).rgb;
+    float3 cSeed  = SAMPLE_TEXTURE2D(SeededTex.tex, SeededTex.samplerstate, uv + 0.13).rgb;
+    float wGrass = wA.x + wB.y;                                           // «не поле» тоже трава (если FieldMask не используется)
+    Albedo = cGrass * wGrass + cStub * wA.y + cCult * wA.z + cPlow * wA.w + cSeed * wB.x;
+    Albedo = lerp(Albedo, Albedo * float3(1.12, 1.07, 0.88), straw * wA.y);   // солома на стерне — светлее и желтее
+
+    // влажная голая земля темнее и глянцевее
+    float soil = wA.z + wA.w + wB.x;
+    Albedo *= lerp(1.0, 0.72, moist * soil);
+    Smoothness = lerp(0.06, 0.32, moist * soil);
+
+    // борозды: одна карта нормалей с разным шагом; каток приминает рельеф
+    float3 nPlow = UnpackNormal(SAMPLE_TEXTURE2D(FurrowNormalTex.tex, FurrowNormalTex.samplerstate, uvPlow));
+    float3 nCult = UnpackNormal(SAMPLE_TEXTURE2D(FurrowNormalTex.tex, FurrowNormalTex.samplerstate, uvCult));
+    float3 nSeed = UnpackNormal(SAMPLE_TEXTURE2D(FurrowNormalTex.tex, FurrowNormalTex.samplerstate, uvSeed));
+    float3 tPlow, tCult, tSeed;
+    FieldFurrowNormal_float(nPlow, dir, tPlow); FieldFurrowNormal_float(nCult, dir, tCult); FieldFurrowNormal_float(nSeed, dir, tSeed);
+    float2 xy = tPlow.xy * wA.w + tCult.xy * (wA.z * 0.55) + tSeed.xy * (wB.x * 0.7);
+    xy *= 1.0 - rolled * 0.6;
+    NormalTS = normalize(float3(xy, 1.0));
+    FieldMask = 1.0 - wB.y;
+}
+
 // ---------------------------------------------------------------- растения (вершинный шейдер)
 // CropId — номер культуры этого материала (CropType), ReadyStage — стадия созревания (FieldCrops).
 // Height01: 0 — здесь нет этой культуры (вершины сплющиваются в землю), иначе 0..1 по стадии роста; Withered = 1, если погибло.

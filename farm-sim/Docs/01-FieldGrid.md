@@ -55,6 +55,7 @@
      - Ещё он отдаёт направление борозд, влажность, удобрение, сорняки и солому.
    - `FieldFurrowUV_float` поворачивает UV текстуры борозд на угол клетки, и борозды идут по ходу трактора.
    - `FieldFurrowNormal_float` поворачивает нормаль обратно в оси ландшафта.
+   - `FieldSoilSurface_float` — всё в одном узле: получает текстуры слоёв и карту нормалей борозд, отдаёт Albedo, NormalTS, Smoothness и FieldMask. Проще всего начать с него.
    - В графе albedo, normal и roughness смешиваются по весам. Пахота, культивация и посев получают свою нормаль борозд, по желанию добавляется Parallax Occlusion.
    - Влажность затемняет и делает глянцевее, удобрение даёт лёгкий оттенок.
 4. **Растения** (следующий шаг рендера) не создаются через `Instantiate`.
@@ -115,9 +116,9 @@
 2. **Поле.** Объект → `FieldArea`, номер поля, дочерние пустышки — углы поля по порядку.
 3. **Орудие.** На плуг — `ImplementWorkArea`, operation = Plow, три точки рабочей зоны. Свойство `IsLowered` переключает навеска (шаг 2).
 4. **Грунт.** Shader Graph (URP Lit):
-   - узел Custom Function → File → `FieldGround.hlsl` → `FieldGround`;
-   - веса смешивают текстуры слоёв;
-   - для борозд — `FieldFurrowUV` + `FieldFurrowNormal`.
+   - Position (World) → узел Custom Function → File → `FieldGround.hlsl`, функция `FieldSoilSurface`;
+   - входы: 5 текстур слоёв, карта нормалей борозд (импорт как Normal map), Tiling 0.25, FurrowSpacing 1.2, EdgeNoise 0.35;
+   - выходы Albedo → Base Color, NormalTS → Normal (Tangent), Smoothness → Smoothness.
 5. **Тесты.** Window → General → Test Runner → EditMode → Run All. Без Unity: `dotnet test farm-sim/Tools/FieldTests`.
 
 ## Что дальше по этой системе
