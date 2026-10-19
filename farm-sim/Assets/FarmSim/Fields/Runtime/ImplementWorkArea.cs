@@ -50,6 +50,10 @@ namespace FarmSim.Fields
         public CropType Crop { get => crop; set => crop = value; }
         public bool IsWorking { get; private set; }
         public FieldOpResult LastResult { get; private set; }
+        /// <summary>Ширина захвата, м (расстояние workStart → workWidth).</summary>
+        public float Width => workStart && workWidth ? Vector3.Distance(workStart.position, workWidth.position) : 0f;
+        /// <summary>Середина рабочей зоны в мире (там орудие «держится» за землю: тут прикладывается тяговое сопротивление).</summary>
+        public Vector3 CenterWorld => workStart && workWidth && workHeight ? (workStart.position + workWidth.position) * 0.5f + (workHeight.position - workStart.position) * 0.5f : transform.position;
         public FieldOpResult Total;                     // всего за жизнь орудия (га = Total.AreaM2 / 10000)
 
         Rigidbody body;

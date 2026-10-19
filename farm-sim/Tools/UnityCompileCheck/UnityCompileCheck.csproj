@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Проверка, что весь код игры (вместе с MonoBehaviour) компилируется против справочных сборок Unity 2021.3 (пакет UnityEngine.Modules).
+       Запуск: dotnet build Tools/UnityCompileCheck. Код для Unity 6 (linearVelocity и др.) стоит под #if UNITY_6000_0_OR_NEWER. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <NoWarn>CS0649;CS0169;CS0414;NU1701</NoWarn>
+    <DefineConstants>UNITY_2021_3_OR_NEWER;UNITY_EDITOR</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/FarmSim/**/Runtime/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" GeneratePathProperty="true" ExcludeAssets="all" />
+    <Reference Include="$(PkgUnityEngine_Modules)/lib/net45/*.dll" />
+  </ItemGroup>
+</Project>

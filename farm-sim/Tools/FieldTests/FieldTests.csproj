@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Тесты логики полей без Unity: dotnet test Tools/FieldTests. Берёт те же исходники, что и Unity (кроме MonoBehaviour). -->
+  <!-- Тесты логики (поля, техника) без Unity: dotnet test Tools/FieldTests. Берёт те же исходники, что и Unity (кроме MonoBehaviour). -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
@@ -14,6 +14,10 @@
     <Compile Include="../../Assets/FarmSim/Fields/Runtime/Crops/CropChunkIndex.cs" />
     <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/FieldGridTests.cs" />
     <Compile Include="../../Assets/FarmSim/Fields/Tests/Editor/CropChunkIndexTests.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/Drivetrain.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/SoilAndDraft.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Runtime/HitchLogic.cs" />
+    <Compile Include="../../Assets/FarmSim/Vehicles/Tests/Editor/VehicleLogicTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />

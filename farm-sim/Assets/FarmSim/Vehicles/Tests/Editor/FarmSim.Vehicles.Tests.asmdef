@@ -1,0 +1,12 @@
+{
+    "name": "FarmSim.Vehicles.Tests",
+    "rootNamespace": "FarmSim.Vehicles.Tests",
+    "references": ["FarmSim.Vehicles", "FarmSim.Fields", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
