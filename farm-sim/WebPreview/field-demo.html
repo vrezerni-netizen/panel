@@ -1,0 +1,486 @@
+<title>Поле · шаг 1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Кабина трактора: тёмные полупрозрачные панели поверх солнечного поля, золотой акцент спелой пшеницы */
+:root {
+  --panel: rgba(20, 25, 22, .80);
+  --panel-solid: #161b18;
+  --line: rgba(255, 255, 255, .10);
+  --ink: #f1eee4;
+  --mute: #a8b0a2;
+  --gold: #e2b04a;
+  --soil: #a46c43;
+  --ok: #86c46b;
+  --warn: #e98f3e;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: #9cc3e0; color: var(--ink); font-family: var(--body); overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.hud { position: fixed; z-index: 2; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#top { top: calc(env(safe-area-inset-top, 0px) + 8px); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+#top > * { pointer-events: auto; }
+.row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.row::-webkit-scrollbar { display: none; }
+.chip { flex: none; font: 600 15px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 9px 13px; cursor: pointer; }
+.chip.on { background: var(--gold); color: #1e1a10; border-color: var(--gold); }
+.chip.crop.on { background: var(--ok); border-color: var(--ok); color: #13200d; }
+.chip:focus-visible, .btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+#status { padding: 10px 12px; display: grid; gap: 4px; max-width: 330px; font-size: 13px; }
+#status .t { font: 700 20px/1 var(--display); letter-spacing: .02em; display: flex; gap: 8px; align-items: baseline; }
+.pill { font: 600 12px/1 var(--display); text-transform: uppercase; letter-spacing: .06em; padding: 4px 7px; border-radius: 5px; background: rgba(255,255,255,.12); color: var(--mute); }
+.pill.work { background: var(--ok); color: #13200d; }
+.pill.idle { background: var(--warn); color: #2a1404; }
+#status .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-variant-numeric: tabular-nums; }
+#status .kv span:nth-child(odd) { color: var(--mute); }
+#status .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); margin-top: 4px; }
+#status .bar i { display: block; height: 100%; }
+#status .legend { color: var(--mute); font-size: 12px; }
+#joy { left: max(14px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 132px; height: 132px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); touch-action: none; }
+#knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(241,238,228,.92); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+#joy .lbl { position: absolute; left: 0; right: 0; top: -18px; text-align: center; font: 600 11px/1 var(--display); color: var(--ink); text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+#act { right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: min(270px, 52vw); }
+.btn { font: 700 15px/1.1 var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 8px; cursor: pointer; text-align: center; }
+.btn.big { grid-column: span 2; font-size: 19px; padding: 15px 8px; }
+.btn.lower { background: var(--soil); border-color: var(--soil); }
+.btn.on { background: var(--gold); border-color: var(--gold); color: #1e1a10; }
+.btn small { display: block; font: 500 11px/1.2 var(--body); text-transform: none; letter-spacing: 0; color: inherit; opacity: .8; margin-top: 2px; }
+#help { left: 50%; transform: translateX(-50%); top: 50%; margin-top: -120px; width: min(360px, calc(100vw - 32px)); padding: 16px 16px 14px; display: grid; gap: 8px; background: var(--panel-solid); }
+#help h2 { margin: 0; font: 700 22px/1.1 var(--display); text-wrap: balance; }
+#help p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink); }
+#help .mute { color: var(--mute); font-size: 12.5px; }
+#help .btn { justify-self: start; padding: 10px 16px; background: var(--gold); color: #1e1a10; border-color: var(--gold); }
+#nogl { inset: 0; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); background: var(--panel-solid); text-align: center; font-size: 16px; }
+@media (max-width: 520px) { #status { max-width: 62vw; font-size: 12px; } #status .t { font-size: 18px; } #joy { width: 118px; height: 118px; } .btn { font-size: 13.5px; padding: 10px 6px; } .btn.big { font-size: 17px; padding: 13px 6px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<canvas id="gl"></canvas>
+<div id="top" class="hud">
+  <div class="row" id="tools" role="toolbar" aria-label="Орудие"></div>
+  <div class="row" id="crops" role="toolbar" aria-label="Что сеять" hidden></div>
+  <div id="status" class="panel" aria-live="polite"></div>
+</div>
+<div id="joy" class="hud" aria-label="Руль и газ"><div id="knob"></div><div class="lbl">Руль · газ</div></div>
+<div id="act" class="hud">
+  <button class="btn big lower" id="bLower" type="button">▼ Опустить</button>
+  <button class="btn" id="bAuto" type="button">Авто<small>сам пройдёт поле</small></button>
+  <button class="btn" id="bView" type="button">Вид<small>сзади / сверху</small></button>
+  <button class="btn" id="bGrow" type="button">+1 период<small>рост на стадию</small></button>
+  <button class="btn" id="bGrow4" type="button">+4 периода<small>с дождём</small></button>
+</div>
+<div id="help" class="hud panel" role="dialog" aria-labelledby="helpT" hidden>
+  <h2 id="helpT">Поле из шага 1: та же логика, что в Unity</h2>
+  <p>Трактор уже пашет сам. Каждая клетка поля 0,5 м хранит своё состояние, а земля и растения рисуются прямо из этой карты.</p>
+  <p>Выбери орудие сверху, жми «Опустить» и веди джойстиком. Или «Авто»: трактор сам пройдёт поле челноком.</p>
+  <p class="mute">На компьютере: W A S D — ехать, пробел — опустить или поднять.</p>
+  <button class="btn" id="helpOk" type="button">Понятно</button>
+</div>
+<div id="nogl" class="hud" hidden>Этот показ требует WebGL 2. Открой страницу в Safari или Chrome поновее.</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!--INLINE:../../farm-game/world3d.js-->
+<!--INLINE:../../farm-game/models_props.js-->
+<!--INLINE:../../farm-game/models_machines.js-->
+<!--INLINE:../../farm-game/models_machines2.js-->
+<!--INLINE:field.js-->
+<script>
+(function () {
+  'use strict';
+  const T = THREE, FS = window.FieldSim, { G, C, OP, Cell } = FS;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------------- данные поля (как FieldManager: origin, клетка 0.5 м)
+  const OX = -64, OZ = -64, CELL = 0.5, W = 256, H = 256;
+  const FIELD = { x0: -40, z0: -28, x1: 40, z1: 28 };
+  const grid = new FS.Grid(OX, OZ, CELL, W, H);
+  grid.addFieldRect(1, FIELD.x0, FIELD.z0, FIELD.x1, FIELD.z1, G.Stubble);
+  // начальная картина: стерня после уборки, полоса культивации по диагонали, спелая пшеница, кукуруза, цветущий рапс
+  const quad = (op, x0, z0, x1, z1) => grid.applyQuad(op, x0, z0, x1, z0, x1, z1, x0, z1);
+  for (let i = 0; i < grid.state.length; i++) if (grid.fid[i]) { let s = grid.state[i]; s = Cell.withStraw(s, true); s = Cell.withPlowNeed(s, 1); s = Cell.withMoisture(s, 5); grid.state[i] = s; }
+  quad({ kind: OP.Cultivate, angle: 2 }, -10, FIELD.z0, 10, FIELD.z1);
+  const sowBlock = (crop, x0, z0, x1, z1, stage) => {
+    quad({ kind: OP.Cultivate, angle: 0 }, x0, z0, x1, z1); quad({ kind: OP.Sow, angle: 0, crop }, x0, z0, x1, z1);
+    for (let cz = 0; cz < H; cz++) for (let cx = 0; cx < W; cx++) {
+      const i = cz * W + cx, s = grid.state[i]; if (Cell.crop(s) !== crop) continue;
+      const px = OX + (cx + 0.5) * CELL, pz = OZ + (cz + 0.5) * CELL; if (px < x0 || px > x1 || pz < z0 || pz > z1) continue;
+      grid.state[i] = Cell.withLime(Cell.withFert(Cell.withGrowth(s, stage), 2), true);
+    }
+  };
+  sowBlock(C.Wheat, 10, FIELD.z0, 25, FIELD.z1, 8);
+  sowBlock(C.Corn, 25, FIELD.z0, FIELD.x1, 0, 4);
+  sowBlock(C.Canola, 25, 0, FIELD.x1, FIELD.z1, 7);
+
+  // ---------------------------------------------------------------- рендер
+  const canvas = $('gl');
+  let renderer;
+  try { renderer = new T.WebGLRenderer({ canvas, antialias: true }); if (!renderer.capabilities.isWebGL2) throw new Error('webgl2'); }
+  catch (e) { $('nogl').hidden = false; return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  const SKY = new T.Color(0x9cc3e0), FOG = [140, 420];
+  const scene = new T.Scene(); scene.background = SKY; scene.fog = new T.Fog(SKY, FOG[0], FOG[1]);
+  try { scene.environment = window.FarmCore.makeEnv(renderer); } catch (e) { /* без отражений */ }
+  const camera = new T.PerspectiveCamera(50, 1, 0.3, 1200);
+  const sunDir = new T.Vector3(0.45, 0.8, 0.35).normalize();
+  const sun = new T.DirectionalLight(0xfff2dc, 2.4); sun.position.copy(sunDir).multiplyScalar(100); scene.add(sun);
+  scene.add(new T.HemisphereLight(0xcfe3f5, 0x5d5a3c, 0.9));
+
+  // текстура состояний: 1 пиксель = 1 клетка, 4 байта = uint (как _FieldStateTex в Unity)
+  const stateTex = new T.DataTexture(new Uint8Array(grid.state.buffer), W, H, T.RGBAFormat, T.UnsignedByteType);
+  stateTex.magFilter = stateTex.minFilter = T.NearestFilter; stateTex.generateMipmaps = false; stateTex.needsUpdate = true;
+  const U = {
+    uState: { value: stateTex }, uParams: { value: new T.Vector4(OX, OZ, 1 / CELL, CELL) }, uSize: { value: new T.Vector2(W, H) },
+    uSun: { value: sunDir }, uTime: { value: 0 }, uCam: { value: new T.Vector3() }, uFog: { value: new T.Vector3(SKY.r, SKY.g, SKY.b) }, uFogR: { value: new T.Vector2(FOG[0], FOG[1]) },
+  };
+
+  // общая часть шейдеров: чтение клетки (то же, что FS_Load в FieldGround.hlsl)
+  const COMMON = `
+  precision highp float; precision highp int;
+  uniform sampler2D uState; uniform vec4 uParams; uniform vec2 uSize;
+  uniform vec3 uSun; uniform float uTime; uniform vec3 uCam; uniform vec3 uFog; uniform vec2 uFogR;
+  uint loadS(ivec2 c) { c = clamp(c, ivec2(0), ivec2(uSize) - 1); uvec4 b = uvec4(round(texelFetch(uState, c, 0) * 255.0)); return b.r | (b.g << 8u) | (b.b << 16u) | (b.a << 24u); }
+  float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+  float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int k = 0; k < 4; k++) { s += a * noise(p); p *= 2.03; a *= 0.5; } return s; }
+  vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
+  vec3 shadeFog(vec3 c, vec3 wp) { float d = distance(wp, uCam); return mix(c, uFog, smoothstep(uFogR.x, uFogR.y, d)); }`;
+
+  // ---- грунт: перенос FieldGround_float + FieldSoilSurface_float (веса 4 соседних клеток, шум края, борозды по углу клетки)
+  const groundMat = new T.ShaderMaterial({
+    uniforms: U,
+    vertexShader: `varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: COMMON + `
+    varying vec3 vW;
+    void weights(uint s, out vec4 a, out vec2 b) { uint g = s & 15u; a = vec4(g == 1u, g == 2u, g == 3u, g == 4u); b = vec2(g == 5u, g == 0u); }
+    // профиль борозды: пласт, отваленный плугом (несимметричный гребень)
+    float ridge(float u) { float f = fract(u); return smoothstep(0.0, 0.62, f) * (1.0 - smoothstep(0.62, 1.0, f)); }
+    vec3 bump(vec3 N, vec3 p, float h) {
+      vec3 dpx = dFdx(p), dpy = dFdy(p); float dhx = dFdx(h), dhy = dFdy(h);
+      vec3 r1 = cross(dpy, N), r2 = cross(N, dpx); float det = dot(dpx, r1);
+      vec3 gr = sign(det) * (dhx * r1 + dhy * r2); return normalize(abs(det) * N - gr);
+    }
+    void main() {
+      vec2 p = (vW.xz - uParams.xy) * uParams.z - 0.5;
+      p += (vec2(noise(vW.xz * 1.3), noise(vW.xz * 1.3 + 17.0)) - 0.5) * 0.4;
+      ivec2 i0 = ivec2(floor(p)); vec2 f = fract(p);
+      uint s00 = loadS(i0), s10 = loadS(i0 + ivec2(1, 0)), s01 = loadS(i0 + ivec2(0, 1)), s11 = loadS(i0 + ivec2(1, 1));
+      vec4 a00, a10, a01, a11; vec2 b00, b10, b01, b11;
+      weights(s00, a00, b00); weights(s10, a10, b10); weights(s01, a01, b01); weights(s11, a11, b11);
+      vec4 wA = mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y);
+      vec2 wB = mix(mix(b00, b10, f.x), mix(b01, b11, f.x), f.y);
+      float moist = mix(mix(float((s00 >> 29) & 7u), float((s10 >> 29) & 7u), f.x), mix(float((s01 >> 29) & 7u), float((s11 >> 29) & 7u), f.x), f.y) / 7.0;
+      uint sn = f.y < 0.5 ? (f.x < 0.5 ? s00 : s10) : (f.x < 0.5 ? s01 : s11);
+      float ang = float((sn >> 4) & 7u) * 0.39269908; vec2 dir = vec2(sin(ang), cos(ang)), side = vec2(dir.y, -dir.x);
+      float rolled = float((sn >> 7) & 1u), straw = float((sn >> 26) & 1u);
+      float along = dot(vW.xz, dir), across = dot(vW.xz, side);
+      float n1 = fbm(vW.xz * 0.9), n2 = fbm(vW.xz * 4.0), n3 = noise(vW.xz * 18.0);
+      // рельеф борозд гаснет, когда борозда тоньше пикселя (иначе рябь)
+      float fadeP = 1.0 - smoothstep(0.25, 0.9, fwidth(across / 1.2)), fadeC = 1.0 - smoothstep(0.25, 0.9, fwidth(across / 0.55)), fadeS = 1.0 - smoothstep(0.25, 0.9, fwidth(across / 0.3));
+      float hPlow = ridge(across / 1.2) * 0.16 * fadeP + n2 * 0.05;
+      float hCult = ridge(across / 0.55) * 0.05 * fadeC + n2 * 0.035 + n3 * 0.01;
+      float hSeed = (0.5 - 0.5 * cos(across / 0.3 * 6.2831853)) * 0.025 * fadeS + n2 * 0.012;
+      float hStub = n3 * 0.012; float hGrass = n2 * 0.03 + n3 * 0.015;
+      float flat1 = 1.0 - rolled * 0.65;
+      float h = hGrass * (wA.x + wB.y) + hStub * wA.y + hCult * wA.z * flat1 + hPlow * wA.w * flat1 + hSeed * wB.x * flat1;
+      // цвет слоёв (sRGB → линейный)
+      vec3 soilBase = mix(vec3(0.33, 0.24, 0.16), vec3(0.42, 0.31, 0.21), n1);
+      vec3 cGrass = mix(vec3(0.30, 0.45, 0.18), vec3(0.45, 0.55, 0.22), n1) * (0.85 + 0.3 * n3);
+      float rows = smoothstep(0.55, 0.9, sin(across / 0.22 * 6.2831853) * 0.5 + 0.5);
+      vec3 cStub = mix(vec3(0.50, 0.43, 0.29), vec3(0.78, 0.68, 0.43), rows * 0.7 + n3 * 0.3);
+      cStub = mix(cStub, vec3(0.86, 0.76, 0.48), straw * smoothstep(0.55, 0.8, fbm(vW.xz * 2.5 + 3.0)) * 0.8);
+      vec3 cCult = soilBase * (0.92 + 0.25 * n3) * (0.85 + 0.3 * ridge(across / 0.55));
+      vec3 cPlow = soilBase * 0.78 * (0.65 + 0.55 * ridge(across / 1.2)) * (0.9 + 0.2 * n3);
+      vec3 cSeed = soilBase * 0.9 * (0.9 + 0.12 * cos(across / 0.3 * 6.2831853));
+      vec3 alb = lin(cGrass) * (wA.x + wB.y) + lin(cStub) * wA.y + lin(cCult) * wA.z + lin(cPlow) * wA.w + lin(cSeed) * wB.x;
+      float soil = wA.z + wA.w + wB.x;
+      alb *= mix(1.0, 0.62, moist * soil);
+      // свет: солнце + небо + немного блеска у влажной земли
+      vec3 N = bump(vec3(0.0, 1.0, 0.0), vW, h * 4.0);
+      vec3 V = normalize(uCam - vW), Hh = normalize(uSun + V);
+      float dif = max(dot(N, uSun), 0.0);
+      float spec = pow(max(dot(N, Hh), 0.0), 40.0) * 0.25 * moist * soil;
+      vec3 amb = mix(vec3(0.18, 0.17, 0.12), vec3(0.42, 0.50, 0.60), N.y * 0.5 + 0.5);
+      vec3 col = alb * (vec3(1.0, 0.95, 0.86) * 2.3 * dif + amb) + spec;
+      col = shadeFog(col, vW);
+      gl_FragColor = vec4(col, 1.0);
+      #include <tonemapping_fragment>
+      #include <encodings_fragment>
+    }`,
+  });
+  const ground = new T.Mesh(new T.PlaneGeometry(1200, 1200), groundMat); ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+  // ---- растения: одна «кочка» стеблей на клетку поля; вершинный шейдер сам читает культуру и стадию из той же карты
+  function tuftGeometry() {
+    const pos = [], uv = [], nor = [], idx = []; let v = 0;
+    const blades = 7;
+    for (let b = 0; b < blades; b++) {
+      const a = b / blades * Math.PI * 2 + (b % 3) * 0.4, r = 0.12 + (b % 3) * 0.08, cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+      const lean = 0.18 + (b % 2) * 0.1, rot = a + 1.3, wdt = 0.045, segs = 3;
+      for (let k = 0; k <= segs; k++) {
+        const t = k / segs, w = wdt * (1 - t * 0.85), lx = Math.cos(a) * lean * t * t, lz = Math.sin(a) * lean * t * t;
+        for (const sd of [-1, 1]) { pos.push(cx + lx + Math.cos(rot) * w * sd, t, cz + lz + Math.sin(rot) * w * sd); uv.push((sd + 1) / 2, t); nor.push(Math.cos(a), 0.6, Math.sin(a)); }
+        if (k) { const o = v + (k - 1) * 2; idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
+      }
+      v += (segs + 1) * 2;
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setIndex(idx); return g;
+  }
+  const cropMat = new T.ShaderMaterial({
+    uniforms: U, side: T.DoubleSide,
+    vertexShader: COMMON + `
+    varying vec3 vCol; varying vec3 vN; varying vec3 vW; varying float vTop;
+    void main() {
+      vec3 base = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      uint s = loadS(ivec2(floor((base.xz - uParams.xy) * uParams.z)));
+      uint g = s & 15u, crop = (s >> 8u) & 31u, st = (s >> 13u) & 15u;
+      float ready = crop == 1u ? 8.0 : crop == 4u ? 9.0 : crop == 5u ? 7.0 : crop == 2u ? 7.0 : crop == 3u ? 5.0 : 8.0;
+      float maxH = crop == 5u ? 2.2 : crop == 4u ? 1.25 : 0.95;
+      bool here = g == 5u && crop > 0u;
+      float f = clamp(float(st) / ready, 0.0, 1.0);
+      float hgt = here ? maxH * (0.1 + 0.9 * f) : 0.0;
+      float wid = here ? (crop == 5u ? 1.0 + 1.6 * f : 0.9 + 0.7 * f) : 0.0;
+      vec3 p = position; p.xz *= wid; p.y *= hgt;
+      float t = uv.y;
+      p.x += sin(uTime * 1.6 + base.x * 0.31 + base.z * 0.17) * 0.09 * t * t * hgt;
+      p.z += cos(uTime * 1.3 + base.x * 0.21) * 0.05 * t * t * hgt;
+      vec4 wp = modelMatrix * instanceMatrix * vec4(p, 1.0); vW = wp.xyz;
+      vec3 young = vec3(0.30, 0.50, 0.17), ripe = vec3(0.86, 0.71, 0.36);
+      if (crop == 4u) ripe = vec3(0.47, 0.44, 0.24); else if (crop == 5u) ripe = vec3(0.78, 0.70, 0.46);
+      vec3 c = mix(young, ripe, smoothstep(0.6, 1.0, f));
+      if (crop == 4u && f > 0.62 && f < 0.97 && t > 0.72) c = vec3(0.98, 0.83, 0.12);          // рапс цветёт
+      if ((crop == 1u || crop == 2u) && f > 0.8 && t > 0.78) c *= 1.08;                         // колосья светлее
+      if (float(st) > ready) c = vec3(0.40, 0.35, 0.27);
+      vCol = c * (0.45 + 0.55 * t); vTop = t;
+      vN = normalize(mat3(modelMatrix * instanceMatrix) * normal);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }`,
+    fragmentShader: COMMON + `
+    varying vec3 vCol; varying vec3 vN; varying vec3 vW; varying float vTop;
+    void main() {
+      vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
+      float dif = max(dot(N, uSun), 0.0) * 0.8 + 0.25;
+      vec3 col = lin(vCol) * (vec3(1.0, 0.95, 0.86) * 1.9 * dif + vec3(0.30, 0.36, 0.42));
+      col = shadeFog(col, vW);
+      gl_FragColor = vec4(col, 1.0);
+      #include <tonemapping_fragment>
+      #include <encodings_fragment>
+    }`,
+  });
+  {
+    const cells = []; for (let cz = 0; cz < H; cz++) for (let cx = 0; cx < W; cx++) if (grid.fid[cz * W + cx]) cells.push([cx, cz]);
+    const im = new T.InstancedMesh(tuftGeometry(), cropMat, cells.length); im.frustumCulled = false;
+    const m = new T.Matrix4(), q = new T.Quaternion(), up = new T.Vector3(0, 1, 0), sc = new T.Vector3(1, 1, 1), ps = new T.Vector3();
+    cells.forEach(([cx, cz], i) => {
+      const h1 = Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453, r = h1 - Math.floor(h1), h2 = Math.sin(cx * 39.3468 + cz * 11.135) * 24634.6345, r2 = h2 - Math.floor(h2);
+      ps.set(OX + (cx + 0.5) * CELL + (r - 0.5) * 0.18, 0, OZ + (cz + 0.5) * CELL + (r2 - 0.5) * 0.18); q.setFromAxisAngle(up, r * 6.283); sc.setScalar(0.85 + r2 * 0.3);
+      m.compose(ps, q, sc); im.setMatrixAt(i, m);
+    });
+    scene.add(im);
+  }
+
+  // ---- окружение: деревья по краям (модели игры), межа вокруг поля
+  {
+    const FM = window.FarmModels, kinds = ['oak', 'pine', 'birch', 'oakLow', 'poplar'];
+    if (FM) for (let i = 0; i < 46; i++) {
+      const side = i % 4, t = (i * 0.618) % 1, d = 18 + ((i * 7) % 5) * 4;
+      const x = side === 0 ? -120 + t * 240 : side === 1 ? -120 + t * 240 : side === 2 ? FIELD.x0 - d - 10 : FIELD.x1 + d + 10;
+      const z = side === 0 ? FIELD.z1 + d + 14 : side === 1 ? FIELD.z0 - d - 40 : -90 + t * 180;
+      try { const tr = FM.make('tree', kinds[i % kinds.length], { seed: i % 3 }); tr.position.set(x, 0, z); tr.rotation.y = i * 2.1; scene.add(tr); } catch (e) { /* без деревьев */ }
+    }
+  }
+
+  // ---------------------------------------------------------------- техника и орудия
+  const TOOLS = [
+    { id: 'plow', name: 'Плуг', op: OP.Plow, width: 4, model: 'tractor', level: 4, front: false, depth: 1.2 },
+    { id: 'cult', name: 'Культиватор', op: OP.Cultivate, width: 6, model: 'tractor', level: 2, front: false, depth: 1.2 },
+    { id: 'sow', name: 'Сеялка', op: OP.Sow, width: 6, model: 'tractor', level: 6, front: false, depth: 1.0 },
+    { id: 'fert', name: 'Удобрение', op: OP.Fertilize, width: 12, model: 'spreader', level: 3, front: false, depth: 1.5 },
+    { id: 'harv', name: 'Комбайн', op: OP.Harvest, width: 6, model: 'combine', level: 4, front: true, depth: 1.2 },
+  ];
+  const CROPS = [[C.Wheat, 'Пшеница'], [C.Corn, 'Кукуруза'], [C.Canola, 'Рапс']];
+  const veh = { x: -38, z: FIELD.z0 - 10, th: 0, v: 0, steer: 0, lowered: false, tool: TOOLS[0], crop: C.Wheat, obj: null, local: null, prevL: null, prevR: null, area: 0, yield: 0, working: false };
+  const shadow = new T.Mesh(new T.CircleGeometry(1, 32), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 1; scene.add(shadow);
+  function setTool(t) {
+    veh.tool = t;
+    if (veh.obj) scene.remove(veh.obj);
+    let o = null; try { o = window.FarmModels.make('vehicle', t.model, { level: t.level }); } catch (e) { o = null; }
+    if (!o) { o = new T.Mesh(new T.BoxGeometry(2.5, 2.5, 5), new T.MeshStandardMaterial({ color: 0x3d7a2f })); o.position.y = 1.25; const g2 = new T.Group(); g2.add(o); o = g2; }
+    const box = new T.Box3().setFromObject(o); veh.box = box; veh.obj = o; scene.add(o);
+    // рабочая зона в осях машины: у прицепных — у заднего края, у комбайна — жатка впереди
+    const hw = t.width / 2, zf = t.front ? box.max.z - 0.4 : box.min.z + t.depth, zb = zf - t.depth;
+    veh.local = { l: [-hw, zf], r: [hw, zf], bl: [-hw, zb] };
+    shadow.scale.set((box.max.x - box.min.x) * 0.42, (box.max.z - box.min.z) * 0.45, 1);
+    veh.prevL = null; renderUI();
+  }
+  const toWorld = (lx, lz) => { const c = Math.cos(veh.th), s = Math.sin(veh.th); return [veh.x + lx * c + lz * s, veh.z - lx * s + lz * c]; };
+
+  // ---------------------------------------------------------------- авто-челнок (заготовка шага 5: проходы вдоль поля, пустые пропускаются)
+  const auto = { on: false, path: [], i: 0, laneDone: 0, lanes: 0 };
+  function buildAuto(xFrom, xTo) {
+    const t = veh.tool, w = t.width * 0.94, op = currentOp(0), path = [];
+    const z0 = FIELD.z0, z1 = FIELD.z1, lanes = []; for (let x = xFrom + w / 2; x <= xTo - w / 2 + 0.01; x += w) lanes.push(x);
+    const work = lanes.filter((x) => grid.hasWork(op, x - w / 2, z0, x + w / 2, z1));
+    let up = Math.abs(veh.z - z0) < Math.abs(veh.z - z1);
+    work.forEach((x, k) => {
+      const zs = up ? z0 - 9 : z1 + 9, ze = up ? z1 + 9 : z0 - 9, sgn = up ? 1 : -1;
+      for (let z = zs; sgn > 0 ? z <= ze : z >= ze; z += sgn * 4) path.push([x, z, true]);   // на проходе орудие опущено (вне поля клетки всё равно не меняются)
+      const nx = work[k + 1]; if (nx != null) { const R = Math.max(7, (nx - x) / 2 + 3); path.push([x + (nx - x) * 0.15, ze + sgn * R * 0.7, false]); path.push([(x + nx) / 2, ze + sgn * R, false]); path.push([nx - (nx - x) * 0.15, ze + sgn * R * 0.7, false]); }
+      up = !up;
+    });
+    auto.path = path; auto.i = 0; auto.lanes = work.length; return path.length > 0;
+  }
+  function currentOp(angle) { return { kind: veh.tool.op, angle, crop: veh.tool.op === OP.Sow ? veh.crop : 0, direct: false }; }
+
+  // ---------------------------------------------------------------- управление
+  const input = { thr: 0, str: 0, keys: {} };
+  const joy = $('joy'), knob = $('knob'); let joyId = null;
+  const joyMove = (e) => { const r = joy.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2 - 14; let dx = e.clientX - cx, dy = e.clientY - cy; const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; } knob.style.transform = `translate(${dx}px,${dy}px)`; input.str = dx / R; input.thr = -dy / R; };
+  joy.addEventListener('pointerdown', (e) => { joyId = e.pointerId; joy.setPointerCapture(e.pointerId); joyMove(e); stopAuto(); e.preventDefault(); });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) joyMove(e); });
+  const joyEnd = (e) => { if (e.pointerId !== joyId) return; joyId = null; knob.style.transform = ''; input.str = input.thr = 0; };
+  joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
+  addEventListener('keydown', (e) => { input.keys[e.code] = true; if (e.code === 'Space') { toggleLower(); e.preventDefault(); } if (/Key[WASD]|Arrow/.test(e.code)) stopAuto(); });
+  addEventListener('keyup', (e) => { input.keys[e.code] = false; });
+
+  // камера: сзади (крутить пальцем по полю) или сверху; колёсико / два пальца — ближе-дальше
+  const cam = { mode: 'chase', yaw: 0, dist: innerWidth < innerHeight ? 38 : 26, pitch: innerWidth < innerHeight ? 0.6 : 0.42, x: 0, y: 30, z: 0, tx: 0, tz: 0 };
+  let drag = null; const touches = new Map();
+  canvas.addEventListener('pointerdown', (e) => { touches.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!touches.has(e.pointerId)) return; const prev = touches.get(e.pointerId); touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (touches.size === 2) { const [a, b] = [...touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (cam.pd) cam.dist = Math.min(140, Math.max(8, cam.dist * cam.pd / d)); cam.pd = d; return; }
+    cam.yaw -= (e.clientX - prev[0]) * 0.006; cam.pitch = Math.min(1.35, Math.max(0.15, cam.pitch + (e.clientY - prev[1]) * 0.004));
+  });
+  const ptrEnd = (e) => { touches.delete(e.pointerId); if (touches.size < 2) cam.pd = 0; };
+  canvas.addEventListener('pointerup', ptrEnd); canvas.addEventListener('pointercancel', ptrEnd);
+  canvas.addEventListener('wheel', (e) => { cam.dist = Math.min(140, Math.max(8, cam.dist * (e.deltaY > 0 ? 1.1 : 0.9))); e.preventDefault(); }, { passive: false });
+
+  function toggleLower() { veh.lowered = !veh.lowered; renderUI(); }
+  function stopAuto() { if (auto.on) { auto.on = false; renderUI(); } }
+  $('bLower').onclick = () => { stopAuto(); toggleLower(); };
+  $('bAuto').onclick = () => { if (auto.on) { stopAuto(); return; } if (buildAuto(FIELD.x0, FIELD.x1)) { auto.on = true; } else flash('Здесь этому орудию нечего делать'); renderUI(); };
+  $('bView').onclick = () => { cam.mode = cam.mode === 'chase' ? 'top' : 'chase'; renderUI(); };
+  $('bGrow').onclick = () => { grid.grow(false); flash('Прошёл период: всё подросло на стадию, земля подсохла'); };
+  $('bGrow4').onclick = () => { for (let k = 0; k < 4; k++) grid.grow(true); flash('Прошло 4 периода с дождём'); };
+  let flashMsg = '', flashT = 0; function flash(m) { flashMsg = m; flashT = 3; renderUI(); }
+
+  // ---------------------------------------------------------------- интерфейс
+  const toolsEl = $('tools'), cropsEl = $('crops');
+  toolsEl.innerHTML = TOOLS.map((t, i) => `<button type="button" class="chip" data-t="${i}">${t.name}</button>`).join('');
+  cropsEl.innerHTML = CROPS.map(([c, n]) => `<button type="button" class="chip crop" data-c="${c}">${n}</button>`).join('');
+  toolsEl.onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; stopAuto(); veh.lowered = false; setTool(TOOLS[+b.dataset.t]); };
+  cropsEl.onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; veh.crop = +b.dataset.c; renderUI(); };
+  const GN = ['не поле', 'трава', 'стерня', 'культивировано', 'вспахано', 'засеяно'];
+  function cellText(s) {
+    if (!s) return 'не поле';
+    const g = Cell.ground(s), c = Cell.crop(s), parts = [GN[g]];
+    if (g === G.Plowed || g === G.Cultivated || g === G.Seeded) parts.push('борозды ' + Math.round(Cell.angle(s) * 22.5) + '°');
+    if (c) { const d = FS.cropDef(c); parts.push(d.name + ' ' + Math.min(Cell.growth(s), d.ready) + '/' + d.ready + (Cell.growth(s) >= d.ready ? ' — спелая' : '')); }
+    if (Cell.straw(s)) parts.push('солома');
+    return parts.join(' · ');
+  }
+  let lastUI = '';
+  function renderUI() {
+    for (const b of toolsEl.children) b.classList.toggle('on', TOOLS[+b.dataset.t] === veh.tool);
+    cropsEl.hidden = veh.tool.op !== OP.Sow;
+    for (const b of cropsEl.children) b.classList.toggle('on', +b.dataset.c === veh.crop);
+    const bl = $('bLower'); bl.textContent = veh.lowered ? '▲ Поднять' : '▼ Опустить'; bl.classList.toggle('lower', !veh.lowered);
+    $('bAuto').classList.toggle('on', auto.on); $('bView').classList.toggle('on', cam.mode === 'top');
+    const [mx, mz] = toWorld((veh.local.l[0] + veh.local.r[0]) / 2, (veh.local.l[1] + veh.local.bl[1]) / 2);
+    const st = grid.stats(1), pc = (n) => (100 * n / st.cells);
+    const state = veh.working ? ['work', 'Работает'] : veh.lowered ? ['idle', Math.abs(veh.v) < 0.14 ? 'Опущено · едь вперёд' : 'Опущено · нет работы'] : ['', 'Поднято'];
+    const html = `<div class="t">${veh.tool.name}${veh.tool.op === OP.Sow ? ' · ' + FS.cropDef(veh.crop).name : ''} <span class="pill ${state[0]}">${auto.on ? 'Авто · ' : ''}${state[1]}</span></div>
+      <div class="kv"><span>Скорость</span><span>${(Math.abs(veh.v) * 3.6).toFixed(1)} км/ч · захват ${veh.tool.width} м</span>
+      <span>Под орудием</span><span>${cellText(grid.getAt(mx, mz))}</span>
+      <span>Обработано</span><span>${Math.round(veh.area).toLocaleString('ru')} м² (${(veh.area / 10000).toFixed(2)} га)${veh.yield ? ' · собрано ' + Math.round(veh.yield).toLocaleString('ru') + ' л' : ''}</span></div>
+      <div class="bar" aria-hidden="true"><i style="width:${pc(st.stubble)}%;background:#c9b277"></i><i style="width:${pc(st.cult)}%;background:#8a6544"></i><i style="width:${pc(st.plowed)}%;background:#5d3e28"></i><i style="width:${pc(st.seeded)}%;background:#86c46b"></i><i style="width:${pc(st.grass)}%;background:#4f7d33"></i></div>
+      <div class="legend">Поле 80×56 м: стерня ${pc(st.stubble).toFixed(0)}% · культ. ${pc(st.cult).toFixed(0)}% · пахота ${pc(st.plowed).toFixed(0)}% · посевы ${pc(st.seeded).toFixed(0)}% (спелые ${pc(st.ready).toFixed(0)}%)</div>
+      ${flashT > 0 ? `<div class="legend" style="color:var(--gold)">${flashMsg}</div>` : ''}`;
+    if (html !== lastUI) { $('status').innerHTML = html; lastUI = html; }
+  }
+
+  // ---------------------------------------------------------------- частицы пыли за орудием
+  const dust = []; const dustMat = new T.SpriteMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(150,110,75,.55)'); gr.addColorStop(1, 'rgba(150,110,75,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new T.CanvasTexture(c); })(), depthWrite: false, transparent: true });
+  for (let i = 0; i < 70; i++) { const s = new T.Sprite(dustMat.clone()); s.visible = false; scene.add(s); dust.push({ s, life: 0 }); }
+  let dustI = 0;
+  function puff(x, z) { const d = dust[dustI++ % dust.length]; d.life = 1.4; d.s.position.set(x, 0.4, z); d.s.scale.setScalar(1.2); d.s.visible = true; d.vx = (Math.random() - 0.5) * 0.6; d.vz = (Math.random() - 0.5) * 0.6; }
+
+  // ---------------------------------------------------------------- шаг физики 50 Гц: движение + рабочая зона (как ImplementWorkArea.FixedUpdate)
+  const DT = 1 / 50, WB = 3.0;
+  function physics() {
+    let thr = input.thr, str = input.str;
+    if (input.keys.KeyW || input.keys.ArrowUp) thr = 1; if (input.keys.KeyS || input.keys.ArrowDown) thr = -0.6;
+    if (input.keys.KeyA || input.keys.ArrowLeft) str = -1; if (input.keys.KeyD || input.keys.ArrowRight) str = 1;
+    if (auto.on) {
+      // преследование точки пути (pure pursuit) — заготовка наёмного рабочего из шага 5
+      while (auto.i < auto.path.length && Math.hypot(auto.path[auto.i][0] - veh.x, auto.path[auto.i][1] - veh.z) < 4.5) auto.i++;
+      if (auto.i >= auto.path.length) { auto.on = false; veh.lowered = false; flash('Готово: поле пройдено'); thr = 0; }
+      else {
+        const p = auto.path[auto.i], ang = Math.atan2(p[0] - veh.x, p[1] - veh.z); let d = ang - veh.th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+        str = Math.max(-1, Math.min(1, d * 1.8)); thr = p[2] ? 0.62 : 0.5; veh.lowered = p[2] && Math.abs(d) < 0.35;
+      }
+    }
+    const vmax = veh.lowered ? 4.2 : 8.3, target = thr * vmax;
+    veh.v += Math.max(-4 * DT, Math.min(4 * DT, target - veh.v)); if (!thr && Math.abs(veh.v) < 0.05) veh.v = 0;
+    veh.steer += (str * 0.6 - veh.steer) * Math.min(1, DT * 6);
+    veh.th += veh.v / WB * Math.tan(veh.steer) * DT;
+    veh.x += Math.sin(veh.th) * veh.v * DT; veh.z += Math.cos(veh.th) * veh.v * DT;
+    veh.x = Math.max(-110, Math.min(110, veh.x)); veh.z = Math.max(-110, Math.min(110, veh.z));
+    // рабочая зона
+    const L = toWorld(...veh.local.l), R = toWorld(...veh.local.r), BL = toWorld(...veh.local.bl), BR = [R[0] + BL[0] - L[0], R[1] + BL[1] - L[1]];
+    const forward = veh.v > 0.14; veh.workT = Math.max(0, (veh.workT || 0) - DT);
+    if (veh.lowered && forward) {
+      if (!veh.prevL) { veh.prevL = L; veh.prevR = R; }
+      const op = currentOp(Cell.angleFromHeading(veh.th * 180 / Math.PI));
+      const P = veh.prevL, Q = veh.prevR;
+      const r = grid.applyTriangles(op, [P[0], P[1], Q[0], Q[1], R[0], R[1], P[0], P[1], R[0], R[1], L[0], L[1], L[0], L[1], R[0], R[1], BR[0], BR[1], L[0], L[1], BR[0], BR[1], BL[0], BL[1]]);
+      veh.prevL = L; veh.prevR = R;
+      if (r.cells) { veh.workT = 0.6; veh.area += r.area; veh.yield += r.yield; if (Math.random() < 0.6) { const t = Math.random(); puff(BL[0] + (BR[0] - BL[0]) * t, BL[1] + (BR[1] - BL[1]) * t); } }
+    } else { veh.prevL = null; veh.workT = 0; }
+    veh.working = veh.workT > 0;
+  }
+
+  // ---------------------------------------------------------------- кадр
+  function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  addEventListener('resize', resize); resize();
+  let last = performance.now(), acc = 0, uiT = 0;
+  let frames = 0;
+  function frame(now) {
+    frames++; if (window.__demo) window.__demo.frames = frames;
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; acc += dt;
+    while (acc >= DT) { physics(); acc -= DT; }
+    if (grid.dirty) { stateTex.needsUpdate = true; grid.dirty = false; }    // в Unity — только изменённые чанки
+    U.uTime.value += dt;
+    if (veh.obj) { veh.obj.position.set(veh.x, 0, veh.z); veh.obj.rotation.y = veh.th; shadow.position.set(veh.x + Math.sin(veh.th) * (veh.box.max.z + veh.box.min.z) / 2, 0.03, veh.z + Math.cos(veh.th) * (veh.box.max.z + veh.box.min.z) / 2); shadow.rotation.z = -veh.th; }
+    for (const d of dust) if (d.life > 0) { d.life -= dt; d.s.position.x += d.vx * dt; d.s.position.z += d.vz * dt; d.s.position.y += dt * 0.9; d.s.scale.setScalar(1.2 + (1.4 - d.life) * 2.2); d.s.material.opacity = Math.max(0, d.life / 1.4); if (d.life <= 0) d.s.visible = false; }
+    // камера
+    const fx = Math.sin(veh.th), fz = Math.cos(veh.th);
+    let px, py, pz, lx = veh.x + fx * 3, lz = veh.z + fz * 3;
+    if (cam.mode === 'top') { px = veh.x + 0.01; pz = veh.z - 0.01 - 8; py = cam.dist * 2.4 + 20; lx = veh.x; lz = veh.z; }
+    else { const yaw = veh.th + Math.PI + cam.yaw, hd = Math.cos(cam.pitch) * cam.dist; px = lx + Math.sin(yaw) * hd; pz = lz + Math.cos(yaw) * hd; py = Math.sin(cam.pitch) * cam.dist + 2; }
+    const k = Math.min(1, dt * 4); cam.x += (px - cam.x) * k; cam.y += (py - cam.y) * k; cam.z += (pz - cam.z) * k; cam.tx += (lx - cam.tx) * k; cam.tz += (lz - cam.tz) * k;
+    camera.position.set(cam.x, cam.y, cam.z); camera.lookAt(cam.tx, 0.5, cam.tz); U.uCam.value.copy(camera.position);
+    renderer.render(scene, camera);
+    uiT += dt; if (uiT > 0.2) { uiT = 0; if (flashT > 0) flashT -= 0.2; renderUI(); }
+    requestAnimationFrame(frame);
+  }
+
+  // старт: плуг сам пашет стерню челноком — картина живая сразу
+  setTool(TOOLS[0]);
+  if (buildAuto(FIELD.x0, -10)) auto.on = true;
+  cam.x = veh.x - 20; cam.y = 22; cam.z = veh.z - 24; cam.tx = veh.x; cam.tz = veh.z;
+  renderUI();
+  try { if (!localStorage.getItem('fieldDemoHelp')) $('help').hidden = false; } catch (e) { $('help').hidden = false; }
+  $('helpOk').onclick = () => { $('help').hidden = true; try { localStorage.setItem('fieldDemoHelp', '1'); } catch (e) { /* ничего */ } };
+  window.__demo = { grid, veh, auto, setTool, TOOLS, sim: (n) => { for (let k = 0; k < n; k++) physics(); }, cam };
+  requestAnimationFrame(frame);
+})();
+</script>
